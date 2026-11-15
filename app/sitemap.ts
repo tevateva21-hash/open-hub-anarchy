@@ -1,5 +1,5 @@
 import { MetadataRoute } from "next";
-import { BLOG_POSTS, VST_PLUGINS } from "@/lib/openhub-data";
+import { ANARCHY_VST_PLUGINS, BLOG_POSTS, VST_PLUGINS } from "@/lib/openhub-data";
 
 /**
  * Génération dynamique du `/sitemap.xml` pour les moteurs de recherche.
@@ -16,12 +16,6 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 1.0,
     },
     {
-      url: `${baseUrl}/samples`,
-      lastModified: now,
-      changeFrequency: "weekly",
-      priority: 0.9,
-    },
-    {
       url: `${baseUrl}/anarchy-visual-design`,
       lastModified: now,
       changeFrequency: "weekly",
@@ -34,13 +28,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.85,
     },
     {
-      url: `${baseUrl}/forum`,
+      url: `${baseUrl}/communaute/samples`,
+      lastModified: now,
+      changeFrequency: "weekly",
+      priority: 0.9,
+    },
+    {
+      url: `${baseUrl}/communaute/forum`,
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.85,
     },
     {
-      url: `${baseUrl}/blog`,
+      url: `${baseUrl}/communaute/blog`,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.85,
@@ -53,7 +53,10 @@ export default function sitemap(): MetadataRoute.Sitemap {
     },
   ];
 
-  const vstRoutes: MetadataRoute.Sitemap = VST_PLUGINS.map((plugin) => ({
+  const vstRoutes: MetadataRoute.Sitemap = [
+    ...ANARCHY_VST_PLUGINS,
+    ...VST_PLUGINS,
+  ].map((plugin) => ({
     url: `${baseUrl}/vst/${plugin.id}`,
     lastModified: now,
     changeFrequency: "weekly",

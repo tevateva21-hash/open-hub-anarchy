@@ -18,46 +18,66 @@ interface DriveRadioTrack {
   driveUrl: string;
 }
 
-const FALLBACK_SONS_TRACKS: Omit<DriveRadioTrack, "streamUrl" | "driveUrl">[] = [
+const STATIC_DRIVE_MIRROR: Record<string, string> = {
+  "1X9xsOqjso_wuK2PX5Hyr8HUuEj3yz7MR": "/radio/anarchy/anarchy.mp3",
+  "1kCdATeyppoK39nd3hap-hXQPr3YSBEnx": "/radio/anarchy/power-glove-remix.mp3",
+  "1Om8QOq2avKSDmCcsl8l8Xe-fgzH8rFVp": "/radio/anarchy/psychedelic-trap.mp3",
+  "14AP_M91GRmzig5NoKPvUi-p7_CBSQCn7": "/radio/anarchy/psychedelic-vibe.mp3",
+  "1P8lOsbuX7W4KKNKy0wL87xWcn8jRwKTJ": "/radio/anarchy/tribal-136.mp3",
+};
+
+const FALLBACK_SONS_TRACKS: Omit<DriveRadioTrack, "driveUrl">[] = [
   {
     id: "1X9xsOqjso_wuK2PX5Hyr8HUuEj3yz7MR",
     name: "Anarchy.wav",
     title: "Anarchy",
-    mimeType: "audio/wav",
-    sizeLabel: "58.3 MB",
+    mimeType: "audio/mpeg",
+    sizeLabel: "58.3 MB (WAV) · MP3",
+    streamUrl: "/radio/anarchy/anarchy.mp3",
   },
   {
     id: "1kCdATeyppoK39nd3hap-hXQPr3YSBEnx",
     name: "POWER GLOVE REMIX.wav",
     title: "POWER GLOVE REMIX",
-    mimeType: "audio/wav",
-    sizeLabel: "38.3 MB",
+    mimeType: "audio/mpeg",
+    sizeLabel: "38.3 MB (WAV) · MP3",
+    streamUrl: "/radio/anarchy/power-glove-remix.mp3",
   },
   {
     id: "1Om8QOq2avKSDmCcsl8l8Xe-fgzH8rFVp",
     name: "psychedelic trap.wav",
     title: "psychedelic trap",
-    mimeType: "audio/wav",
-    sizeLabel: "48.2 MB",
+    mimeType: "audio/mpeg",
+    sizeLabel: "48.2 MB (WAV) · MP3",
+    streamUrl: "/radio/anarchy/psychedelic-trap.mp3",
   },
   {
     id: "14AP_M91GRmzig5NoKPvUi-p7_CBSQCn7",
     name: "PSYCHEDELIC VIBE.wav",
     title: "PSYCHEDELIC VIBE",
-    mimeType: "audio/wav",
-    sizeLabel: "47.7 MB",
+    mimeType: "audio/mpeg",
+    sizeLabel: "47.7 MB (WAV) · MP3",
+    streamUrl: "/radio/anarchy/psychedelic-vibe.mp3",
   },
   {
     id: "1P8lOsbuX7W4KKNKy0wL87xWcn8jRwKTJ",
     name: "tribal -136.wav",
     title: "tribal -136",
-    mimeType: "audio/wav",
-    sizeLabel: "38.0 MB",
+    mimeType: "audio/mpeg",
+    sizeLabel: "38.0 MB (WAV) · MP3",
+    streamUrl: "/radio/anarchy/tribal-136.mp3",
   },
 ];
 
 function stripAudioExtension(filename: string): string {
   return filename.replace(/\.(wav|mp3|ogg|flac|m4a|aac|aiff)$/i, "").trim();
+}
+
+function resolveStreamUrl(id: string): string {
+  return (
+    STATIC_DRIVE_MIRROR[id] ??
+    `/api/radio/anarchy/stream/${encodeURIComponent(id)}`
+  );
 }
 
 function parseGdriveLsOutput(stdout: string): DriveRadioTrack[] {
@@ -75,20 +95,18 @@ function parseGdriveLsOutput(stdout: string): DriveRadioTrack[] {
     ) {
       continue;
     }
-    // Format: <ID>  <Name>  audio/<ext>  <Size>
-    const match = line.match(
-      /^(\S+)\s+(.+?)\s+(audio\/\S+)\s+(.+)$/
-    );
+    const match = line.match(/^(\S+)\s+(.+?)\s+(audio\/\S+)\s+(.+)$/);
     if (!match) continue;
     const [, id, name, mimeType, sizeLabel] = match;
+    const cleanId = id.trim();
     tracks.push({
-      id: id.trim(),
+      id: cleanId,
       name: name.trim(),
       title: stripAudioExtension(name.trim()),
       mimeType: mimeType.trim(),
       sizeLabel: sizeLabel.trim(),
-      streamUrl: `/api/radio/anarchy/stream/${encodeURIComponent(id.trim())}`,
-      driveUrl: `https://drive.google.com/file/d/${encodeURIComponent(id.trim())}/view`,
+      streamUrl: resolveStreamUrl(cleanId),
+      driveUrl: `https://drive.google.com/file/d/${encodeURIComponent(cleanId)}/view`,
     });
   }
   return tracks;
@@ -97,7 +115,7 @@ function parseGdriveLsOutput(stdout: string): DriveRadioTrack[] {
 export async function GET() {
   const syncedAt = new Date().toISOString();
 
-  // 1. Essayer le listing live via gdrive CLI (connecté dans la VM)
+  // 1. Listing live via gdrive CLI (VM)
   try {
     const { stdout } = await execFileAsync(
       "gdrive",
@@ -114,7 +132,7 @@ export async function GET() {
       });
     }
   } catch {
-    // Fallback si gdrive CLI indisponible (ex: Vercel)
+    // Fallback Vercel / hors VM
   }
 
   // 2. Fallback API Google Drive publique si GOOGLE_DRIVE_API_KEY est configurée
@@ -148,25 +166,24 @@ export async function GET() {
               sizeLabel: f.size
                 ? `${(Number(f.size) / (1024 * 1024)).toFixed(1)} MB`
                 : "AUDIO",
-              streamUrl: `/api/radio/anarchy/stream/${encodeURIComponent(f.id)}`,
+              streamUrl: resolveStreamUrl(f.id),
               driveUrl: `https://drive.google.com/file/d/${encodeURIComponent(f.id)}/view`,
             })),
           });
         }
       }
     } catch {
-      // Fallback vers le manifeste
+      // Fallback vers le manifeste embarqué
     }
   }
 
-  // 3. Fallback manifeste connu du dossier Drive Sons
+  // 3. Fallback embarqué Vercel (fichiers MP3 encodés depuis Drive Sons)
   return NextResponse.json({
-    source: "drive_manifest",
+    source: "vercel_drive_sync",
     folderId: ANARCHY_SONS_FOLDER_ID,
     syncedAt,
     tracks: FALLBACK_SONS_TRACKS.map((t) => ({
       ...t,
-      streamUrl: `/api/radio/anarchy/stream/${encodeURIComponent(t.id)}`,
       driveUrl: `https://drive.google.com/file/d/${encodeURIComponent(t.id)}/view`,
     })),
   });

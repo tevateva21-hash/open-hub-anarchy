@@ -69,7 +69,6 @@ export default function RadioPage() {
     oscilloscopeMode,
     peakLevels,
     playTrack,
-    togglePlay,
     setVolume,
     toggleMute,
     toggleWetDry,
@@ -238,7 +237,37 @@ export default function RadioPage() {
     return [...communityTracks].sort((a, b) => b.likes - a.likes);
   }, [communityTracks]);
 
-  // Boucle 60fps oscilloscope
+  // Boucle 60fps oscilloscope (analyse du flux Drive en priorité, sinon contexte global)
+  const driveAudioCtxRef = useRef<AudioContext | null>(null);
+  const driveAnalyserRef = useRef<AnalyserNode | null>(null);
+  const driveSourceConnectedRef = useRef(false);
+
+  const ensureDriveAnalyser = useCallback(() => {
+    const audioEl = driveAudioRef.current;
+    if (!audioEl || driveSourceConnectedRef.current) return;
+    try {
+      const AudioCtx =
+        window.AudioContext ||
+        (window as unknown as { webkitAudioContext: typeof AudioContext })
+          .webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = driveAudioCtxRef.current ?? new AudioCtx();
+      if (ctx.state === "suspended") {
+        void ctx.resume();
+      }
+      const source = ctx.createMediaElementSource(audioEl);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 256;
+      source.connect(analyser);
+      analyser.connect(ctx.destination);
+      driveAudioCtxRef.current = ctx;
+      driveAnalyserRef.current = analyser;
+      driveSourceConnectedRef.current = true;
+    } catch {
+      // ignore if already connected or unsupported
+    }
+  }, []);
+
   useEffect(() => {
     const canvas = canvasRef.current;
     if (!canvas) return;
@@ -263,8 +292,14 @@ export default function RadioPage() {
       ctx.lineTo(width, height / 2);
       ctx.stroke();
 
+      const analyser = driveAnalyserRef.current;
+
       if (oscilloscopeMode === "FFT") {
-        getFrequencyData(dataArray);
+        if (analyser && isDrivePlaying) {
+          analyser.getByteFrequencyData(dataArray);
+        } else {
+          getFrequencyData(dataArray);
+        }
         const barCount = 32;
         const barWidth = width / barCount - 1.5;
 
@@ -277,7 +312,11 @@ export default function RadioPage() {
           ctx.fillRect(x, y, barWidth, barHeight);
         }
       } else {
-        getTimeDomainData(dataArray);
+        if (analyser && isDrivePlaying) {
+          analyser.getByteTimeDomainData(dataArray);
+        } else {
+          getTimeDomainData(dataArray);
+        }
         const sliceWidth = width / (bufferLength - 1);
 
         if (oscilloscopeMode === "ANAGLYPH") {
@@ -315,17 +354,9 @@ export default function RadioPage() {
 
     animationFrameId = window.requestAnimationFrame(renderFrame);
     return () => window.cancelAnimationFrame(animationFrameId);
-  }, [getFrequencyData, getTimeDomainData, oscilloscopeMode, wetDryMix]);
+  }, [getFrequencyData, getTimeDomainData, isDrivePlaying, oscilloscopeMode, wetDryMix]);
 
   const activeTrack = currentTrack ?? DEFAULT_RADIO_STREAM;
-
-  const handleToggleRadio = () => {
-    if (!currentTrack) {
-      playTrack(DEFAULT_RADIO_STREAM);
-    } else {
-      togglePlay();
-    }
-  };
 
   const handleOpenUpload = () => {
     if (!user) {
@@ -448,23 +479,24 @@ export default function RadioPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-5 border-b border-neutral-200">
               <div className="flex items-center gap-4">
                 <AvatarBD
-                  name={activeTrack.title}
+                  name={activeDriveTrack?.title ?? activeTrack.title}
                   expression={activeTrack.avatarExpression}
                   size="md"
                   badgeText="LIVE"
-                  audioReactive={isPlaying}
-                  anaglyphRing={isPlaying}
+                  audioReactive={isDrivePlaying || isPlaying}
+                  anaglyphRing={isDrivePlaying || isPlaying}
                 />
                 <div>
                   <div className="font-mono text-xs font-bold uppercase text-brand-red">
-                    {"// RADIO_ANARCHY"}
+                    {"// RADIO_ANARCHY · GOOGLE DRIVE SONS"}
                   </div>
                   <h1 className="font-sans text-2xl sm:text-3xl font-bold text-brand-black">
-                    {activeTrack.title}
+                    {activeDriveTrack ? activeDriveTrack.title : "Radio Anarchy"}
                   </h1>
                   <p className="font-mono text-xs text-neutral-500">
-                    {activeTrack.subtitle} • {activeTrack.bpm} BPM •{" "}
-                    {activeTrack.key}
+                    {activeDriveTrack
+                      ? `${activeDriveTrack.name} • ${activeDriveTrack.sizeLabel}`
+                      : "Synchronisation Google Drive en cours..."}
                   </p>
                 </div>
               </div>
@@ -472,11 +504,15 @@ export default function RadioPage() {
               <div className="flex flex-wrap items-center gap-2.5">
                 <Button
                   id="btn-radio-play"
-                  variant={isPlaying ? "primary" : "comic"}
+                  variant={isDrivePlaying ? "primary" : "comic"}
                   size="lg"
-                  onClick={handleToggleRadio}
+                  onClick={() => {
+                    ensureDriveAnalyser();
+                    handleToggleDrivePlay();
+                  }}
+                  disabled={driveTracks.length === 0}
                 >
-                  {isPlaying ? "❚❚ PAUSE SYNTH" : "▶ SYNTH LIVE"}
+                  {isDrivePlaying ? "❚❚ PAUSE RADIO" : "▶ LANCER RADIO ANARCHY"}
                 </Button>
                 <Button
                   id="btn-radio-sync-drive"
@@ -524,7 +560,9 @@ export default function RadioPage() {
 
                 <div className="flex items-center justify-between font-mono text-xs text-neutral-500">
                   <span>
-                    {formatTimecode(currentTime)} / {formatTimecode(duration)}
+                    {formatTimecode(isDrivePlaying || driveDuration > 0 ? driveTime : currentTime)}{" "}
+                    /{" "}
+                    {formatTimecode(isDrivePlaying || driveDuration > 0 ? driveDuration : duration)}
                   </span>
                   <span>
                     MODE DSP :{" "}
