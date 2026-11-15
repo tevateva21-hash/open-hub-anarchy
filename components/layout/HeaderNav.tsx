@@ -10,7 +10,6 @@ interface NavItem {
   id: string;
   href: string;
   label: string;
-  accent?: boolean;
 }
 
 const NAV_ITEMS: NavItem[] = [
@@ -21,18 +20,20 @@ const NAV_ITEMS: NavItem[] = [
     href: "/anarchy-visual-design",
     label: "03.VISUAL_DESIGN",
   },
-  { id: "nav-forum", href: "/forum", label: "04.FORUM" },
-  { id: "nav-blog", href: "/blog", label: "05.BLOG_&_DOCS" },
-  { id: "nav-legal", href: "/legal", label: "06.RGPD_&_HTTPS", accent: true },
+  { id: "nav-radio", href: "/radio", label: "04.RADIO" },
+  { id: "nav-forum", href: "/forum", label: "05.FORUM" },
+  { id: "nav-blog", href: "/blog", label: "06.BLOG_&_DOCS" },
 ];
 
 /**
- * Composant `HeaderNav` — Header Clinique DAW + Emblème Lunettes 3D BD + Navigation Desktop & Mobile.
+ * Composant `HeaderNav` — Header Clinique DAW épuré avec navigation principale
+ * (VST Hub, Samples, Visual Design, Radio, Forum, Blog) sans RGPD dans le header
+ * (placé en pied de page comme sur les sites standards) ni lecteur persistant encombrant.
  */
 export const HeaderNav: React.FC = () => {
   const pathname = usePathname() || "/";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { isPlaying, togglePlay, currentTrack } = useAudioPlayer();
+  const { isPlaying } = useAudioPlayer();
 
   const isRouteActive = (href: string): boolean => {
     if (href === "/") {
@@ -47,7 +48,7 @@ export const HeaderNav: React.FC = () => {
       className="sticky top-0 z-40 w-full bg-brand-white/95 backdrop-blur-md border-b border-neutral-200 shadow-clinical"
     >
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
-        {/* Identité visuelle & Titre technique obligatoire en police monospace */}
+        {/* Identité visuelle & Titre technique */}
         <Link
           href="/"
           className="flex items-center gap-3 focus:outline-none group shrink-0"
@@ -106,19 +107,11 @@ export const HeaderNav: React.FC = () => {
             </svg>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="font-mono text-sm sm:text-base font-bold tracking-tight text-brand-black">
-              OPEN HUB{" "}
-              <span className="text-brand-red font-bold">{"//"}</span>{" "}
-              <span className="text-brand-charcoal font-medium">
-                by anarchy
-              </span>
-            </span>
-            <span className="hidden xl:inline-flex items-center gap-1.5 ml-1 px-2 py-0.5 rounded bg-brand-pearl border border-neutral-200 font-mono text-[10px] text-brand-charcoal uppercase">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-red animate-pulse" />
-              v2.4_TLS1.3
-            </span>
-          </div>
+          <span className="font-mono text-sm sm:text-base font-bold tracking-tight text-brand-black">
+            OPEN HUB{" "}
+            <span className="text-brand-red font-bold">{"//"}</span>{" "}
+            <span className="text-brand-charcoal font-medium">by anarchy</span>
+          </span>
         </Link>
 
         {/* Navigation Principale Desktop */}
@@ -139,8 +132,6 @@ export const HeaderNav: React.FC = () => {
                   "px-3 py-1.5 rounded-md transition-colors whitespace-nowrap",
                   active
                     ? "bg-brand-pearl text-brand-black font-bold border border-black shadow-comic-sm"
-                    : item.accent
-                    ? "text-brand-red font-medium hover:bg-brand-pearl/70"
                     : "text-neutral-600 hover:text-brand-black hover:bg-brand-pearl/70",
                 ].join(" ")}
               >
@@ -150,30 +141,17 @@ export const HeaderNav: React.FC = () => {
           })}
         </nav>
 
-        {/* Zone droite : Bouton rapide TEST_SIGNAL + Statut Audio + AvatarBD + Toggle Mobile */}
+        {/* Zone droite : Statut Radio si actif + AvatarBD + Toggle Mobile */}
         <div className="flex items-center gap-2.5 shrink-0">
-          <button
-            id="header-test-signal-btn"
-            data-testid="header-test-signal-btn"
-            type="button"
-            onClick={togglePlay}
-            className={`hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded font-mono text-[11px] font-bold uppercase tracking-wider border-2 border-black shadow-comic-sm transition-transform active:translate-y-0.5 ${
-              isPlaying
-                ? "bg-brand-charcoal text-brand-white"
-                : "bg-brand-red text-brand-white"
-            }`}
-          >
-            <span>{isPlaying ? "❚❚ STOP_SIG" : "▶ TEST_SIGNAL"}</span>
-          </button>
-
-          <div className="hidden lg:flex flex-col items-end font-mono text-[10px] leading-tight">
-            <span className="text-brand-black font-bold">
-              {"48.0 kHz // 24-BIT"}
-            </span>
-            <span className="text-neutral-500 truncate max-w-[110px]">
-              {currentTrack ? currentTrack.key : "HTTPS_STRICT"}
-            </span>
-          </div>
+          {isPlaying && (
+            <Link
+              href="/radio"
+              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded border-2 border-black bg-brand-red text-brand-white font-mono text-[10px] font-bold uppercase shadow-comic-sm"
+            >
+              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
+              <span>RADIO ON</span>
+            </Link>
+          )}
 
           <AvatarBD
             id="header-user-avatar"
@@ -211,13 +189,6 @@ export const HeaderNav: React.FC = () => {
           data-testid="mobile-nav-drawer"
           className="md:hidden bg-brand-white border-b-2 border-black px-4 pt-2 pb-4 space-y-2 shadow-clinical"
         >
-          <div className="flex items-center justify-between py-1.5 border-b border-neutral-200 font-mono text-[10px] text-neutral-500">
-            <span>{"SYS_NAV // MOBILE_DRAWER"}</span>
-            <span className="text-brand-red font-bold">
-              {"TLS_1.3 // RGPD_OK"}
-            </span>
-          </div>
-
           <nav
             aria-label="Navigation mobile"
             className="flex flex-col gap-1.5 font-mono text-xs"
@@ -242,19 +213,6 @@ export const HeaderNav: React.FC = () => {
               );
             })}
           </nav>
-
-          <div className="pt-2 flex items-center justify-between gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                togglePlay();
-                setMobileMenuOpen(false);
-              }}
-              className="w-full py-2 rounded bg-brand-red text-brand-white border-2 border-black shadow-comic-sm font-mono text-xs font-bold uppercase"
-            >
-              {isPlaying ? "❚❚ PAUSE TEST_SIGNAL" : "▶ PLAY TEST_SIGNAL"}
-            </button>
-          </div>
         </div>
       )}
     </header>

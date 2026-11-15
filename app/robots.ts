@@ -13,6 +13,7 @@ export default function robots(): MetadataRoute.Robots {
           "/samples",
           "/anarchy-visual-design",
           "/visual-engine",
+          "/radio",
           "/forum",
           "/blog",
           "/vst",

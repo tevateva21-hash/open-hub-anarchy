@@ -113,7 +113,7 @@ export const CookieConsentBanner: React.FC = () => {
       role="dialog"
       aria-modal="false"
       aria-labelledby="rgpd-banner-title"
-      className="fixed bottom-24 inset-x-4 z-50 max-w-4xl mx-auto"
+      className="fixed bottom-4 inset-x-4 z-50 max-w-4xl mx-auto"
     >
       <div className="bg-brand-white border-2 border-black rounded-xl shadow-comic overflow-hidden">
         {/* Barre supérieure technique style module DAW */}

@@ -1,8 +1,7 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
-import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 interface AnarchyHudShellProps {
   header: React.ReactNode;
@@ -10,29 +9,8 @@ interface AnarchyHudShellProps {
   footer: React.ReactNode;
 }
 
-const HUD_ROUTES = [
-  { href: "/", label: "01.VST_HUB" },
-  { href: "/samples", label: "02.SAMPLES" },
-  { href: "/anarchy-visual-design", label: "03.VISUAL_DESIGN" },
-  { href: "/forum", label: "04.FORUM" },
-  { href: "/blog", label: "05.BLOG" },
-  { href: "/legal", label: "06.RGPD" },
-] as const;
-
-const KNOWN_ADDRESS_OPTIONS = [
-  { label: "https://openhub-anarchy.org/ (Catalogue VST3/CLAP)", path: "/" },
-  { label: "https://openhub-anarchy.org/samples (Banque Samples)", path: "/samples" },
-  {
-    label: "https://openhub-anarchy.org/anarchy-visual-design (Studio 19 Faders)",
-    path: "/anarchy-visual-design",
-  },
-  { label: "https://openhub-anarchy.org/forum (Imageboard Communauté)", path: "/forum" },
-  { label: "https://openhub-anarchy.org/blog (Docs & DSP)", path: "/blog" },
-  { label: "https://openhub-anarchy.org/legal (RGPD & HTTPS)", path: "/legal" },
-];
-
 /**
- * Emblème carré pixel/BD [A] Open Hub by Anarchy (sans aucune référence externe/club).
+ * Emblème carré pixel/BD [A] Open Hub by Anarchy.
  */
 const AnarchySquareEmblem: React.FC<{ size?: "xs" | "md" }> = ({
   size = "xs",
@@ -45,7 +23,6 @@ const AnarchySquareEmblem: React.FC<{ size?: "xs" | "md" }> = ({
     >
       <svg viewBox="0 0 24 24" className="w-full h-full" fill="none">
         <rect width="24" height="24" fill="#000000" />
-        {/* Ombre 3D anaglyphe subtile Rouge / Cyan */}
         <path
           d="M11 4L5 20H8.2L9.5 16.5H14.5L15.8 20H19L13 4H11ZM10.4 13.8L12 9L13.6 13.8H10.4Z"
           transform="translate(-0.8 0)"
@@ -76,9 +53,9 @@ const AnarchySquareEmblem: React.FC<{ size?: "xs" | "md" }> = ({
 };
 
 /**
- * `AnarchyHudShell` — Habillage global rétro-HUD inspiré d'une fenêtre OS/navigateur
- * fin 90s (barre de titre dégradée vert → cobalt → bleu ciel, barre Address, cadre biseauté,
- * ascenseur latéral et barre d'état Done), fusionné avec la charte Figma Clinique + BD 3D.
+ * `AnarchyHudShell` — Habillage épuré rétro-HUD (cadre biseauté + barre de titre
+ * dégradée vert → cobalt → bleu ciel + rail scrollbar + barre d'état Done),
+ * sans aucune barre d'adresse ni menu redondant avec `HeaderNav`.
  */
 export const AnarchyHudShell: React.FC<AnarchyHudShellProps> = ({
   header,
@@ -86,37 +63,15 @@ export const AnarchyHudShell: React.FC<AnarchyHudShellProps> = ({
   footer,
 }) => {
   const pathname = usePathname() || "/";
-  const router = useRouter();
-
-  const [hudCompact, setHudCompact] = useState(false);
   const [hudExpanded, setHudExpanded] = useState(false);
-  const [addressValue, setAddressValue] = useState(
-    `https://openhub-anarchy.org${pathname}`
-  );
+  const [showStatusBar, setShowStatusBar] = useState(true);
   const [statusNotice, setStatusNotice] = useState(
     "Done · HTTPS TLS 1.3 · RGPD CNIL OK"
   );
 
   useEffect(() => {
-    setAddressValue(`https://openhub-anarchy.org${pathname}`);
     setStatusNotice(`Done · ${pathname} · TLS 1.3 OK`);
   }, [pathname]);
-
-  const handleAddressNavigate = (e: React.FormEvent) => {
-    e.preventDefault();
-    const cleaned = addressValue
-      .trim()
-      .replace(/^https?:\/\/openhub-anarchy\.org/i, "")
-      .replace(/^https?:\/\/[^/]+/i, "");
-    const targetPath = cleaned.startsWith("/") ? cleaned : `/${cleaned}`;
-    if (targetPath && targetPath !== pathname) {
-      setStatusNotice(`Navigating → ${targetPath}...`);
-      router.push(targetPath);
-    } else {
-      window.scrollTo({ top: 0, behavior: "smooth" });
-      setStatusNotice("HUD Viewport refreshed · 48.0 kHz");
-    }
-  };
 
   const scrollByStep = (delta: number) => {
     window.scrollBy({ top: delta, behavior: "smooth" });
@@ -148,7 +103,7 @@ export const AnarchyHudShell: React.FC<AnarchyHudShellProps> = ({
           <div className="flex items-center gap-2 min-w-0">
             <AnarchySquareEmblem size="xs" />
             <span className="font-mono text-[11px] sm:text-xs font-bold tracking-tight text-white drop-shadow-[1px_1px_0px_rgba(0,0,0,0.85)] truncate">
-              {"OPEN HUB // BY ANARCHY — VST3, SAMPLES & VISUAL DESIGN HUD"}
+              {"OPEN HUB // BY ANARCHY"}
             </span>
           </div>
 
@@ -156,13 +111,9 @@ export const AnarchyHudShell: React.FC<AnarchyHudShellProps> = ({
           <div className="flex items-center gap-1 shrink-0">
             <button
               type="button"
-              onClick={() => setHudCompact((prev) => !prev)}
-              title={
-                hudCompact
-                  ? "Restaurer les barres du HUD"
-                  : "Réduire les barres du HUD"
-              }
-              aria-label="Réduire ou restaurer les barres d'outils HUD"
+              onClick={() => setShowStatusBar((prev) => !prev)}
+              title="Afficher ou masquer la barre d'état HUD"
+              aria-label="Afficher ou masquer la barre d'état HUD"
               className="w-5 h-5 bg-[#D4D0C8] text-black font-mono text-[11px] font-bold leading-none flex items-center justify-center border border-t-white border-l-white border-r-[#404040] border-b-[#404040] active:border-t-[#404040] active:border-l-[#404040] active:border-r-white active:border-b-white"
             >
               _
@@ -195,104 +146,7 @@ export const AnarchyHudShell: React.FC<AnarchyHudShellProps> = ({
           </div>
         </div>
 
-        {/* 2. BARRE DE MODULES + EMBLÈME ANARCHY BD DROIT (masquable via [_]) */}
-        {!hudCompact && (
-          <>
-            <div className="hidden sm:flex items-center justify-between gap-2 px-2 py-1 bg-[#D4D0C8] border-b border-[#808080]">
-              <div className="flex flex-wrap items-center gap-1 font-mono text-[11px]">
-                <span className="px-1.5 py-0.5 text-neutral-600 font-bold border-r border-[#808080] mr-0.5">
-                  HUD://
-                </span>
-                {HUD_ROUTES.map((item) => {
-                  const isActive =
-                    item.href === "/"
-                      ? pathname === "/" || pathname.startsWith("/vst")
-                      : pathname === item.href ||
-                        pathname.startsWith(`${item.href}/`);
-                  return (
-                    <Link
-                      key={`hud-strip-${item.href}`}
-                      href={item.href}
-                      className={`px-2 py-0.5 transition-colors inline-flex items-center gap-1.5 ${
-                        isActive
-                          ? "bg-white text-black font-bold border border-t-[#808080] border-l-[#808080] border-r-white border-b-white"
-                          : "text-neutral-800 hover:bg-white/60 border border-transparent hover:border-t-white hover:border-l-white hover:border-r-[#808080] hover:border-b-[#808080]"
-                      }`}
-                    >
-                      {isActive && (
-                        <span
-                          aria-hidden="true"
-                          className="w-1.5 h-1.5 bg-brand-red inline-block"
-                        />
-                      )}
-                      <span>{item.label}</span>
-                    </Link>
-                  );
-                })}
-              </div>
-
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="hidden md:inline-block font-mono text-[10px] font-bold text-neutral-700 px-1.5 py-0.5 bg-[#E6E4DE] border border-t-[#808080] border-l-[#808080] border-r-white border-b-white">
-                  FIGMA DAW // 3D BD
-                </span>
-                <AnarchySquareEmblem size="md" />
-              </div>
-            </div>
-
-            {/* 3. BARRE D'ADRESSE RÉTRO (`Address` + Input + Quick-Select + `Go`) */}
-            <form
-              onSubmit={handleAddressNavigate}
-              className="flex items-center gap-1.5 sm:gap-2 px-2 py-1.5 bg-[#D4D0C8] border-b-2 border-[#808080]"
-              aria-label="Barre d'adresse Anarchy HUD"
-            >
-              <label
-                htmlFor="hud-address-input"
-                className="font-mono text-[11px] font-bold text-neutral-800 shrink-0 hidden xs:inline sm:inline"
-              >
-                Address
-              </label>
-
-              <div className="flex-1 min-w-0 flex items-center bg-white border border-t-[#808080] border-l-[#808080] border-r-white border-b-white px-1.5 py-0.5 gap-1.5">
-                <AnarchySquareEmblem size="xs" />
-                <input
-                  id="hud-address-input"
-                  type="text"
-                  value={addressValue}
-                  onChange={(e) => setAddressValue(e.target.value)}
-                  aria-label="Adresse URL Open Hub"
-                  className="w-full min-w-0 bg-transparent font-mono text-[11px] sm:text-xs text-brand-black focus:outline-none truncate"
-                />
-                <select
-                  aria-label="Accès rapide aux routes Open Hub"
-                  value={
-                    HUD_ROUTES.some((r) => r.href === pathname) ? pathname : "/"
-                  }
-                  onChange={(e) => {
-                    router.push(e.target.value);
-                  }}
-                  className="w-5 h-5 bg-[#D4D0C8] text-black font-mono text-[10px] border border-t-white border-l-white border-r-[#808080] border-b-[#808080] cursor-pointer shrink-0"
-                  title="Choisir une route Open Hub"
-                >
-                  {KNOWN_ADDRESS_OPTIONS.map((opt) => (
-                    <option key={opt.path} value={opt.path}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <button
-                type="submit"
-                className="px-2.5 py-0.5 bg-[#D4D0C8] text-black font-mono text-[11px] font-bold border border-t-white border-l-white border-r-[#404040] border-b-[#404040] active:border-t-[#404040] active:border-l-[#404040] active:border-r-white active:border-b-white hover:bg-[#DFDCD5] inline-flex items-center gap-1 shrink-0"
-              >
-                <span className="text-[#52B755] font-bold">{"→"}</span>
-                <span>Go</span>
-              </button>
-            </form>
-          </>
-        )}
-
-        {/* 4. CONTENEUR CENTRAL (HEADER + MAIN + FOOTER + RAIL SCROLLBAR DÉCORATIF) */}
+        {/* 2. CONTENEUR CENTRAL (HEADER + MAIN + FOOTER + RAIL SCROLLBAR DÉCORATIF) */}
         <div className="flex min-w-0 bg-brand-pearl border-t border-white">
           <div className="flex-1 min-w-0 flex flex-col">
             {header}
@@ -300,7 +154,7 @@ export const AnarchyHudShell: React.FC<AnarchyHudShellProps> = ({
             {footer}
           </div>
 
-          {/* Rail scrollbar rétro Win98 (bureau xl+, purement ergonomique / décoratif) */}
+          {/* Rail scrollbar rétro Win98 (bureau xl+) */}
           <div
             aria-hidden="true"
             className="hidden xl:flex flex-col justify-between w-4 bg-[#D4D0C8] border-l border-[#808080] shrink-0 select-none"
@@ -329,29 +183,27 @@ export const AnarchyHudShell: React.FC<AnarchyHudShellProps> = ({
           </div>
         </div>
 
-        {/* 5. BARRE D'ÉTAT INFÉRIEURE RÉTRO (`Done`) */}
-        <div
-          id="anarchy-hud-statusbar"
-          className="flex flex-wrap items-center justify-between gap-1.5 px-1.5 py-1 bg-[#D4D0C8] border-t-2 border-white font-mono text-[10px] sm:text-[11px] text-neutral-800"
-        >
-          <div className="flex-1 min-w-[180px] flex items-center gap-1.5 px-2 py-0.5 bg-[#D4D0C8] border border-t-[#808080] border-l-[#808080] border-r-white border-b-white truncate">
-            <AnarchySquareEmblem size="xs" />
-            <span className="truncate font-medium">{statusNotice}</span>
-          </div>
+        {/* 3. BARRE D'ÉTAT INFÉRIEURE RÉTRO (`Done`) */}
+        {showStatusBar && (
+          <div
+            id="anarchy-hud-statusbar"
+            className="flex flex-wrap items-center justify-between gap-1.5 px-1.5 py-1 bg-[#D4D0C8] border-t-2 border-white font-mono text-[10px] sm:text-[11px] text-neutral-800"
+          >
+            <div className="flex-1 min-w-[180px] flex items-center gap-1.5 px-2 py-0.5 bg-[#D4D0C8] border border-t-[#808080] border-l-[#808080] border-r-white border-b-white truncate">
+              <AnarchySquareEmblem size="xs" />
+              <span className="truncate font-medium">{statusNotice}</span>
+            </div>
 
-          <div className="hidden md:block px-2 py-0.5 bg-[#D4D0C8] border border-t-[#808080] border-l-[#808080] border-r-white border-b-white text-neutral-700">
-            {"ENGINE // V2.0 (19 FADERS)"}
-          </div>
+            <div className="hidden sm:block px-2 py-0.5 bg-[#D4D0C8] border border-t-[#808080] border-l-[#808080] border-r-white border-b-white text-neutral-700">
+              {"48.0 kHz // 24-BIT"}
+            </div>
 
-          <div className="hidden sm:block px-2 py-0.5 bg-[#D4D0C8] border border-t-[#808080] border-l-[#808080] border-r-white border-b-white text-neutral-700">
-            {"48.0 kHz // 24-BIT"}
+            <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#D4D0C8] border border-t-[#808080] border-l-[#808080] border-r-white border-b-white font-bold text-brand-black">
+              <AnarchySquareEmblem size="xs" />
+              <span>ANARCHY 2026</span>
+            </div>
           </div>
-
-          <div className="flex items-center gap-1.5 px-2 py-0.5 bg-[#D4D0C8] border border-t-[#808080] border-l-[#808080] border-r-white border-b-white font-bold text-brand-black">
-            <AnarchySquareEmblem size="xs" />
-            <span>ANARCHY 2026</span>
-          </div>
-        </div>
+        )}
       </div>
     </div>
   );

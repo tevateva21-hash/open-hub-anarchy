@@ -3,7 +3,6 @@ import { Inter, Roboto_Mono } from "next/font/google";
 import Link from "next/link";
 import "./globals.css";
 import { AudioPlayerProvider } from "@/components/audio/AudioPlayerContext";
-import { StickyBottomPlayer } from "@/components/audio/StickyBottomPlayer";
 import { HeaderNav } from "@/components/layout/HeaderNav";
 import { AnarchyHudShell } from "@/components/layout/AnarchyHudShell";
 import { CookieConsentBanner } from "@/components/compliance/CookieConsentBanner";
@@ -26,11 +25,11 @@ export const metadata: Metadata = {
   metadataBase: new URL("https://openhub-anarchy.org"),
   title: {
     default:
-      "OPEN HUB // by anarchy — Plateforme Open-Source VST, Samples & Audio",
+      "OPEN HUB // by anarchy — Plateforme Open-Source VST, Samples & Visual Design",
     template: "%s | OPEN HUB // by anarchy",
   },
   description:
-    "Plateforme open-source destinée à héberger des plugins VST, un forum, un blog technique et à partager des sons et samples pour la communauté Anarchy.",
+    "Plateforme open-source communautaire dédiée aux plugins VST, aux samples, à la radio, au forum et au studio Anarchy Visual Design.",
   robots: {
     index: true,
     follow: true,
@@ -38,26 +37,13 @@ export const metadata: Metadata = {
   openGraph: {
     title: "OPEN HUB // by anarchy",
     description:
-      "Écosystème open-source VST3/CLAP, samples libres de droits, forum et recherche DSP.",
+      "Plateforme communautaire open-source : VST, Samples, Anarchy Visual Design, Radio, Forum & Blog.",
     type: "website",
     locale: "fr_FR",
     siteName: "OPEN HUB // by anarchy",
   },
 };
 
-/**
- * Layout global `RootLayout` — Open Hub (by Anarchy).
- *
- * Intègre :
- * - Lien d'évitement RGAA / WCAG ("Aller au contenu principal")
- * - Typographies Google Fonts `Inter` et `Roboto Mono`
- * - Habillage Rétro Anarchy HUD (`AnarchyHudShell`) fusionné Figma + BD 3D
- * - Contexte Audio Global (`AudioPlayerProvider`) persistant à travers le routage App Router
- * - Header clinique & responsive (`HeaderNav`) avec emblème lunettes 3D anaglyphes
- * - Lecteur Audio Persistant en bas d'écran (`StickyBottomPlayer`) avec oscilloscope `#FF1B24`
- * - Bandeau & Console de consentement RGPD / CNIL (`CookieConsentBanner`)
- * - Espace inférieur `pb-28` pour ne jamais masquer la barre d'état HUD ni le footer par le lecteur persistant
- */
 export default function RootLayout({
   children,
 }: Readonly<{
@@ -65,7 +51,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="fr" className={`${inter.variable} ${robotoMono.variable}`}>
-      <body className="min-h-screen flex flex-col bg-brand-pearl text-brand-charcoal font-sans pb-28">
+      <body className="min-h-screen flex flex-col bg-brand-pearl text-brand-charcoal font-sans">
         <AudioPlayerProvider>
           {/* Lien d'évitement accessibilité RGAA / WCAG */}
           <a
@@ -82,8 +68,8 @@ export default function RootLayout({
                 <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-4 font-mono text-xs text-neutral-500">
                   <div>
                     <span>{"OPEN HUB // BY ANARCHY"}</span> —{" "}
-                    <span className="text-brand-red">v2.4</span> VST3/CLAP,
-                    SAMPLES, VISUAL DESIGN, FORUM &amp; RGPD
+                    <span className="text-brand-red">HTTPS TLS 1.3</span> ·
+                    Communauté Open-Source
                   </div>
                   <div className="flex flex-wrap items-center justify-center gap-4">
                     <FooterCookieTrigger />
@@ -92,7 +78,7 @@ export default function RootLayout({
                       href="/legal"
                       className="text-brand-charcoal hover:text-brand-red underline decoration-neutral-300 hover:decoration-brand-red underline-offset-4 transition-colors"
                     >
-                      MENTIONS LÉGALES &amp; RGPD
+                      RGPD, HTTPS &amp; MENTIONS LÉGALES
                     </Link>
                     <span>•</span>
                     <a
@@ -115,11 +101,8 @@ export default function RootLayout({
             </main>
           </AnarchyHudShell>
 
-          {/* Bandeau & Console RGPD / Cookies (CNIL) positionné au-dessus du lecteur */}
+          {/* Bandeau & Console RGPD / Cookies (CNIL) */}
           <CookieConsentBanner />
-
-          {/* Jalon 3 : Lecteur Audio Persistant avec Oscilloscope Rouge */}
-          <StickyBottomPlayer />
         </AudioPlayerProvider>
       </body>
     </html>
