@@ -50,6 +50,7 @@ export interface AudioPlayerContextValue {
   getTimeDomainData: (target: Uint8Array) => void;
   getFrequencyData: (target: Uint8Array) => void;
   triggerGlitchBurst: (type?: "glitch" | "strobe" | "invert") => void;
+  getCaptureAudioStream: () => MediaStream | null;
 }
 
 const AUDIO_PREFS_STORAGE_KEY = "openhub_audio_prefs";
@@ -158,6 +159,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
   const wetBusGainRef = useRef<GainNode | null>(null);
   const wetFilterRef = useRef<BiquadFilterNode | null>(null);
   const waveShaperRef = useRef<WaveShaperNode | null>(null);
+  const streamDestRef = useRef<MediaStreamAudioDestinationNode | null>(null);
 
   // État interne temps-réel pour le séquenceur procédural et le fallback oscilloscope
   const isPlayingRef = useRef<boolean>(false);
@@ -736,6 +738,21 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
+  const getCaptureAudioStream = useCallback((): MediaStream | null => {
+    const ctx = ensureAudioGraph();
+    if (!ctx || !analyserRef.current) return null;
+    if (!streamDestRef.current) {
+      try {
+        const dest = ctx.createMediaStreamDestination();
+        analyserRef.current.connect(dest);
+        streamDestRef.current = dest;
+      } catch {
+        return null;
+      }
+    }
+    return streamDestRef.current.stream;
+  }, [ensureAudioGraph]);
+
   const contextValue = useMemo<AudioPlayerContextValue>(
     () => ({
       currentTrack,
@@ -761,6 +778,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       getTimeDomainData,
       getFrequencyData,
       triggerGlitchBurst,
+      getCaptureAudioStream,
     }),
     [
       currentTrack,
@@ -786,6 +804,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       getTimeDomainData,
       getFrequencyData,
       triggerGlitchBurst,
+      getCaptureAudioStream,
     ]
   );
 

@@ -20,7 +20,8 @@ Document de suivi complet des jalons réalisés sur **Open Hub by Anarchy** (`te
 | **M9 — Now Playing & Émulation DAW** | `f74830b` | Badge « son en cours » global en haut à droite, suppression des fiches/commentaires VST au profit de l'émulation DAW pure | ✅ Terminé |
 | **M10 — Docs & Packs de 5 Scènes (C++/JSON + IA)** | `b9222be` | Rétroplanning GitHub/Drive/Site (`/docs/retroplanning`) + Packs de 5 scènes Visual Studio (JSON & C++ `.hpp`/`.cpp`, Prompt IA, partage communauté) | ✅ Terminé |
 | **M11 — Refonte Paradigme Packs de 5 Scènes** | `87fe70e` | Pack original `PS2 // Enter the Dragon`, générateur procédural par seed (`🎲 GÉNÉRER UN PACK`), enchaînement automatique 5 scènes au BPM, noms optionnels, scènes individuelles masquées par défaut | ✅ Terminé |
-| **M12 — Curseur MAUI, Éditeur C++ Externe & Calage 0.00s** | *Actuel* | Curseur audio libre sans crans + fenêtre 30s glissable sur la waveform (style .NET MAUI), éditeur externe `/anarchy-visual-design/editeur` avec exécution de code C++ temps réel sur le canvas, calage BPM verrouillé à `0.00s` par défaut | ✅ Terminé |
+| **M12 — Curseur MAUI, Éditeur C++ Externe & Calage 0.00s** | `c16e12c` | Curseur audio libre sans crans + fenêtre 30s glissable sur la waveform (style .NET MAUI), éditeur externe `/anarchy-visual-design/editeur` avec exécution de code C++ temps réel sur le canvas, calage BPM verrouillé à `0.00s` par défaut | ✅ Terminé |
+| **M13 — Export MP4 avec Son & Ergonomie Zone Prévisualisée** | *Actuel* | Déplacement de `RANDOMIZE`, `UNDO`/`REDO`, `PNG` et `EXPORT MP4` directement sous le moniteur vidéo et près de l'audio ; capture audio+vidéo muxée (`MediaStream` local/Open Hub) enregistrant exactement la zone d'extrait prévisualisée avec arrêt automatique et fondus | ✅ Terminé |
 
 ---
 

@@ -77,9 +77,15 @@ const MILESTONES = [
   },
   {
     id: "M12",
-    commit: "ACTUEL",
+    commit: "c16e12c",
     title: "Prévisualisation .NET MAUI, Éditeur C++ Externe & Calage 0.00s",
     details: "Curseur musique continu sans crans + fenêtre 30s glissable sur la waveform, éditeur externe /anarchy-visual-design/editeur avec injection C++ live modifiant le rendu, calage BPM verrouillé à 0.00s par défaut.",
+  },
+  {
+    id: "M13",
+    commit: "ACTUEL",
+    title: "Export MP4 avec Son & Cohérence Zone Prévisualisée",
+    details: "Boutons Randomize, Undo/Redo, Snapshot PNG et Export MP4 déplacés au plus près du moniteur vidéo et de l'extrait audio ; capture muxée vidéo + audio (piste locale avec fondus ou flux Open Hub) enregistrant automatiquement la zone prévisualisée.",
   },
 ];
 

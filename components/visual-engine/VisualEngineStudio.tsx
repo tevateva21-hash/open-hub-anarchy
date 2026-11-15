@@ -90,6 +90,7 @@ export const VisualEngineStudio: React.FC = () => {
     togglePlay,
     getTimeDomainData,
     getFrequencyData,
+    getCaptureAudioStream,
   } = useAudioPlayer();
 
   // Projet M6 complet + pile Undo/Redo
@@ -338,14 +339,47 @@ export const VisualEngineStudio: React.FC = () => {
     }
   };
 
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const isRecordingVideoRef = useRef<boolean>(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+  const recordAutoStopTimerRef = useRef<number | null>(null);
+  const localAudioCaptureRef = useRef<{
+    el: HTMLAudioElement;
+    ctx: AudioContext;
+    dest: MediaStreamAudioDestinationNode;
+  } | null>(null);
+
+  const stopActiveRecording = useCallback(() => {
+    if (recordAutoStopTimerRef.current !== null) {
+      window.clearTimeout(recordAutoStopTimerRef.current);
+      recordAutoStopTimerRef.current = null;
+    }
+    if (
+      mediaRecorderRef.current &&
+      mediaRecorderRef.current.state !== "inactive"
+    ) {
+      mediaRecorderRef.current.stop();
+    }
+    isRecordingVideoRef.current = false;
+    setIsRecordingVideo(false);
+  }, []);
+
   const applyClipFadeVolume = useCallback(
     (audioEl: HTMLAudioElement, t: number) => {
-      if (!clipActive) {
+      if (!clipActive && !isRecordingVideoRef.current) {
         audioEl.volume = 1;
         return;
       }
       const clipEnd = clipStartSeconds + clipDurationSeconds;
       if (t >= clipEnd) {
+        if (isRecordingVideoRef.current) {
+          audioEl.pause();
+          audioEl.currentTime = clipStartSeconds;
+          setLocalTime(clipStartSeconds);
+          stopActiveRecording();
+          return;
+        }
         if (clipLoop) {
           audioEl.currentTime = clipStartSeconds;
           setLocalTime(clipStartSeconds);
@@ -369,7 +403,15 @@ export const VisualEngineStudio: React.FC = () => {
       }
       audioEl.volume = Math.min(1, Math.max(0, vol));
     },
-    [clipActive, clipDurationSeconds, clipLoop, clipStartSeconds, fadeInSeconds, fadeOutSeconds]
+    [
+      clipActive,
+      clipDurationSeconds,
+      clipLoop,
+      clipStartSeconds,
+      fadeInSeconds,
+      fadeOutSeconds,
+      stopActiveRecording,
+    ]
   );
 
   // Boucle de rendu déterministe / temps-réel (pilote le Canvas 320x180)
@@ -391,13 +433,18 @@ export const VisualEngineStudio: React.FC = () => {
         const audioEl = localAudioRef.current;
         let t = audioEl ? audioEl.currentTime : localTime;
         if (audioEl && !audioEl.paused) {
-          if (clipActive) {
+          if (clipActive || isRecordingVideoRef.current) {
             const clipEnd = Math.min(
               analysis.durationSeconds,
               clipStartSeconds + clipDurationSeconds
             );
             if (t >= clipEnd) {
-              if (clipLoop) {
+              if (isRecordingVideoRef.current) {
+                audioEl.pause();
+                audioEl.currentTime = clipStartSeconds;
+                t = clipStartSeconds;
+                stopActiveRecording();
+              } else if (clipLoop) {
                 audioEl.currentTime = clipStartSeconds;
                 t = clipStartSeconds;
               } else {
@@ -586,6 +633,7 @@ export const VisualEngineStudio: React.FC = () => {
     playbackSpeed,
     project,
     sourceMode,
+    stopActiveRecording,
     transientGain,
     trebleGain,
   ]);
@@ -738,10 +786,6 @@ export const VisualEngineStudio: React.FC = () => {
     setPresetError("");
   };
 
-  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const recordedChunksRef = useRef<Blob[]>([]);
-
   const handleExportSnapshot = () => {
     const src = stageCanvasRef.current;
     if (!src) return;
@@ -761,10 +805,10 @@ export const VisualEngineStudio: React.FC = () => {
     document.body.removeChild(a);
   };
 
-  const handleToggleVideoExport = () => {
+  const handleToggleVideoExport = async () => {
     if (isRecordingVideo && mediaRecorderRef.current) {
-      mediaRecorderRef.current.stop();
-      setIsRecordingVideo(false);
+      stopActiveRecording();
+      localAudioRef.current?.pause();
       return;
     }
 
@@ -777,18 +821,92 @@ export const VisualEngineStudio: React.FC = () => {
     }
 
     try {
-      const stream = canvas.captureStream(30);
-      const candidates = [
-        "video/mp4;codecs=avc1",
-        "video/mp4",
-        "video/webm;codecs=vp9",
-        "video/webm",
-      ];
+      const videoStream = canvas.captureStream(30);
+      const tracks: MediaStreamTrack[] = [...videoStream.getVideoTracks()];
+      let hasAudioTrack = false;
+
+      // 1. Capturer le son de l'extrait local (avec Fade In/Out) OU le flux live Open Hub
+      const audioEl = localAudioRef.current;
+      if (sourceMode === "LOCAL_FILE" && audioEl && localUrl) {
+        try {
+          if (
+            !localAudioCaptureRef.current ||
+            localAudioCaptureRef.current.el !== audioEl
+          ) {
+            if (localAudioCaptureRef.current) {
+              localAudioCaptureRef.current.ctx.close().catch(() => {});
+              localAudioCaptureRef.current = null;
+            }
+            const AudioCtxCtor =
+              window.AudioContext ||
+              (window as unknown as { webkitAudioContext?: typeof AudioContext })
+                .webkitAudioContext;
+            if (AudioCtxCtor) {
+              const ctx = new AudioCtxCtor();
+              const srcNode = ctx.createMediaElementSource(audioEl);
+              const dest = ctx.createMediaStreamDestination();
+              srcNode.connect(ctx.destination);
+              srcNode.connect(dest);
+              localAudioCaptureRef.current = { el: audioEl, ctx, dest };
+            }
+          }
+          if (localAudioCaptureRef.current) {
+            if (localAudioCaptureRef.current.ctx.state === "suspended") {
+              await localAudioCaptureRef.current.ctx.resume();
+            }
+            const audioTracks =
+              localAudioCaptureRef.current.dest.stream.getAudioTracks();
+            tracks.push(...audioTracks);
+            hasAudioTrack = audioTracks.length > 0;
+          }
+        } catch {
+          // fallback navigateur : captureStream sur <audio> si dispo
+          const fallbackEl = audioEl as HTMLAudioElement & {
+            captureStream?: () => MediaStream;
+            mozCaptureStream?: () => MediaStream;
+          };
+          const cap =
+            fallbackEl.captureStream?.() ?? fallbackEl.mozCaptureStream?.();
+          if (cap) {
+            const audioTracks = cap.getAudioTracks();
+            tracks.push(...audioTracks);
+            hasAudioTrack = audioTracks.length > 0;
+          }
+        }
+      } else {
+        if (!isPlaying) {
+          togglePlay();
+          await new Promise((r) => window.setTimeout(r, 80));
+        }
+        const hubAudioStream = getCaptureAudioStream();
+        if (hubAudioStream) {
+          const audioTracks = hubAudioStream.getAudioTracks();
+          tracks.push(...audioTracks);
+          hasAudioTrack = audioTracks.length > 0;
+        }
+      }
+
+      const combinedStream = new MediaStream(tracks);
+      const candidates = hasAudioTrack
+        ? [
+            "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
+            "video/mp4;codecs=avc1,mp4a",
+            "video/mp4",
+            "video/webm;codecs=vp9,opus",
+            "video/webm;codecs=vp8,opus",
+            "video/webm",
+          ]
+        : [
+            "video/mp4;codecs=avc1",
+            "video/mp4",
+            "video/webm;codecs=vp9",
+            "video/webm",
+          ];
       const mimeType =
         candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
       const recorder = mimeType
-        ? new MediaRecorder(stream, { mimeType })
-        : new MediaRecorder(stream);
+        ? new MediaRecorder(combinedStream, { mimeType })
+        : new MediaRecorder(combinedStream);
 
       recordedChunksRef.current = [];
       recorder.ondataavailable = (ev) => {
@@ -803,31 +921,45 @@ export const VisualEngineStudio: React.FC = () => {
         const url = URL.createObjectURL(blob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `anarchy-visual-${preset.sceneId}-${preset.seed}.${ext}`;
+        a.download = `anarchy-visual-${clipStartSeconds.toFixed(0)}s-${clipDurationSeconds}s.${ext}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        setPresetMessage(`Vidéo exportée au format .${ext.toUpperCase()} !`);
+        isRecordingVideoRef.current = false;
+        setIsRecordingVideo(false);
+        setPresetMessage(
+          `Extrait vidéo + son exporté (.${ext.toUpperCase()} · ${clipDurationSeconds}s) !`
+        );
       };
 
-      // Caler la lecture audio sur le début de l'extrait au lancement de l'export vidéo
-      if (localAudioRef.current) {
-        localAudioRef.current.currentTime = clipStartSeconds;
-        setLocalTime(clipStartSeconds);
-        void localAudioRef.current.play().catch(() => {});
-      }
-
-      recorder.start(250);
-      mediaRecorderRef.current = recorder;
+      // Caler exactement sur la zone prévisualisée [clipStartSeconds -> clipEnd]
+      setClipActive(true);
+      isRecordingVideoRef.current = true;
       setIsRecordingVideo(true);
       setAutoAnimate(true);
+      recorder.start(200);
+      mediaRecorderRef.current = recorder;
+
+      if (sourceMode === "LOCAL_FILE" && audioEl) {
+        audioEl.currentTime = clipStartSeconds;
+        setLocalTime(clipStartSeconds);
+        applyClipFadeVolume(audioEl, clipStartSeconds);
+        await audioEl.play().catch(() => {});
+      } else {
+        recordAutoStopTimerRef.current = window.setTimeout(() => {
+          stopActiveRecording();
+        }, clipDurationSeconds * 1000);
+      }
+
       setPresetError("");
       setPresetMessage(
-        `Enregistrement vidéo de l'extrait (${clipDurationSeconds}s) en cours... Cliquez à nouveau pour télécharger.`
+        `⏺ Enregistrement de la zone prévisualisée (${clipStartSeconds.toFixed(1)}s → ${(clipStartSeconds + clipDurationSeconds).toFixed(1)}s · ${hasAudioTrack ? "Son inclus" : "Vidéo seule"})...`
       );
     } catch {
-      setPresetError("Impossible de démarrer l'enregistrement vidéo.");
+      isRecordingVideoRef.current = false;
+      setIsRecordingVideo(false);
+      setPresetError("Impossible de démarrer l'enregistrement MP4.");
     }
   };
 
@@ -959,58 +1091,19 @@ export const VisualEngineStudio: React.FC = () => {
                 </span>
               </h1>
               <p className="text-sm text-neutral-600 max-w-2xl">
-                5 scènes génératives (dont <strong>Techno Therapy</strong>), 7 palettes
-                avec morphing temps-réel, synchronisation BPM &amp; Kick Blackout,
-                filtre psychédélique, paroles bitmap et console à 19 faders verrouillables.
+                Packs de 5 scènes génératives, synchronisation BPM &amp; Kick Blackout,
+                éditeur C++ live, console à 19 faders et export MP4 synchronisé sur votre extrait audio.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2.5 shrink-0">
-            <Button
-              id="btn-ve-undo"
-              variant="clinical"
-              size="sm"
-              disabled={historyPast.length === 0}
-              onClick={handleUndo}
-            >
-              ↶ UNDO
-            </Button>
-            <Button
-              id="btn-ve-redo"
-              variant="clinical"
-              size="sm"
-              disabled={historyFuture.length === 0}
-              onClick={handleRedo}
-            >
-              ↷ REDO
-            </Button>
-            <Button
-              id="btn-ve-randomize"
-              variant="comic"
-              size="md"
-              onClick={handleRandomize}
-            >
-              🎲 RANDOMIZE (SEED)
-            </Button>
-            <Button
-              id="btn-ve-snapshot"
-              variant="primary"
-              size="md"
-              onClick={handleExportSnapshot}
-            >
-              ⬇ PNG 1280×720
-            </Button>
-            <Button
-              id="btn-ve-video"
-              variant={isRecordingVideo ? "comic" : "clinical"}
-              size="md"
-              onClick={handleToggleVideoExport}
-            >
-              {isRecordingVideo
-                ? "⏹ STOP & SAUVER VIDÉO"
-                : "🎬 EXPORT VIDÉO (MP4/WEBM)"}
-            </Button>
+          <div className="flex flex-wrap items-center gap-2 shrink-0 font-mono text-[11px]">
+            <span className="px-2.5 py-1 rounded border-2 border-black bg-brand-pearl text-brand-black font-bold">
+              SEED #{preset.seed}
+            </span>
+            <span className="px-2.5 py-1 rounded border-2 border-black bg-brand-white text-brand-red font-bold">
+              {bpm} BPM · {clipStartSeconds.toFixed(1)}s → {(clipStartSeconds + clipDurationSeconds).toFixed(1)}s
+            </span>
           </div>
         </div>
       </Card>
@@ -1245,13 +1338,35 @@ export const VisualEngineStudio: React.FC = () => {
                           ▶ LIRE L&apos;EXTRAIT ({clipDurationSeconds}s)
                         </Button>
                         <Button
-                          variant="primary"
+                          variant={isRecordingVideo ? "comic" : "primary"}
+                          size="sm"
+                          onClick={() => void handleToggleVideoExport()}
+                        >
+                          {isRecordingVideo
+                            ? "⏹ STOP & SAUVER MP4"
+                            : `🎬 ENREGISTRER EXTRAIT (${clipDurationSeconds}s + SON)`}
+                        </Button>
+                        <Button
+                          variant="clinical"
                           size="sm"
                           onClick={handleAutoSyncScenesToAudio}
                         >
                           ⏱ CALER SCÈNES EN BPM ({bpm} BPM)
                         </Button>
                       </div>
+                    </div>
+
+                    <div className="px-2.5 py-1.5 rounded-lg bg-brand-white border border-black font-mono text-[10px] flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-bold text-brand-black">
+                        ZONE PRÉVISUALISÉE &amp; ENREGISTRÉE :{" "}
+                        <span className="text-brand-red">
+                          {clipStartSeconds.toFixed(2)}s → {(clipStartSeconds + clipDurationSeconds).toFixed(2)}s
+                        </span>{" "}
+                        ({clipDurationSeconds}s)
+                      </span>
+                      <span className="text-neutral-600">
+                        Audio + Vidéo + Fondus ({fadeInSeconds.toFixed(1)}s / {fadeOutSeconds.toFixed(1)}s) synchronisés dans le MP4
+                      </span>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 font-mono text-[11px]">
@@ -1607,6 +1722,77 @@ export const VisualEngineStudio: React.FC = () => {
                       }}
                       className="w-full accent-brand-red"
                     />
+                  </div>
+                </div>
+              </div>
+
+              {/* Barre Actions & Export MP4 synchronisée (proche du son et de l'image) */}
+              <div className="p-3 rounded-xl bg-brand-pearl border-2 border-black shadow-comic-sm space-y-2.5">
+                <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px]">
+                  <span className="font-bold text-brand-black uppercase">
+                    EXPORT &amp; GÉNÉRATION DIRECTE {"//"} ZONE :{" "}
+                    <span className="text-brand-red">
+                      {clipStartSeconds.toFixed(1)}s → {(clipStartSeconds + clipDurationSeconds).toFixed(1)}s
+                    </span>{" "}
+                    ({clipDurationSeconds}s + SON)
+                  </span>
+                  <span className="text-neutral-600">
+                    {isRecordingVideo
+                      ? "⏺ Enregistrement en cours (arrêt auto fin d'extrait)..."
+                      : sourceMode === "LOCAL_FILE"
+                        ? "Prêt : piste locale + fondus + vidéo"
+                        : "Prêt : flux Open Hub + vidéo"}
+                  </span>
+                </div>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      id="btn-ve-randomize"
+                      variant="comic"
+                      size="sm"
+                      onClick={handleRandomize}
+                    >
+                      🎲 RANDOMIZE (SEED)
+                    </Button>
+                    <Button
+                      id="btn-ve-undo"
+                      variant="clinical"
+                      size="sm"
+                      disabled={historyPast.length === 0}
+                      onClick={handleUndo}
+                    >
+                      ↶ UNDO
+                    </Button>
+                    <Button
+                      id="btn-ve-redo"
+                      variant="clinical"
+                      size="sm"
+                      disabled={historyFuture.length === 0}
+                      onClick={handleRedo}
+                    >
+                      ↷ REDO
+                    </Button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button
+                      id="btn-ve-snapshot"
+                      variant="clinical"
+                      size="sm"
+                      onClick={handleExportSnapshot}
+                    >
+                      ⬇ PNG 1280×720
+                    </Button>
+                    <Button
+                      id="btn-ve-video"
+                      variant={isRecordingVideo ? "comic" : "primary"}
+                      size="sm"
+                      onClick={() => void handleToggleVideoExport()}
+                    >
+                      {isRecordingVideo
+                        ? "⏹ STOP & SAUVER MP4"
+                        : `🎬 EXPORTER EXTRAIT MP4 (${clipDurationSeconds}s + SON)`}
+                    </Button>
                   </div>
                 </div>
               </div>
