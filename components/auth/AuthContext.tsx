@@ -2,11 +2,16 @@
 
 import React, { createContext, useContext, useEffect, useState } from "react";
 import type { AvatarExpression } from "@/lib/openhub-data";
+import { getSupabaseClient } from "@/lib/supabase";
 
 export interface OpenHubUser {
   email: string;
   pseudo: string;
   expression: AvatarExpression;
+  avatarUrl?: string;
+  bio?: string;
+  githubUrl?: string;
+  soundcloudUrl?: string;
   signedInAt: string;
 }
 
@@ -18,14 +23,37 @@ interface AuthContextValue {
   login: (
     email: string,
     pseudo: string,
-    expression?: AvatarExpression
+    expression?: AvatarExpression,
+    avatarUrl?: string
   ) => { ok: boolean; error?: string };
+  updateProfile: (patch: Partial<OpenHubUser>) => void;
   logout: () => void;
 }
 
 const AUTH_STORAGE_KEY = "openhub_user_session_v1";
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+async function syncProfileToSupabase(u: OpenHubUser) {
+  const supabase = getSupabaseClient();
+  if (!supabase) return;
+  try {
+    await supabase.from("profiles").upsert(
+      {
+        email: u.email,
+        pseudo: u.pseudo,
+        bio: u.bio ?? "",
+        avatar_style: u.expression,
+        avatar_url: u.avatarUrl ?? "",
+        github_url: u.githubUrl ?? "",
+        soundcloud_url: u.soundcloudUrl ?? "",
+      },
+      { onConflict: "email" }
+    );
+  } catch {
+    // fallback silencieux si les tables SQL ne sont pas encore créées
+  }
+}
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   children,
@@ -47,10 +75,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
     }
   }, []);
 
+  const persistUser = (nextUser: OpenHubUser) => {
+    setUser(nextUser);
+    try {
+      window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
+    } catch {
+      // ignore storage quota errors
+    }
+    void syncProfileToSupabase(nextUser);
+  };
+
   const login = (
     email: string,
     pseudo: string,
-    expression: AvatarExpression = "spectateur-a"
+    expression: AvatarExpression = "spectateur-a",
+    avatarUrl?: string
   ) => {
     const cleanEmail = email.trim();
     const cleanPseudo = pseudo.trim();
@@ -68,16 +107,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       email: cleanEmail,
       pseudo: cleanPseudo,
       expression,
+      avatarUrl: avatarUrl?.trim() || undefined,
       signedInAt: new Date().toISOString(),
     };
-    setUser(nextUser);
-    try {
-      window.localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify(nextUser));
-    } catch {
-      // ignore storage quota errors
-    }
+    persistUser(nextUser);
     setAuthModalOpen(false);
     return { ok: true };
+  };
+
+  const updateProfile = (patch: Partial<OpenHubUser>) => {
+    if (!user) return;
+    const nextUser: OpenHubUser = {
+      ...user,
+      ...patch,
+      email: user.email,
+    };
+    persistUser(nextUser);
   };
 
   const logout = () => {
@@ -97,6 +142,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
         openAuthModal: () => setAuthModalOpen(true),
         closeAuthModal: () => setAuthModalOpen(false),
         login,
+        updateProfile,
         logout,
       }}
     >

@@ -6,6 +6,7 @@ import { usePathname } from "next/navigation";
 import { AvatarBD } from "@/components/ui/AvatarBD";
 import { useAudioPlayer } from "@/components/audio/AudioPlayerContext";
 import { useAuth } from "@/components/auth/AuthContext";
+import { SITE_TEXTS } from "@/lib/site-texts";
 
 interface NavItem {
   id: string;
@@ -14,17 +15,18 @@ interface NavItem {
 }
 
 const NAV_ITEMS: NavItem[] = [
-  { id: "nav-vst", href: "/", label: "01.VST_HUB" },
-  { id: "nav-samples", href: "/samples", label: "02.SAMPLES" },
+  { id: "nav-vst", href: "/", label: SITE_TEXTS.nav.vst },
+  { id: "nav-samples", href: "/samples", label: SITE_TEXTS.nav.samples },
   {
     id: "nav-visual-design",
     href: "/anarchy-visual-design",
-    label: "03.VISUAL_DESIGN",
+    label: SITE_TEXTS.nav.visualDesign,
   },
-  { id: "nav-radio", href: "/radio", label: "04.RADIO" },
-  { id: "nav-sons-commu", href: "/sons-communaute", label: "05.SONS_COMMU" },
-  { id: "nav-forum", href: "/forum", label: "06.FORUM" },
-  { id: "nav-blog", href: "/blog", label: "07.BLOG_&_DOCS" },
+  { id: "nav-radio", href: "/radio", label: SITE_TEXTS.nav.radio },
+  { id: "nav-sons-commu", href: "/sons-communaute", label: SITE_TEXTS.nav.sonsCommu },
+  { id: "nav-reseau", href: "/reseau", label: SITE_TEXTS.nav.social },
+  { id: "nav-forum", href: "/forum", label: SITE_TEXTS.nav.forum },
+  { id: "nav-blog", href: "/blog", label: SITE_TEXTS.nav.blog },
 ];
 
 /**
@@ -170,16 +172,19 @@ export const HeaderNav: React.FC = () => {
 
           {user ? (
             <div className="hidden sm:flex items-center gap-1.5">
-              <span className="px-2 py-1 rounded bg-brand-pearl border border-black font-mono text-[11px] font-bold text-brand-black">
+              <Link
+                href="/reseau"
+                className="px-2 py-1 rounded bg-brand-pearl border border-black font-mono text-[11px] font-bold text-brand-black hover:bg-brand-white"
+              >
                 @{user.pseudo}
-              </span>
+              </Link>
               <button
                 type="button"
                 onClick={logout}
                 title="Se déconnecter"
                 className="px-2 py-1 rounded border border-neutral-300 bg-brand-white hover:border-black font-mono text-[10px] text-neutral-600 hover:text-brand-red"
               >
-                QUITTER
+                {SITE_TEXTS.auth.logoutButton}
               </button>
             </div>
           ) : (
@@ -189,18 +194,21 @@ export const HeaderNav: React.FC = () => {
               onClick={openAuthModal}
               className="hidden sm:inline-flex items-center px-2.5 py-1.5 rounded border-2 border-black bg-brand-white hover:bg-brand-pearl font-mono text-[11px] font-bold text-brand-black shadow-comic-sm"
             >
-              CONNEXION
+              {SITE_TEXTS.auth.loginButton}
             </button>
           )}
 
-          <AvatarBD
-            id="header-user-avatar"
-            name={user?.pseudo ?? "Visiteur"}
-            expression={user?.expression ?? "spectateur-a"}
-            size="sm"
-            badgeText={user ? "ON" : "3D"}
-            audioReactive={isPlaying}
-          />
+          <Link href="/reseau" aria-label="Profil et réseau communautaire">
+            <AvatarBD
+              id="header-user-avatar"
+              name={user?.pseudo ?? "Visiteur"}
+              expression={user?.expression ?? "spectateur-a"}
+              src={user?.avatarUrl}
+              size="sm"
+              badgeText={user ? "ON" : "3D"}
+              audioReactive={isPlaying}
+            />
+          </Link>
 
           {/* Bouton Hamburger / Drawer Mobile (<768px) */}
           <button
