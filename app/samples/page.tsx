@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
@@ -9,14 +9,51 @@ import { useAuth } from "@/components/auth/AuthContext";
 import {
   SAMPLE_TRACKS,
   sampleToAudioTrack,
+  type AvatarExpression,
   type SampleTrack,
 } from "@/lib/openhub-data";
 
-type SamplesDrawer = "ANARCHY_OFFICIAL" | "COMMUNITY_SAMPLES";
+type SamplesDrawer =
+  | "ANARCHY_OFFICIAL"
+  | "COMMUNITY_SAMPLES"
+  | "VST_PRESETS";
+
+type VstPresetCategory =
+  | "Serum"
+  | "Vital"
+  | "PsyLab (Eclipse/Helios/Prism)"
+  | "Massive / Phase Plant"
+  | "À préciser";
+
+interface VstPresetItem {
+  id: string;
+  name: string;
+  vstCategory: VstPresetCategory;
+  customVstName?: string;
+  description: string;
+  fileName?: string;
+  fileUrl?: string;
+  authorPseudo: string;
+  authorExpression: AvatarExpression;
+  likes: number;
+  createdAt: string;
+}
+
+const VST_PRESETS_STORAGE_KEY = "openhub_vst_presets_v1";
+
+const VST_PRESET_CATEGORIES: VstPresetCategory[] = [
+  "Serum",
+  "Vital",
+  "PsyLab (Eclipse/Helios/Prism)",
+  "Massive / Phase Plant",
+  "À préciser",
+];
 
 /**
- * Page `/samples` — Avec 2 tiroirs (Samples Anarchy Officiels & Samples Communauté)
- * et attribution automatique au pseudo connecté (`useAuth`).
+ * Page `/samples` — Avec 3 tiroirs :
+ * 1. Packs Anarchy (Officiels)
+ * 2. Samples Communauté
+ * 3. Presets VST (Serum, Vital, PsyLab, Massive/Phase Plant, ou À préciser)
  */
 export default function SamplesPage() {
   const { playTrack, currentTrack, isPlaying } = useAudioPlayer();
@@ -28,6 +65,7 @@ export default function SamplesPage() {
   const [likesMap, setLikesMap] = useState<Record<string, number>>({});
   const [showForm, setShowForm] = useState(false);
 
+  // Formulaire Sample
   const [title, setTitle] = useState("");
   const [packName, setPackName] = useState("");
   const [bpm, setBpm] = useState(130);
@@ -36,12 +74,58 @@ export default function SamplesPage() {
   const [license, setLicense] = useState<SampleTrack["license"]>("CC0 1.0");
   const [error, setError] = useState<string | null>(null);
 
+  // Presets VST (Serum, Vital, À préciser...)
+  const [presets, setPresets] = useState<VstPresetItem[]>([]);
+  const [presetFilter, setPresetFilter] = useState<string>("ALL");
+  const [showPresetForm, setShowPresetForm] = useState(false);
+  const [presetName, setPresetName] = useState("");
+  const [presetCategory, setPresetCategory] =
+    useState<VstPresetCategory>("Serum");
+  const [presetCustomVst, setPresetCustomVst] = useState("");
+  const [presetDesc, setPresetDesc] = useState("");
+  const [presetFileName, setPresetFileName] = useState("");
+  const [presetFileUrl, setPresetFileUrl] = useState<string | undefined>(
+    undefined
+  );
+  const [presetError, setPresetError] = useState<string | null>(null);
+
+  useEffect(() => {
+    try {
+      const raw = window.localStorage.getItem(VST_PRESETS_STORAGE_KEY);
+      if (raw) {
+        const parsed = JSON.parse(raw) as VstPresetItem[];
+        if (Array.isArray(parsed)) setPresets(parsed);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const persistPresets = (next: VstPresetItem[]) => {
+    setPresets(next);
+    try {
+      const serializable = next.map((p) => ({ ...p, fileUrl: undefined }));
+      window.localStorage.setItem(
+        VST_PRESETS_STORAGE_KEY,
+        JSON.stringify(serializable)
+      );
+    } catch {
+      // ignore
+    }
+  };
+
   const handleOpenForm = () => {
     if (!user) {
       openAuthModal();
       return;
     }
-    setShowForm((prev) => !prev);
+    if (activeDrawer === "VST_PRESETS") {
+      setShowPresetForm((prev) => !prev);
+      setShowForm(false);
+    } else {
+      setShowForm((prev) => !prev);
+      setShowPresetForm(false);
+    }
   };
 
   const handleSubmitSample = (e: React.FormEvent) => {
@@ -91,23 +175,71 @@ export default function SamplesPage() {
     setShowForm(false);
   };
 
+  const handleSubmitPreset = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!user) {
+      openAuthModal();
+      return;
+    }
+    const cleanName = presetName.trim();
+    if (!cleanName) {
+      setPresetError("Veuillez saisir un nom pour votre preset.");
+      return;
+    }
+    if (presetCategory === "À préciser" && !presetCustomVst.trim()) {
+      setPresetError("Veuillez préciser le nom du VST cible.");
+      return;
+    }
+
+    const created: VstPresetItem = {
+      id: `preset-${Date.now()}`,
+      name: cleanName,
+      vstCategory: presetCategory,
+      customVstName:
+        presetCategory === "À préciser" ? presetCustomVst.trim() : undefined,
+      description:
+        presetDesc.trim() ||
+        `Preset ${presetCategory === "À préciser" ? presetCustomVst.trim() : presetCategory} partagé par @${user.pseudo}.`,
+      fileName: presetFileName || undefined,
+      fileUrl: presetFileUrl,
+      authorPseudo: user.pseudo,
+      authorExpression: user.expression,
+      likes: 1,
+      createdAt: new Date().toLocaleDateString("fr-FR"),
+    };
+
+    persistPresets([created, ...presets]);
+    setPresetName("");
+    setPresetCustomVst("");
+    setPresetDesc("");
+    setPresetFileName("");
+    setPresetFileUrl(undefined);
+    setPresetError(null);
+    setShowPresetForm(false);
+  };
+
+  const filteredPresets = presets.filter((p) =>
+    presetFilter === "ALL" ? true : p.vstCategory === presetFilter
+  );
+
   return (
     <div className="space-y-6">
       <Card
-        moduleTitle="SAMPLES_HUB // PARTAGE_COMMUNAUTAIRE"
-        moduleMeta={`${samples.length} SAMPLE(S)`}
+        moduleTitle="SAMPLES_&_PRESETS_HUB // PARTAGE_COMMUNAUTAIRE"
+        moduleMeta={`${samples.length} SAMPLE(S) · ${presets.length} PRESET(S)`}
         activeIndicator
       >
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="space-y-1.5">
             <div className="font-mono text-xs font-bold uppercase text-brand-red">
-              {"// 48.0 kHz · 24-BIT · CC0 / CC-BY"}
+              {"// 48.0 kHz · 24-BIT · PRESETS SERUM / VITAL / PSYLAB"}
             </div>
             <h1 className="font-sans text-2xl sm:text-3xl font-bold text-brand-black">
-              Banque de Samples
+              Banque de Samples &amp; Presets VST
             </h1>
             <p className="font-sans text-sm text-neutral-600">
-              Partagez vos stems et packs libres de droits avec la communauté.
+              Partagez vos stems, packs libres de droits et presets de synthés
+              (Serum, Vital, PsyLab ou autre VST à préciser).
             </p>
           </div>
 
@@ -118,15 +250,19 @@ export default function SamplesPage() {
             onClick={handleOpenForm}
           >
             {user
-              ? showForm
-                ? "✕ FERMER"
-                : "+ AJOUTER UN SAMPLE"
+              ? activeDrawer === "VST_PRESETS"
+                ? showPresetForm
+                  ? "✕ FERMER"
+                  : "+ AJOUTER UN PRESET"
+                : showForm
+                  ? "✕ FERMER"
+                  : "+ AJOUTER UN SAMPLE"
               : "CONNEXION POUR AJOUTER"}
           </Button>
         </div>
       </Card>
 
-      {/* Petits tiroirs Samples Anarchy / Communauté */}
+      {/* Petits tiroirs Samples Anarchy / Samples Communauté / Presets VST */}
       <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
         <button
           type="button"
@@ -150,9 +286,22 @@ export default function SamplesPage() {
         >
           🎛 SAMPLES COMMUNAUTÉ ({samples.length})
         </button>
+        <button
+          id="tab-vst-presets"
+          type="button"
+          onClick={() => setActiveDrawer("VST_PRESETS")}
+          className={`px-4 py-2 rounded-lg border-2 font-bold transition-all ${
+            activeDrawer === "VST_PRESETS"
+              ? "bg-brand-red text-white border-black shadow-comic-sm"
+              : "bg-brand-white text-brand-charcoal border-neutral-300 hover:border-black"
+          }`}
+        >
+          🎹 PRESETS VST ({presets.length})
+        </button>
       </div>
 
-      {showForm && user && (
+      {/* Formulaire Sample */}
+      {showForm && user && activeDrawer !== "VST_PRESETS" && (
         <Card
           moduleTitle={`SUBMIT_SAMPLE // @${user.pseudo.toUpperCase()}`}
           moduleMeta="COMMUNAUTÉ"
@@ -298,6 +447,138 @@ export default function SamplesPage() {
         </Card>
       )}
 
+      {/* Formulaire Preset VST (Serum, Vital, À préciser...) */}
+      {showPresetForm && user && activeDrawer === "VST_PRESETS" && (
+        <Card
+          moduleTitle={`SUBMIT_VST_PRESET // @${user.pseudo.toUpperCase()}`}
+          moduleMeta="SERUM · VITAL · AUTRE"
+          activeIndicator
+        >
+          <form onSubmit={handleSubmitPreset} className="space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="preset-name"
+                  className="block font-mono text-[11px] font-bold uppercase text-neutral-600 mb-1"
+                >
+                  Nom du Preset *
+                </label>
+                <input
+                  id="preset-name"
+                  type="text"
+                  value={presetName}
+                  onChange={(e) => setPresetName(e.target.value)}
+                  placeholder="Ex: Psy Acid Lead 01"
+                  className="w-full px-3 py-2 rounded-lg border-2 border-black bg-brand-white font-mono text-xs"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="preset-vst-cat"
+                  className="block font-mono text-[11px] font-bold uppercase text-neutral-600 mb-1"
+                >
+                  Catégorie VST *
+                </label>
+                <select
+                  id="preset-vst-cat"
+                  value={presetCategory}
+                  onChange={(e) =>
+                    setPresetCategory(e.target.value as VstPresetCategory)
+                  }
+                  className="w-full px-3 py-2 rounded-lg border-2 border-black bg-brand-white font-mono text-xs font-bold"
+                >
+                  {VST_PRESET_CATEGORIES.map((cat) => (
+                    <option key={cat} value={cat}>
+                      {cat}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {presetCategory === "À préciser" && (
+              <div>
+                <label
+                  htmlFor="preset-custom-vst"
+                  className="block font-mono text-[11px] font-bold uppercase text-brand-red mb-1"
+                >
+                  Préciser le nom du VST / Synthé *
+                </label>
+                <input
+                  id="preset-custom-vst"
+                  type="text"
+                  value={presetCustomVst}
+                  onChange={(e) => setPresetCustomVst(e.target.value)}
+                  placeholder="Ex: Diva, Pigments, Spire, Sylenth1..."
+                  className="w-full px-3 py-2 rounded-lg border-2 border-black bg-brand-white font-mono text-xs"
+                />
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label
+                  htmlFor="preset-file"
+                  className="block font-mono text-[11px] font-bold uppercase text-neutral-600 mb-1"
+                >
+                  Fichier Preset (.fxp, .vital, .vstpreset, .zip)
+                </label>
+                <input
+                  id="preset-file"
+                  type="file"
+                  accept=".fxp,.vital,.nmsv,.vstpreset,.zip"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    setPresetFileName(file.name);
+                    setPresetFileUrl(URL.createObjectURL(file));
+                  }}
+                  className="w-full px-3 py-2 rounded-lg border-2 border-black bg-brand-pearl font-mono text-xs"
+                />
+              </div>
+
+              <div>
+                <label
+                  htmlFor="preset-desc"
+                  className="block font-mono text-[11px] font-bold uppercase text-neutral-600 mb-1"
+                >
+                  Description / Usage
+                </label>
+                <input
+                  id="preset-desc"
+                  type="text"
+                  value={presetDesc}
+                  onChange={(e) => setPresetDesc(e.target.value)}
+                  placeholder="Ex: Basse psytrance roll 138 BPM"
+                  className="w-full px-3 py-2 rounded-lg border-2 border-black bg-brand-white font-mono text-xs"
+                />
+              </div>
+            </div>
+
+            {presetError && (
+              <p className="font-mono text-xs font-bold text-brand-red">
+                ⚠ {presetError}
+              </p>
+            )}
+
+            <div className="flex justify-end gap-3">
+              <Button
+                type="button"
+                variant="clinical"
+                size="sm"
+                onClick={() => setShowPresetForm(false)}
+              >
+                ANNULER
+              </Button>
+              <Button type="submit" variant="primary" size="md">
+                PUBLIER LE PRESET
+              </Button>
+            </div>
+          </form>
+        </Card>
+      )}
+
       {activeDrawer === "ANARCHY_OFFICIAL" ? (
         <Card moduleTitle="PACKS_ANARCHY // OFFICIELS" moduleMeta="0 PACK">
           <div className="py-8 text-center space-y-2">
@@ -309,6 +590,118 @@ export default function SamplesPage() {
             </p>
           </div>
         </Card>
+      ) : activeDrawer === "VST_PRESETS" ? (
+        <div className="space-y-4">
+          {/* Filtres par catégorie de VST */}
+          <div className="flex flex-wrap items-center gap-2 font-mono text-[11px]">
+            <button
+              type="button"
+              onClick={() => setPresetFilter("ALL")}
+              className={`px-3 py-1 rounded border font-bold ${
+                presetFilter === "ALL"
+                  ? "bg-brand-black text-white border-black"
+                  : "bg-brand-pearl text-brand-charcoal border-neutral-300"
+              }`}
+            >
+              TOUS ({presets.length})
+            </button>
+            {VST_PRESET_CATEGORIES.map((cat) => (
+              <button
+                key={cat}
+                type="button"
+                onClick={() => setPresetFilter(cat)}
+                className={`px-3 py-1 rounded border font-bold ${
+                  presetFilter === cat
+                    ? "bg-brand-red text-white border-black"
+                    : "bg-brand-pearl text-brand-charcoal border-neutral-300"
+                }`}
+              >
+                {cat.toUpperCase()}
+              </button>
+            ))}
+          </div>
+
+          {filteredPresets.length === 0 ? (
+            <Card
+              moduleTitle="PRESETS_VST // SERUM · VITAL · À PRÉCISER"
+              moduleMeta="0 PRESET"
+            >
+              <div className="py-8 text-center space-y-3">
+                <p className="font-sans text-base font-semibold text-brand-black">
+                  Aucun preset VST publié dans cette catégorie pour l&apos;instant.
+                </p>
+                <p className="font-sans text-sm text-neutral-600">
+                  Déposez vos presets pour <strong>Serum</strong>,{" "}
+                  <strong>Vital</strong>, <strong>PsyLab</strong> ou tout
+                  autre VST (<strong>À préciser</strong>).
+                </p>
+                <Button variant="comic" size="md" onClick={handleOpenForm}>
+                  + AJOUTER UN PRESET VST
+                </Button>
+              </div>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {filteredPresets.map((p) => {
+                const vstLabel =
+                  p.vstCategory === "À préciser" && p.customVstName
+                    ? p.customVstName
+                    : p.vstCategory;
+                return (
+                  <Card
+                    key={p.id}
+                    moduleTitle={`PRESET // ${vstLabel.toUpperCase()}`}
+                    moduleMeta={`@${p.authorPseudo.toUpperCase()} · ${p.createdAt}`}
+                    activeIndicator
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <AvatarBD
+                          name={p.authorPseudo}
+                          expression={p.authorExpression}
+                          size="sm"
+                          badgeText="FXP"
+                        />
+                        <div className="min-w-0">
+                          <h2 className="font-mono text-sm font-bold text-brand-black truncate">
+                            {p.name}
+                          </h2>
+                          <div className="font-sans text-xs text-neutral-600 truncate">
+                            {p.description}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() =>
+                            persistPresets(
+                              presets.map((item) =>
+                                item.id === p.id
+                                  ? { ...item, likes: item.likes + 1 }
+                                  : item
+                              )
+                            )
+                          }
+                          className="px-2.5 py-1 rounded border-2 border-black bg-brand-pearl font-mono text-xs font-bold"
+                        >
+                          ▲ {p.likes}
+                        </button>
+                        {p.fileUrl && (
+                          <a href={p.fileUrl} download={p.fileName}>
+                            <Button variant="comic" size="sm">
+                              ⬇ {p.fileName}
+                            </Button>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          )}
+        </div>
       ) : samples.length === 0 ? (
         <Card moduleTitle="BANQUE_SAMPLES // VIDE" moduleMeta="0 FICHIER">
           <div className="py-8 text-center space-y-3">

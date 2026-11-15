@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AvatarBD } from "@/components/ui/AvatarBD";
@@ -13,31 +13,27 @@ interface NavItem {
   label: string;
 }
 
-const PRIMARY_NAV_ITEMS: NavItem[] = [
+const NAV_ITEMS: NavItem[] = [
   { id: "nav-vst", href: "/", label: "01.VST_HUB" },
+  { id: "nav-samples", href: "/samples", label: "02.SAMPLES" },
   {
     id: "nav-visual-design",
     href: "/anarchy-visual-design",
-    label: "02.VISUAL_DESIGN",
+    label: "03.VISUAL_DESIGN",
   },
-  { id: "nav-radio", href: "/radio", label: "03.RADIO" },
-];
-
-const COMMUNITY_NAV_ITEMS: NavItem[] = [
-  { id: "nav-comm-samples", href: "/communaute/samples", label: "SAMPLES" },
-  { id: "nav-comm-forum", href: "/communaute/forum", label: "FORUM" },
-  { id: "nav-comm-blog", href: "/communaute/blog", label: "BLOG & DOCS" },
+  { id: "nav-radio", href: "/radio", label: "04.RADIO" },
+  { id: "nav-forum", href: "/forum", label: "05.FORUM" },
+  { id: "nav-blog", href: "/blog", label: "06.BLOG_&_DOCS" },
 ];
 
 /**
- * Composant `HeaderNav` — Navigation principale épurée (VST Hub, Visual Design, Radio)
- * + Tiroir du haut `04.COMMUNAUTÉ ▾` regroupant les pages communautaires sur `/communaute/*`.
+ * Composant `HeaderNav` — Navigation principale directe (VST Hub, Samples,
+ * Visual Design, Radio, Forum, Blog & Docs) sans onglet Communauté séparé,
+ * chaque section intégrant ses propres tiroirs Anarchy / Communauté.
  */
 export const HeaderNav: React.FC = () => {
   const pathname = usePathname() || "/";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [communityDrawerOpen, setCommunityDrawerOpen] = useState(false);
-  const dropdownRef = useRef<HTMLDivElement | null>(null);
   const { isPlaying } = useAudioPlayer();
   const { user, openAuthModal, logout } = useAuth();
 
@@ -45,23 +41,20 @@ export const HeaderNav: React.FC = () => {
     if (href === "/") {
       return pathname === "/" || pathname.startsWith("/vst");
     }
+    if (
+      href === "/samples" &&
+      pathname.startsWith("/communaute/samples")
+    ) {
+      return true;
+    }
+    if (href === "/forum" && pathname.startsWith("/communaute/forum")) {
+      return true;
+    }
+    if (href === "/blog" && pathname.startsWith("/communaute/blog")) {
+      return true;
+    }
     return pathname === href || pathname.startsWith(`${href}/`);
   };
-
-  const isCommunityActive = pathname.startsWith("/communaute");
-
-  useEffect(() => {
-    const handleOutsideClick = (e: MouseEvent) => {
-      if (
-        dropdownRef.current &&
-        !dropdownRef.current.contains(e.target as Node)
-      ) {
-        setCommunityDrawerOpen(false);
-      }
-    };
-    document.addEventListener("mousedown", handleOutsideClick);
-    return () => document.removeEventListener("mousedown", handleOutsideClick);
-  }, []);
 
   return (
     <header
@@ -135,13 +128,13 @@ export const HeaderNav: React.FC = () => {
           </span>
         </Link>
 
-        {/* Navigation Principale Desktop + Tiroir du haut Communauté */}
+        {/* Navigation Principale Desktop */}
         <nav
           id="primary-navigation"
           aria-label="Navigation principale"
-          className="hidden md:flex items-center gap-1.5 font-mono text-xs"
+          className="hidden md:flex items-center gap-1 font-mono text-xs"
         >
-          {PRIMARY_NAV_ITEMS.map((item) => {
+          {NAV_ITEMS.map((item) => {
             const active = isRouteActive(item.href);
             return (
               <Link
@@ -160,58 +153,6 @@ export const HeaderNav: React.FC = () => {
               </Link>
             );
           })}
-
-          {/* Tiroir du haut : Pages Communautaires (/communaute/*) */}
-          <div className="relative" ref={dropdownRef}>
-            <button
-              id="nav-community-drawer-toggle"
-              type="button"
-              aria-expanded={communityDrawerOpen}
-              onClick={() => setCommunityDrawerOpen((prev) => !prev)}
-              className={[
-                "px-3 py-1.5 rounded-md transition-colors whitespace-nowrap inline-flex items-center gap-1.5",
-                isCommunityActive || communityDrawerOpen
-                  ? "bg-brand-black text-brand-white font-bold border border-black shadow-comic-sm"
-                  : "text-neutral-700 hover:text-brand-black hover:bg-brand-pearl/70 border border-transparent",
-              ].join(" ")}
-            >
-              <span>04.COMMUNAUTÉ</span>
-              <span className="text-[10px]">
-                {communityDrawerOpen ? "▴" : "▾"}
-              </span>
-            </button>
-
-            {communityDrawerOpen && (
-              <div
-                id="community-top-drawer"
-                className="absolute right-0 mt-2 w-56 rounded-xl border-2 border-black bg-brand-white shadow-comic p-2 space-y-1 z-50"
-              >
-                <div className="px-2 py-1 font-mono text-[10px] font-bold uppercase text-brand-red border-b border-neutral-200">
-                  {"// ESPACE COMMUNAUTAIRE"}
-                </div>
-                {COMMUNITY_NAV_ITEMS.map((item) => {
-                  const active = isRouteActive(item.href);
-                  return (
-                    <Link
-                      key={item.id}
-                      id={item.id}
-                      href={item.href}
-                      onClick={() => setCommunityDrawerOpen(false)}
-                      className={[
-                        "flex items-center justify-between px-3 py-2 rounded-lg font-mono text-xs transition-colors",
-                        active
-                          ? "bg-brand-red text-white font-bold"
-                          : "text-brand-black hover:bg-brand-pearl",
-                      ].join(" ")}
-                    >
-                      <span>{item.label}</span>
-                      <span className="text-[10px]">→</span>
-                    </Link>
-                  );
-                })}
-              </div>
-            )}
-          </div>
         </nav>
 
         {/* Zone droite : Connexion / @pseudo + Statut Radio + AvatarBD + Toggle Mobile */}
@@ -291,7 +232,7 @@ export const HeaderNav: React.FC = () => {
             aria-label="Navigation mobile"
             className="flex flex-col gap-1.5 font-mono text-xs"
           >
-            {PRIMARY_NAV_ITEMS.map((item) => {
+            {NAV_ITEMS.map((item) => {
               const active = isRouteActive(item.href);
               return (
                 <Link
@@ -310,31 +251,6 @@ export const HeaderNav: React.FC = () => {
                 </Link>
               );
             })}
-
-            <div className="pt-2 mt-1 border-t border-neutral-200 space-y-1.5">
-              <div className="px-2 font-mono text-[10px] font-bold uppercase text-brand-red">
-                {"// 04.COMMUNAUTÉ (/communaute/*)"}
-              </div>
-              {COMMUNITY_NAV_ITEMS.map((item) => {
-                const active = isRouteActive(item.href);
-                return (
-                  <Link
-                    key={`mobile-${item.id}`}
-                    href={item.href}
-                    onClick={() => setMobileMenuOpen(false)}
-                    className={[
-                      "px-3 py-2 rounded-md flex items-center justify-between transition-colors",
-                      active
-                        ? "bg-brand-red text-white font-bold border-2 border-black shadow-comic-sm"
-                        : "text-brand-charcoal hover:bg-brand-pearl border border-neutral-200",
-                    ].join(" ")}
-                  >
-                    <span>{item.label}</span>
-                    <span className="text-[10px]">{"→"}</span>
-                  </Link>
-                );
-              })}
-            </div>
           </nav>
 
           <div className="pt-2 border-t border-neutral-200 flex items-center justify-between gap-2 font-mono text-xs">

@@ -28,19 +28,19 @@ export default function sitemap(): MetadataRoute.Sitemap {
       priority: 0.85,
     },
     {
-      url: `${baseUrl}/communaute/samples`,
+      url: `${baseUrl}/samples`,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.9,
     },
     {
-      url: `${baseUrl}/communaute/forum`,
+      url: `${baseUrl}/forum`,
       lastModified: now,
       changeFrequency: "daily",
       priority: 0.85,
     },
     {
-      url: `${baseUrl}/communaute/blog`,
+      url: `${baseUrl}/blog`,
       lastModified: now,
       changeFrequency: "weekly",
       priority: 0.85,
