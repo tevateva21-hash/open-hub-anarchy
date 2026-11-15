@@ -37,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
 export const HeaderNav: React.FC = () => {
   const pathname = usePathname() || "/";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { isPlaying } = useAudioPlayer();
+  const { isPlaying, currentTrack, externalAudio, togglePlay } = useAudioPlayer();
   const { user, openAuthModal, logout } = useAuth();
 
   const isRouteActive = (href: string): boolean => {
@@ -160,14 +160,32 @@ export const HeaderNav: React.FC = () => {
 
         {/* Zone droite : Connexion / @pseudo + Statut Radio + AvatarBD + Toggle Mobile */}
         <div className="flex items-center gap-2 shrink-0">
-          {isPlaying && (
-            <Link
-              href="/radio"
-              className="hidden lg:inline-flex items-center gap-1.5 px-2 py-1 rounded border-2 border-black bg-brand-red text-brand-white font-mono text-[10px] font-bold uppercase shadow-comic-sm"
+          {(isPlaying || externalAudio?.isPlaying) && (
+            <div
+              id="header-now-playing"
+              className="inline-flex items-center gap-1.5 px-2 py-1 rounded border-2 border-black bg-brand-red text-brand-white font-mono text-[10px] font-bold shadow-comic-sm max-w-[170px] sm:max-w-[220px]"
             >
-              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-              <span>RADIO</span>
-            </Link>
+              <span className="w-2 h-2 rounded-full bg-white animate-pulse shrink-0" />
+              <span className="truncate">
+                {externalAudio?.isPlaying
+                  ? externalAudio.title
+                  : currentTrack?.title ?? "AUDIO EN COURS"}
+              </span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (externalAudio?.isPlaying) {
+                    externalAudio.pause();
+                  } else {
+                    togglePlay();
+                  }
+                }}
+                aria-label="Mettre en pause le son en cours"
+                className="ml-0.5 px-1 rounded bg-black/25 hover:bg-black/50 text-[9px] shrink-0"
+              >
+                ❚❚
+              </button>
+            </div>
           )}
 
           {user ? (

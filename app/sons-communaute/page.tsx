@@ -493,7 +493,7 @@ export default function CommunitySoundsPage() {
                 {/* Lecteur audio direct */}
                 {track.audioUrl && (
                   <div className="p-3 rounded-xl bg-brand-pearl border-2 border-black">
-                    <audio controls src={track.audioUrl} className="w-full" />
+                    <audio controls src={track.audioUrl} data-track-title={track.title} className="w-full" />
                   </div>
                 )}
 

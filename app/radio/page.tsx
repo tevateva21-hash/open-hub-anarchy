@@ -311,6 +311,7 @@ export default function RadioPage() {
         <div className="space-y-6">
           <audio
             ref={localAudioRef}
+            data-track-title="Radio Générale"
             className="hidden"
             onEnded={() => setActiveLocalPreviewId(null)}
           />

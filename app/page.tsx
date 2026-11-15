@@ -296,21 +296,17 @@ export default function HomePage() {
                           {plugin.name}
                         </h2>
                         <div className="font-mono text-[11px] text-neutral-500">
-                          {plugin.os.join(" · ")} — {plugin.metrics.oversampling}
+                          {plugin.formats.join(" · ")} · {plugin.version}
                         </div>
                       </div>
                     </div>
                   </div>
-
-                  <p className="font-sans text-sm text-neutral-700 leading-relaxed">
-                    {plugin.description}
-                  </p>
                 </div>
 
                 <div className="pt-3 border-t border-neutral-200 flex flex-wrap items-center gap-2">
                   <Link href={`/vst/${plugin.id}`}>
                     <Button variant="primary" size="sm">
-                      FICHE &amp; DÉTAILS →
+                      ÉMULATEUR DAW →
                     </Button>
                   </Link>
                   <a href={latestBuildUrl} target="_blank" rel="noreferrer">

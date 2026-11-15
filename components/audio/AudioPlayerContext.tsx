@@ -20,10 +20,17 @@ import { ConsentPreferences, getStoredConsent } from "@/lib/consent";
 
 export type { AudioTrackItem, AvatarExpression };
 
+export interface ExternalAudioStatus {
+  title: string;
+  isPlaying: boolean;
+  pause: () => void;
+}
+
 export interface AudioPlayerContextValue {
   currentTrack: AudioTrackItem | null;
   queue: AudioTrackItem[];
   isPlaying: boolean;
+  externalAudio: ExternalAudioStatus | null;
   wetDryMix: boolean; // true = WET (DSP active), false = DRY (bypass)
   volume: number; // 0..1
   isMuted: boolean;
@@ -92,6 +99,42 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
     DEFAULT_AUDIO_QUEUE[0] ?? null
   );
   const [isPlaying, setIsPlaying] = useState<boolean>(false);
+  const [externalAudio, setExternalAudio] =
+    useState<ExternalAudioStatus | null>(null);
+
+  useEffect(() => {
+    const handlePlay = (ev: Event) => {
+      const target = ev.target;
+      if (target instanceof HTMLAudioElement) {
+        const rawTitle =
+          target.getAttribute("data-track-title") ||
+          target.title ||
+          target
+            .closest("[data-track-title]")
+            ?.getAttribute("data-track-title") ||
+          "Audio en cours";
+        setExternalAudio({
+          title: rawTitle,
+          isPlaying: true,
+          pause: () => target.pause(),
+        });
+      }
+    };
+    const handleStop = (ev: Event) => {
+      const target = ev.target;
+      if (target instanceof HTMLAudioElement) {
+        setExternalAudio((prev) => (prev ? null : prev));
+      }
+    };
+    document.addEventListener("play", handlePlay, true);
+    document.addEventListener("pause", handleStop, true);
+    document.addEventListener("ended", handleStop, true);
+    return () => {
+      document.removeEventListener("play", handlePlay, true);
+      document.removeEventListener("pause", handleStop, true);
+      document.removeEventListener("ended", handleStop, true);
+    };
+  }, []);
   const [wetDryMix, setWetDryMix] = useState<boolean>(true);
   const [volume, setVolumeState] = useState<number>(0.8);
   const [isMuted, setIsMuted] = useState<boolean>(false);
@@ -698,6 +741,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       currentTrack,
       queue,
       isPlaying,
+      externalAudio,
       wetDryMix,
       volume,
       isMuted,
@@ -722,6 +766,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       currentTrack,
       queue,
       isPlaying,
+      externalAudio,
       wetDryMix,
       volume,
       isMuted,
