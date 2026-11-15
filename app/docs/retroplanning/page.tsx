@@ -89,9 +89,15 @@ const MILESTONES = [
   },
   {
     id: "M14",
-    commit: "ACTUEL",
+    commit: "3fdf239",
     title: "Épuration Studio & Pause Audio Globale du Site",
     details: "Suppression des éléments superflus (curseur libre doublon, lecteur HTML natif, bandeaux au-dessus/dessous de la vidéo, Randomize, grille 4 bandes et slider Début extrait) ; bouton Pause relié à pauseAllAudio() pour couper toute musique sur le site.",
+  },
+  {
+    id: "M15",
+    commit: "ACTUEL",
+    title: "Console 10 Faders Live & Strobe Aigu (Flash Fond sur Clap)",
+    details: "Correction de la boucle temps réel pour que les 10 faders agissent immédiatement même lors du défilement de packs ; ajout d'un flash clair d'arrière-plan sur les aigus/claps (Strobe Aigu), zoom caméra unifié 2D/3D, bass punch, psychédélie et anaglyphe.",
   },
 ];
 

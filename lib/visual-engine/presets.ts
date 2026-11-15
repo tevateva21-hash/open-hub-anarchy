@@ -33,7 +33,7 @@ export const DEFAULT_RETRO_EFFECTS: RetroEffects = {
   colorTransition: 0,
   kickBlackout: 0,
   anaglyphSplit: 0.16,
-  strobeGlow: 0.25,
+  strobeGlow: 0.45,
   pendulumSwing: 0.25,
 };
 

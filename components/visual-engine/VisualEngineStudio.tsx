@@ -112,14 +112,13 @@ export const VisualEngineStudio: React.FC = () => {
   const [bankFilter, setBankFilter] = useState<BankFilter>("ALL");
   const [frame, setFrame] = useState<number>(0);
   const [autoAnimate, setAutoAnimate] = useState<boolean>(true);
-  const [playbackSpeed, setPlaybackSpeed] = useState<number>(100); // % (0 = pause/scrub)
-  const [envelopeSmooth, setEnvelopeSmooth] = useState<number>(30); // %
+  const playbackSpeed = 100;
+  const envelopeSmooth = 22;
 
-  // Gains par bande audio (0..250%)
-  const [bassGain, setBassGain] = useState<number>(100);
-  const [midGain, setMidGain] = useState<number>(100);
-  const [trebleGain, setTrebleGain] = useState<number>(100);
-  const [transientGain, setTransientGain] = useState<number>(100);
+  // Gains essentiels (0..250%) : Basses & Aigus/Clap
+  const [bassGain, setBassGain] = useState<number>(110);
+  const midGain = 100;
+  const [trebleGain, setTrebleGain] = useState<number>(125);
 
   // BPM, Beat Sync & Kick Blackout
   const [bpm, setBpm] = useState<number>(128);
@@ -533,22 +532,14 @@ export const VisualEngineStudio: React.FC = () => {
           timeSeconds,
           analysis: sourceMode === "LOCAL_FILE" ? analysis : undefined,
           liveAudioOverride: useLiveOverride ? nextSmoothed : undefined,
-          intensity: activeSlot ? activeSlot.intensity : effectivePreset.intensity,
+          intensity: effectivePreset.intensity,
           reducedMotion: project.reducedMotion,
-          effects: activeSlot
-            ? {
-                ...effectivePreset.effects,
-                strobeGlow: activeSlot.strobe / 100,
-                psychedelic: activeSlot.kaleidoscope / 100,
-                colorTransition: activeSlot.acidHueShift / 100,
-                anaglyphSplit: activeSlot.feedbackTrails / 100,
-              }
-            : effectivePreset.effects,
+          effects: effectivePreset.effects,
           bandRouting: {
             bassGain: bassGain / 100,
             midGain: midGain / 100,
             trebleGain: trebleGain / 100,
-            transientGain: transientGain / 100,
+            transientGain: trebleGain / 100,
             bassTarget: "halo-pulse",
             midTarget: "haze-fog",
             trebleTarget: "rain-glitter",
@@ -615,7 +606,6 @@ export const VisualEngineStudio: React.FC = () => {
     clipDurationSeconds,
     clipLoop,
     clipStartSeconds,
-    envelopeSmooth,
     frame,
     getFrequencyData,
     getTimeDomainData,
@@ -625,12 +615,9 @@ export const VisualEngineStudio: React.FC = () => {
     lyricsEnabled,
     lyricsStyle,
     lyricsText,
-    midGain,
-    playbackSpeed,
     project,
     sourceMode,
     stopActiveRecording,
-    transientGain,
     trebleGain,
   ]);
 
@@ -750,12 +737,8 @@ export const VisualEngineStudio: React.FC = () => {
 
   const handleReset = () => {
     updateProject(() => createDefaultStudioProject());
-    setBassGain(100);
-    setMidGain(100);
-    setTrebleGain(100);
-    setTransientGain(100);
-    setPlaybackSpeed(100);
-    setEnvelopeSmooth(30);
+    setBassGain(110);
+    setTrebleGain(125);
     setAutoSceneSwitchBeats(0);
     setPresetMessage("Console et projet réinitialisés aux valeurs d'usine.");
     setPresetError("");
@@ -1044,8 +1027,8 @@ export const VisualEngineStudio: React.FC = () => {
     <div className="space-y-8">
       {/* 1. Bandeau En-tête Anarchy Visual Design */}
       <Card
-        moduleTitle="ANARCHY_VISUAL_DESIGN // STUDIO_19_FADERS"
-        moduleMeta={`${activeDescriptor.badge} // 19_CONSOLE_FADERS`}
+        moduleTitle="ANARCHY_VISUAL_DESIGN // STUDIO_10_FADERS"
+        moduleMeta={`${activeDescriptor.badge} // 10_CONSOLE_FADERS`}
         activeIndicator={isPlaying || sourceMode === "LOCAL_FILE"}
       >
         <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
@@ -1063,7 +1046,7 @@ export const VisualEngineStudio: React.FC = () => {
                 <span className="px-2 py-0.5 rounded bg-brand-pearl border-2 border-black shadow-comic-sm text-brand-black">
                   TEVATEVA21 / ANARCHY-VISUAL-ENGINE v2.0
                 </span>
-                <span>{"// 320x180 NEAREST-NEIGHBOR + 32-BIT PS1 + 19 FADERS"}</span>
+                <span>{"// 320x180 NEAREST-NEIGHBOR + 32-BIT PS1 + 10 FADERS"}</span>
               </div>
               <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-brand-black">
                 Anarchy Visual Design{" "}
@@ -1072,8 +1055,8 @@ export const VisualEngineStudio: React.FC = () => {
                 </span>
               </h1>
               <p className="text-sm text-neutral-600 max-w-2xl">
-                Packs de 5 scènes génératives, synchronisation BPM &amp; Kick Blackout,
-                éditeur C++ live, console à 19 faders et export MP4 synchronisé sur votre extrait audio.
+                Packs de 5 scènes génératives, flash strobe aigu sur clap, psychédélie &amp; caméra,
+                éditeur C++ live et export MP4 avec son sur votre extrait audio.
               </p>
             </div>
           </div>
@@ -1098,7 +1081,7 @@ export const VisualEngineStudio: React.FC = () => {
           { label: "🎵 AUDIO & EXTRAIT 30S", open: showAudioPanel, toggle: () => setShowAudioPanel((v) => !v) },
           { label: "📺 MONITEUR VIDÉO", open: showStagePanel, toggle: () => setShowStagePanel((v) => !v) },
           { label: "🎛️ MODE AVANCÉ (SCÈNES)", open: showMatrixPanel, toggle: () => setShowMatrixPanel((v) => !v) },
-          { label: "🎚 CONSOLE 19 FADERS", open: showFadersPanel, toggle: () => setShowFadersPanel((v) => !v) },
+          { label: "🎚 CONSOLE 10 FADERS", open: showFadersPanel, toggle: () => setShowFadersPanel((v) => !v) },
           { label: "🎤 PAROLES & MICRO", open: showLyricsPanel, toggle: () => setShowLyricsPanel((v) => !v) },
         ].map((win) => (
           <button
@@ -2032,8 +2015,8 @@ export const VisualEngineStudio: React.FC = () => {
 
       {showFadersPanel && (
         <Card
-        moduleTitle="MIXING_CONSOLE // 19_PRECISION_FADERS"
-        moduleMeta="DOUBLE-CLIC = RESET · OPEN/LOCK = RANDOMIZER"
+        moduleTitle="MIXING_CONSOLE // 10_FADERS_ESSENTIELS"
+        moduleMeta="DOUBLE-CLIC = RESET · RÉACTIF EN TEMPS RÉEL"
         activeIndicator
       >
         <div className="space-y-6">
@@ -2042,10 +2025,10 @@ export const VisualEngineStudio: React.FC = () => {
             <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
               {(
                 [
-                  { id: "ALL", label: "TOUTES LES BANQUES (19)" },
-                  { id: "AUDIO", label: "BANK A : AUDIO & BANDES (6)" },
-                  { id: "FX", label: "BANK B : RETRO, PSYCHE & BLACKOUT (7)" },
-                  { id: "CAMERA", label: "BANK C : CAMÉRA & PENDULE (6)" },
+                  { id: "ALL", label: "TOUS LES FADERS (10)" },
+                  { id: "AUDIO", label: "AUDIO : BASSES & AIGUS (3)" },
+                  { id: "FX", label: "STROBE AIGU & PSYCHÉ (5)" },
+                  { id: "CAMERA", label: "CAMÉRA (2)" },
                 ] as const
               ).map((tab) => (
                 <button
@@ -2064,18 +2047,52 @@ export const VisualEngineStudio: React.FC = () => {
               ))}
             </div>
             <span className="font-mono text-[11px] text-neutral-500">
-              Style actif : <strong className="text-brand-black">{preset.render.style.toUpperCase()}</strong>
+              Temps réel sur <strong className="text-brand-black">STAGE_OUTPUT</strong>
             </span>
           </div>
 
-          {/* BANK A — AUDIO & BANDS (6 Faders) */}
+          {/* 01 // AUDIO : BASSES, AIGUS/CLAP & MASTER (3 Faders) */}
           {(bankFilter === "ALL" || bankFilter === "AUDIO") && (
             <div className="space-y-2.5">
               <div className="font-mono text-xs font-bold uppercase text-brand-red flex items-center gap-2">
                 <span>{"01 //"}</span>
-                <span>BANK A — AUDIO REACTIVITY &amp; FREQUENCY BANDS (6 FADERS)</span>
+                <span>AUDIO — BASSES, AIGUS / CLAP &amp; PUISSANCE (3 FADERS)</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <ConsoleFader
+                  id="fader-bass"
+                  shortTag="BASS"
+                  label="Bass Punch"
+                  value={bassGain}
+                  min={0}
+                  max={250}
+                  defaultValue={110}
+                  unit="%"
+                  accent="red"
+                  compact
+                  liveMeter={Math.min(1, Math.sqrt(liveFeatures.bass))}
+                  onChange={setBassGain}
+                />
+                <ConsoleFader
+                  id="fader-treble"
+                  shortTag="CLAP-HI"
+                  label="Aigus / Clap"
+                  value={trebleGain}
+                  min={0}
+                  max={250}
+                  defaultValue={125}
+                  unit="%"
+                  accent="cyan"
+                  compact
+                  liveMeter={Math.min(
+                    1,
+                    Math.max(
+                      Math.sqrt(liveFeatures.treble),
+                      Math.sqrt(liveFeatures.spectralFlux) * 2
+                    )
+                  )}
+                  onChange={setTrebleGain}
+                />
                 <ConsoleFader
                   id="fader-intensity"
                   shortTag="MSTR"
@@ -2094,184 +2111,42 @@ export const VisualEngineStudio: React.FC = () => {
                     updatePreset((curr) => ({ ...curr, intensity: val / 100 }))
                   }
                 />
-                <ConsoleFader
-                  id="fader-bass"
-                  shortTag="20-250"
-                  label="Bass Gain"
-                  value={bassGain}
-                  min={0}
-                  max={250}
-                  defaultValue={100}
-                  unit="%"
-                  accent="red"
-                  compact
-                  liveMeter={Math.min(1, Math.sqrt(liveFeatures.bass))}
-                  onChange={setBassGain}
-                />
-                <ConsoleFader
-                  id="fader-mid"
-                  shortTag="250-2K"
-                  label="Mid Gain"
-                  value={midGain}
-                  min={0}
-                  max={250}
-                  defaultValue={100}
-                  unit="%"
-                  accent="cyan"
-                  compact
-                  liveMeter={Math.min(1, Math.sqrt(liveFeatures.mid))}
-                  onChange={setMidGain}
-                />
-                <ConsoleFader
-                  id="fader-treble"
-                  shortTag="2K-12K"
-                  label="Treble Gain"
-                  value={trebleGain}
-                  min={0}
-                  max={250}
-                  defaultValue={100}
-                  unit="%"
-                  accent="cyan"
-                  compact
-                  liveMeter={Math.min(1, Math.sqrt(liveFeatures.treble))}
-                  onChange={setTrebleGain}
-                />
-                <ConsoleFader
-                  id="fader-flux"
-                  shortTag="FLUX"
-                  label="Transient"
-                  value={transientGain}
-                  min={0}
-                  max={250}
-                  defaultValue={100}
-                  unit="%"
-                  accent="red"
-                  compact
-                  liveMeter={Math.min(1, Math.sqrt(liveFeatures.spectralFlux) * 2)}
-                  onChange={setTransientGain}
-                />
-                <ConsoleFader
-                  id="fader-smooth"
-                  shortTag="ENV"
-                  label="Smoothing"
-                  value={envelopeSmooth}
-                  min={0}
-                  max={100}
-                  defaultValue={30}
-                  unit="%"
-                  accent="charcoal"
-                  compact
-                  onChange={setEnvelopeSmooth}
-                />
               </div>
             </div>
           )}
 
-          {/* BANK B — RETRO, PSYCHE & BLACKOUT FX (7 Faders) */}
+          {/* 02 // STROBE AIGU, BLACKOUT & PSYCHÉDÉLIE (5 Faders) */}
           {(bankFilter === "ALL" || bankFilter === "FX") && (
             <div className="space-y-2.5 pt-2 border-t border-neutral-200">
               <div className="font-mono text-xs font-bold uppercase text-brand-black flex items-center gap-2">
                 <span className="text-[#00E5FF]">{"02 //"}</span>
-                <span>BANK B — RETRO, PSYCHEDELIC, KICK BLACKOUT &amp; 3D ANAGLYPH (7 FADERS)</span>
+                <span>STROBE AIGU (FLASH FOND), KICK BLACKOUT &amp; PSYCHÉDÉLIE (5 FADERS)</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
                 <ConsoleFader
-                  id="fader-dither"
-                  shortTag="BAYER"
-                  label="Dither 4x4"
-                  value={Math.round(preset.effects.dither * 100)}
+                  id="fader-strobe"
+                  shortTag="FLASH"
+                  label="Strobe Aigu"
+                  value={Math.round((preset.effects.strobeGlow ?? 0.45) * 100)}
                   min={0}
                   max={100}
-                  defaultValue={65}
+                  defaultValue={45}
                   unit="%"
-                  accent="charcoal"
+                  accent="red"
                   compact
-                  locked={Boolean(preset.locks["effects.dither"])}
-                  onToggleLock={() => toggleLock("effects.dither")}
+                  locked={Boolean(preset.locks["effects.strobeGlow"])}
+                  liveMeter={Math.min(
+                    1,
+                    Math.max(
+                      Math.sqrt(liveFeatures.treble),
+                      Math.sqrt(liveFeatures.spectralFlux) * 2
+                    )
+                  )}
+                  onToggleLock={() => toggleLock("effects.strobeGlow")}
                   onChange={(val) =>
                     updatePreset((curr) => ({
                       ...curr,
-                      effects: { ...curr.effects, dither: val / 100 },
-                    }))
-                  }
-                />
-                <ConsoleFader
-                  id="fader-fog"
-                  shortTag="Z-FOG"
-                  label="Atmos Fog"
-                  value={Math.round(preset.effects.fog * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={55}
-                  unit="%"
-                  accent="charcoal"
-                  compact
-                  locked={Boolean(preset.locks["effects.fog"])}
-                  onToggleLock={() => toggleLock("effects.fog")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, fog: val / 100 },
-                    }))
-                  }
-                />
-                <ConsoleFader
-                  id="fader-grain"
-                  shortTag="CRT"
-                  label="Grain / Scan"
-                  value={Math.round(preset.effects.grain * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={35}
-                  unit="%"
-                  accent="charcoal"
-                  compact
-                  locked={Boolean(preset.locks["effects.grain"])}
-                  onToggleLock={() => toggleLock("effects.grain")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, grain: val / 100 },
-                    }))
-                  }
-                />
-                <ConsoleFader
-                  id="fader-psyche"
-                  shortTag="PSYCHE"
-                  label="Kaleidoscope"
-                  value={Math.round((preset.effects.psychedelic ?? 0) * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={0}
-                  unit="%"
-                  accent="cyan"
-                  compact
-                  locked={Boolean(preset.locks["effects.psychedelic"])}
-                  onToggleLock={() => toggleLock("effects.psychedelic")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, psychedelic: val / 100 },
-                    }))
-                  }
-                />
-                <ConsoleFader
-                  id="fader-morph"
-                  shortTag="MORPH"
-                  label="Color Morph"
-                  value={Math.round((preset.effects.colorTransition ?? 0) * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={0}
-                  unit="%"
-                  accent="cyan"
-                  compact
-                  locked={Boolean(preset.locks["effects.colorTransition"])}
-                  onToggleLock={() => toggleLock("effects.colorTransition")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, colorTransition: val / 100 },
+                      effects: { ...curr.effects, strobeGlow: val / 100 },
                     }))
                   }
                 />
@@ -2292,6 +2167,46 @@ export const VisualEngineStudio: React.FC = () => {
                     updatePreset((curr) => ({
                       ...curr,
                       effects: { ...curr.effects, kickBlackout: val / 100 },
+                    }))
+                  }
+                />
+                <ConsoleFader
+                  id="fader-psyche"
+                  shortTag="PSYCHE"
+                  label="Psychédélie"
+                  value={Math.round((preset.effects.psychedelic ?? 0) * 100)}
+                  min={0}
+                  max={100}
+                  defaultValue={0}
+                  unit="%"
+                  accent="cyan"
+                  compact
+                  locked={Boolean(preset.locks["effects.psychedelic"])}
+                  onToggleLock={() => toggleLock("effects.psychedelic")}
+                  onChange={(val) =>
+                    updatePreset((curr) => ({
+                      ...curr,
+                      effects: { ...curr.effects, psychedelic: val / 100 },
+                    }))
+                  }
+                />
+                <ConsoleFader
+                  id="fader-morph"
+                  shortTag="MORPH"
+                  label="Morph Couleur"
+                  value={Math.round((preset.effects.colorTransition ?? 0) * 100)}
+                  min={0}
+                  max={100}
+                  defaultValue={0}
+                  unit="%"
+                  accent="cyan"
+                  compact
+                  locked={Boolean(preset.locks["effects.colorTransition"])}
+                  onToggleLock={() => toggleLock("effects.colorTransition")}
+                  onChange={(val) =>
+                    updatePreset((curr) => ({
+                      ...curr,
+                      effects: { ...curr.effects, colorTransition: val / 100 },
                     }))
                   }
                 />
@@ -2319,247 +2234,75 @@ export const VisualEngineStudio: React.FC = () => {
             </div>
           )}
 
-          {/* BANK C — CAMERA, PENDULUM & CLOCK (6 Faders) */}
+          {/* 03 // CAMÉRA (2 Faders) */}
           {(bankFilter === "ALL" || bankFilter === "CAMERA") && (
             <div className="space-y-2.5 pt-2 border-t border-neutral-200">
               <div className="font-mono text-xs font-bold uppercase text-brand-charcoal flex items-center gap-2">
                 <span className="text-brand-red">{"03 //"}</span>
-                <span>
-                  BANK C — CAMERA{" "}
-                  {preset.render.style === "pixel-16"
-                    ? "(ORTHOGRAPHIQUE)"
-                    : "(PERSPECTIVE PS1)"}
-                  , PENDULUM &amp; HORLOGE (6 FADERS)
-                </span>
+                <span>CAMÉRA — ZOOM &amp; BALANCEMENT PENDULAIRE (2 FADERS)</span>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <ConsoleFader
-                  id="fader-speed"
-                  shortTag="CLOCK"
-                  label="Speed FPS"
-                  value={playbackSpeed}
-                  min={0}
-                  max={200}
+                  id="fader-cam-zoom"
+                  shortTag="ZOOM"
+                  label="Zoom Cam"
+                  value={
+                    preset.render.camera.kind === "orthographic"
+                      ? Math.round(preset.render.camera.zoom * 100)
+                      : Math.round(
+                          (1 / Math.max(0.45, preset.render.camera.distance)) *
+                            100
+                        )
+                  }
+                  min={50}
+                  max={220}
                   defaultValue={100}
                   unit="%"
-                  accent="red"
+                  accent="cyan"
                   compact
-                  onChange={setPlaybackSpeed}
-                />
-
-                {preset.render.camera.kind === "orthographic" ? (
-                  <>
-                    <ConsoleFader
-                      id="fader-cam-zoom"
-                      shortTag="ZOOM"
-                      label="Ortho Zoom"
-                      value={Math.round(preset.render.camera.zoom * 100)}
-                      min={50}
-                      max={250}
-                      defaultValue={100}
-                      unit="x"
-                      accent="cyan"
-                      compact
-                      locked={Boolean(preset.locks["render.camera.zoom"])}
-                      onToggleLock={() => toggleLock("render.camera.zoom")}
-                      onChange={(val) =>
-                        updatePreset((curr) =>
-                          curr.render.style === "pixel-16"
-                            ? {
-                                ...curr,
-                                render: {
-                                  ...curr.render,
-                                  camera: {
-                                    ...curr.render.camera,
-                                    zoom: val / 100,
-                                  },
-                                },
-                              }
-                            : curr
-                        )
-                      }
-                    />
-                    <ConsoleFader
-                      id="fader-cam-x"
-                      shortTag="PAN-X"
-                      label="Ortho X"
-                      value={Math.round(preset.render.camera.x)}
-                      min={-64}
-                      max={64}
-                      defaultValue={0}
-                      unit="px"
-                      accent="charcoal"
-                      compact
-                      locked={Boolean(preset.locks["render.camera.x"])}
-                      onToggleLock={() => toggleLock("render.camera.x")}
-                      onChange={(val) =>
-                        updatePreset((curr) =>
-                          curr.render.style === "pixel-16"
-                            ? {
-                                ...curr,
-                                render: {
-                                  ...curr.render,
-                                  camera: { ...curr.render.camera, x: val },
-                                },
-                              }
-                            : curr
-                        )
-                      }
-                    />
-                    <ConsoleFader
-                      id="fader-cam-y"
-                      shortTag="PAN-Y"
-                      label="Ortho Y"
-                      value={Math.round(preset.render.camera.y)}
-                      min={-48}
-                      max={48}
-                      defaultValue={0}
-                      unit="px"
-                      accent="charcoal"
-                      compact
-                      locked={Boolean(preset.locks["render.camera.y"])}
-                      onToggleLock={() => toggleLock("render.camera.y")}
-                      onChange={(val) =>
-                        updatePreset((curr) =>
-                          curr.render.style === "pixel-16"
-                            ? {
-                                ...curr,
-                                render: {
-                                  ...curr.render,
-                                  camera: { ...curr.render.camera, y: val },
-                                },
-                              }
-                            : curr
-                        )
-                      }
-                    />
-                  </>
-                ) : (
-                  <>
-                    <ConsoleFader
-                      id="fader-cam-dist"
-                      shortTag="DIST"
-                      label="Cam Dist."
-                      value={Math.round(preset.render.camera.distance * 100)}
-                      min={50}
-                      max={200}
-                      defaultValue={100}
-                      unit="x"
-                      accent="cyan"
-                      compact
-                      locked={Boolean(preset.locks["render.camera.distance"])}
-                      onToggleLock={() => toggleLock("render.camera.distance")}
-                      onChange={(val) =>
-                        updatePreset((curr) =>
-                          curr.render.style === "lowpoly-32"
-                            ? {
-                                ...curr,
-                                render: {
-                                  ...curr.render,
-                                  camera: {
-                                    ...curr.render.camera,
-                                    distance: val / 100,
-                                  },
-                                },
-                              }
-                            : curr
-                        )
-                      }
-                    />
-                    <ConsoleFader
-                      id="fader-cam-yaw"
-                      shortTag="YAW"
-                      label="Cam Yaw"
-                      value={Math.round(preset.render.camera.yawDegrees)}
-                      min={-90}
-                      max={90}
-                      defaultValue={0}
-                      unit="°"
-                      accent="charcoal"
-                      compact
-                      locked={Boolean(preset.locks["render.camera.yawDegrees"])}
-                      onToggleLock={() =>
-                        toggleLock("render.camera.yawDegrees")
-                      }
-                      onChange={(val) =>
-                        updatePreset((curr) =>
-                          curr.render.style === "lowpoly-32"
-                            ? {
-                                ...curr,
-                                render: {
-                                  ...curr.render,
-                                  camera: {
-                                    ...curr.render.camera,
-                                    yawDegrees: val,
-                                  },
-                                },
-                              }
-                            : curr
-                        )
-                      }
-                    />
-                    <ConsoleFader
-                      id="fader-cam-pitch"
-                      shortTag="PITCH"
-                      label="Cam Pitch"
-                      value={Math.round(preset.render.camera.pitchDegrees)}
-                      min={-30}
-                      max={30}
-                      defaultValue={0}
-                      unit="°"
-                      accent="charcoal"
-                      compact
-                      locked={Boolean(
-                        preset.locks["render.camera.pitchDegrees"]
-                      )}
-                      onToggleLock={() =>
-                        toggleLock("render.camera.pitchDegrees")
-                      }
-                      onChange={(val) =>
-                        updatePreset((curr) =>
-                          curr.render.style === "lowpoly-32"
-                            ? {
-                                ...curr,
-                                render: {
-                                  ...curr.render,
-                                  camera: {
-                                    ...curr.render.camera,
-                                    pitchDegrees: val,
-                                  },
-                                },
-                              }
-                            : curr
-                        )
-                      }
-                    />
-                  </>
-                )}
-
-                <ConsoleFader
-                  id="fader-strobe"
-                  shortTag="STROBE"
-                  label="Strobe Glow"
-                  value={Math.round((preset.effects.strobeGlow ?? 0.25) * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={25}
-                  unit="%"
-                  accent="red"
-                  compact
-                  locked={Boolean(preset.locks["effects.strobeGlow"])}
-                  onToggleLock={() => toggleLock("effects.strobeGlow")}
+                  locked={Boolean(
+                    preset.render.camera.kind === "orthographic"
+                      ? preset.locks["render.camera.zoom"]
+                      : preset.locks["render.camera.distance"]
+                  )}
+                  onToggleLock={() =>
+                    toggleLock(
+                      preset.render.camera.kind === "orthographic"
+                        ? "render.camera.zoom"
+                        : "render.camera.distance"
+                    )
+                  }
                   onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, strobeGlow: val / 100 },
-                    }))
+                    updatePreset((curr) =>
+                      curr.render.style === "pixel-16"
+                        ? {
+                            ...curr,
+                            render: {
+                              ...curr.render,
+                              camera: {
+                                ...curr.render.camera,
+                                zoom: val / 100,
+                              },
+                            },
+                          }
+                        : {
+                            ...curr,
+                            render: {
+                              ...curr.render,
+                              camera: {
+                                ...curr.render.camera,
+                                distance: 100 / Math.max(50, val),
+                              },
+                            },
+                          }
+                    )
                   }
                 />
 
                 <ConsoleFader
                   id="fader-pendulum"
                   shortTag="SWAY"
-                  label="Pendulum Cam"
+                  label="Pendule Cam"
                   value={Math.round(
                     (preset.effects.pendulumSwing ?? 0.25) * 100
                   )}

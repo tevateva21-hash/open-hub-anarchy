@@ -1726,21 +1726,49 @@ export function renderSceneFrame(
     pendulumSwing: clamp01(input.effects?.pendulumSwing ?? 0.25),
   };
 
-  // Paramètres caméra (orthographique pixel-16 ou perspective lowpoly-32) + oscillation Pendulum
+  // Strobe aigu / clap : flash clair en arrière-plan quand les aigus et claps tapent
+  const strobeAmt = effects.strobeGlow ?? 0;
+  const trebleSnap = clamp01(
+    Math.max(audio.trebleEnvelope * 1.15, audio.transientPulse * 0.95)
+  );
+  const clapFlash =
+    !reducedMotion && strobeAmt > 0.02
+      ? clamp01((trebleSnap - 0.15) * 2.15 * strobeAmt)
+      : 0;
+  if (clapFlash > 0.02) {
+    palette = {
+      ...palette,
+      sky: lerpHexColor(palette.sky, "#ffffff", clapFlash * 0.85),
+      haze: lerpHexColor(palette.haze, palette.light, clapFlash * 0.9),
+      distant: lerpHexColor(palette.distant, "#ffffff", clapFlash * 0.55),
+    };
+  }
+
+  // Paramètres caméra unifiés (fonctionnent sur pixel-16 ET lowpoly-32 même pendant les switchs de pack)
   const pendulumAmt = reducedMotion ? 0 : effects.pendulumSwing ?? 0;
   const pendulumYaw =
-    Math.sin(input.timeSeconds * 0.85) * 0.14 * pendulumAmt;
+    Math.sin(input.timeSeconds * 0.85) * 0.22 * pendulumAmt;
+  const orthoCam =
+    input.camera?.kind === "orthographic" ? input.camera : undefined;
   const perspCam =
     input.camera?.kind === "perspective" ? input.camera : undefined;
+  const bassPump = reducedMotion ? 0 : audio.bassEnvelope * 0.08;
+  const unifiedZoom = orthoCam
+    ? Math.max(0.5, Math.min(2.5, orthoCam.zoom))
+    : perspCam
+    ? Math.max(0.5, Math.min(2.2, 1 / Math.max(0.45, perspCam.distance)))
+    : 1;
+
   const camOff: PerspectiveOffsets = {
     yawRad: ((perspCam?.yawDegrees ?? 0) * Math.PI) / 180 + pendulumYaw,
     pitchRad: ((perspCam?.pitchDegrees ?? 0) * Math.PI) / 180,
-    distMul: perspCam ? Math.max(0.45, Math.min(2.2, perspCam.distance)) : 1,
-    fovMul: perspCam ? Math.max(0.55, Math.min(1.6, perspCam.fovDegrees / 70)) : 1,
+    distMul: perspCam
+      ? Math.max(0.42, Math.min(2.2, perspCam.distance / (1 + bassPump * 1.3)))
+      : Math.max(0.42, Math.min(2.2, 1 / (unifiedZoom * (1 + bassPump * 1.3)))),
+    fovMul: perspCam
+      ? Math.max(0.55, Math.min(1.6, (perspCam.fovDegrees / 70) * (1 + bassPump)))
+      : 1 + bassPump,
   };
-
-  const orthoCam =
-    input.camera?.kind === "orthographic" ? input.camera : undefined;
 
   const frameIndex = Math.round(input.timeSeconds * STUDY_FPS);
   const seed = (input.seed ?? 1) >>> 0;
@@ -1751,14 +1779,16 @@ export function renderSceneFrame(
   ctx.globalCompositeOperation = "source-over";
   ctx.imageSmoothingEnabled = false;
 
-  if (descriptor.style === "pixel-16" && orthoCam) {
+  if (descriptor.style === "pixel-16") {
     const pendulumPanX =
-      Math.sin(input.timeSeconds * 0.85) * 6 * pendulumAmt;
-    const zoom = Math.max(0.5, Math.min(2.5, orthoCam.zoom));
-    if (zoom !== 1 || orthoCam.x !== 0 || orthoCam.y !== 0 || pendulumPanX !== 0) {
+      Math.sin(input.timeSeconds * 0.85) * 10 * pendulumAmt;
+    const zoom = Math.max(0.5, Math.min(2.5, unifiedZoom * (1 + bassPump)));
+    const camX = orthoCam?.x ?? 0;
+    const camY = orthoCam?.y ?? 0;
+    if (zoom !== 1 || camX !== 0 || camY !== 0 || pendulumPanX !== 0) {
       ctx.fillStyle = palette.shadow;
       ctx.fillRect(0, 0, STUDY_SIZE.width, STUDY_SIZE.height);
-      ctx.translate(160 - (orthoCam.x + pendulumPanX), 90 - orthoCam.y);
+      ctx.translate(160 - (camX + pendulumPanX), 90 - camY);
       ctx.scale(zoom, zoom);
       ctx.translate(-160, -90);
     }
