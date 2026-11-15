@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
 import { useAuth } from "@/components/auth/AuthContext";
 import { getSupabaseClient, isSupabaseConfigured } from "@/lib/supabase";
+import { uploadToOpenHubStorage } from "@/lib/supabase-storage";
 import { SITE_TEXTS } from "@/lib/site-texts";
 import type { AvatarExpression } from "@/lib/openhub-data";
 
@@ -154,7 +155,7 @@ export default function ReseauSocialPage() {
     setStatusMessage("Profil mis à jour.");
   };
 
-  const handleAvatarUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     if (!user) {
       openAuthModal();
       return;
@@ -165,11 +166,19 @@ export default function ReseauSocialPage() {
       setStatusMessage("Image trop lourde (1.5 Mo max).");
       return;
     }
+
+    const cloudUrl = await uploadToOpenHubStorage(file, "avatars");
+    if (cloudUrl) {
+      updateProfile({ avatarUrl: cloudUrl });
+      setStatusMessage("Nouvel avatar enregistré sur Supabase Storage.");
+      return;
+    }
+
     const reader = new FileReader();
     reader.onload = () => {
       if (typeof reader.result === "string") {
         updateProfile({ avatarUrl: reader.result });
-        setStatusMessage("Nouvel avatar enregistré.");
+        setStatusMessage("Nouvel avatar enregistré localement.");
       }
     };
     reader.readAsDataURL(file);
