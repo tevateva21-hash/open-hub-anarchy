@@ -12,6 +12,13 @@ import {
   type ScenePack,
   type ScenePackSlot,
 } from "@/lib/visual-engine/scene-packs";
+import {
+  CPP_SHADER_ENABLED_KEY,
+  CPP_SHADER_STORAGE_KEY,
+  compileCppVisual,
+  createCppRenderContext,
+  type CppRenderContext,
+} from "@/lib/visual-engine/cpp-runtime";
 import { WaveformCanvas } from "@/components/visual-engine/WaveformCanvas";
 import {
   RANDOMIZER_VERSION,
@@ -104,7 +111,7 @@ export const VisualEngineStudio: React.FC = () => {
   // Mode horloge & source audio
   const [sourceMode, setSourceMode] = useState<AudioSourceMode>("LIVE_HUB");
   const [bankFilter, setBankFilter] = useState<BankFilter>("ALL");
-  const [frame, setFrame] = useState<number>(48);
+  const [frame, setFrame] = useState<number>(0);
   const [autoAnimate, setAutoAnimate] = useState<boolean>(true);
   const [playbackSpeed, setPlaybackSpeed] = useState<number>(100); // % (0 = pause/scrub)
   const [envelopeSmooth, setEnvelopeSmooth] = useState<number>(30); // %
@@ -179,7 +186,33 @@ export const VisualEngineStudio: React.FC = () => {
   const abortControllerRef = useRef<AbortController | null>(null);
   const prevFreqRef = useRef<Uint8Array>(new Uint8Array(128));
   const smoothedFeaturesRef = useRef<AudioFeatures>({ ...ZERO_FEATURES });
-  const timeAccumRef = useRef<number>(48 / STUDY_FPS);
+  const timeAccumRef = useRef<number>(0);
+  const cppFnRef = useRef<((ctx: CppRenderContext) => void) | null>(null);
+
+  useEffect(() => {
+    const loadCppShader = () => {
+      try {
+        const enabled =
+          window.localStorage.getItem(CPP_SHADER_ENABLED_KEY) === "true";
+        const code = window.localStorage.getItem(CPP_SHADER_STORAGE_KEY);
+        if (enabled && code) {
+          const compiled = compileCppVisual(code);
+          cppFnRef.current = compiled.ok ? compiled.fn : null;
+        } else {
+          cppFnRef.current = null;
+        }
+      } catch {
+        cppFnRef.current = null;
+      }
+    };
+    loadCppShader();
+    window.addEventListener("storage", loadCppShader);
+    window.addEventListener("focus", loadCppShader);
+    return () => {
+      window.removeEventListener("storage", loadCppShader);
+      window.removeEventListener("focus", loadCppShader);
+    };
+  }, []);
 
   const preset = project.activePreset;
   const activeDescriptor = getSceneDescriptor(
@@ -251,7 +284,8 @@ export const VisualEngineStudio: React.FC = () => {
     if (analysis) {
       const est = estimateTempoBpm(analysis);
       setBpm(est.bpm);
-      setBeatOffset(est.beatOffsetSeconds);
+      // Toujours garder le calage vidéo BPM à 0.00s par défaut au chargement d'une musique
+      setBeatOffset(0);
       setBpmConfidence(est.confidence);
     }
   }, [analysis]);
@@ -265,6 +299,10 @@ export const VisualEngineStudio: React.FC = () => {
     setLocalUrl(undefined);
     setAnalysis(undefined);
     setLocalTime(0);
+    setFrame(0);
+    setClipStartSeconds(0);
+    setBeatOffset(0);
+    timeAccumRef.current = 0;
     setBusy(true);
     setImportError("");
     setImportWarning("");
@@ -492,6 +530,28 @@ export const VisualEngineStudio: React.FC = () => {
           camera: effectivePreset.render.camera,
           seed: activeSlot?.seed ?? effectivePreset.seed,
         });
+
+        if (cppFnRef.current) {
+          try {
+            const beatFloat = Math.max(0, (timeSeconds - beatOffset) * (bpm / 60));
+            const cppCtx = createCppRenderContext(ctx, 320, 180, {
+              t: timeSeconds,
+              bpm,
+              beat: Math.floor(beatFloat),
+              beatPhase: beatFloat - Math.floor(beatFloat),
+              bass: nextReport.audio.bassEnvelope,
+              mid: nextReport.audio.midEnvelope,
+              treble: nextReport.audio.trebleEnvelope,
+              rms: nextReport.audio.rmsEnvelope,
+              flux: nextReport.audio.transientPulse,
+              sceneIndex: livePackSlotIndexRef.current,
+            });
+            cppFnRef.current(cppCtx);
+          } catch {
+            // ignore runtime errors from custom C++
+          }
+        }
+
         setRenderReport(nextReport);
       }
 
@@ -1108,12 +1168,41 @@ export const VisualEngineStudio: React.FC = () => {
                     analysis={analysis}
                     time={localTime}
                     onSeek={seekLocalAudio}
+                    clipActive={clipActive}
+                    clipStartSeconds={clipStartSeconds}
+                    clipDurationSeconds={clipDurationSeconds}
+                    fadeInSeconds={fadeInSeconds}
+                    fadeOutSeconds={fadeOutSeconds}
+                    onClipStartChange={setClipStartSeconds}
                   />
+
+                  {/* Curseur continu type .NET MAUI (déplacement libre au centième de seconde sans crans) */}
+                  <div className="p-2.5 rounded-xl bg-brand-pearl/70 border border-neutral-300 font-mono text-[11px] space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="font-bold text-brand-black">
+                        CURSEUR MUSIQUE (DÉPLACEMENT LIBRE)
+                      </span>
+                      <span className="text-brand-red font-bold">
+                        {localTime.toFixed(2)}s / {analysis.durationSeconds.toFixed(2)}s
+                      </span>
+                    </div>
+                    <input
+                      type="range"
+                      min={0}
+                      max={Math.max(0.1, analysis.durationSeconds)}
+                      step={0.05}
+                      value={Math.min(localTime, analysis.durationSeconds)}
+                      onChange={(e) => seekLocalAudio(Number(e.target.value))}
+                      className="w-full accent-brand-black cursor-ew-resize"
+                    />
+                  </div>
+
                   {localUrl && (
                     <audio
                       ref={localAudioRef}
                       controls
                       src={localUrl}
+                      data-track-title={fileName || "Visual Studio"}
                       onTimeUpdate={(e) => {
                         const t = e.currentTarget.currentTime;
                         setLocalTime(t);
@@ -1169,13 +1258,13 @@ export const VisualEngineStudio: React.FC = () => {
                       <div>
                         <div className="flex justify-between mb-1">
                           <span>DÉBUT EXTRAIT</span>
-                          <strong>{clipStartSeconds.toFixed(1)}s</strong>
+                          <strong>{clipStartSeconds.toFixed(2)}s</strong>
                         </div>
                         <input
                           type="range"
                           min={0}
                           max={Math.max(0, (analysis?.durationSeconds ?? 60) - 5)}
-                          step={0.5}
+                          step={0.05}
                           value={clipStartSeconds}
                           onChange={(e) => setClipStartSeconds(Number(e.target.value))}
                           className="w-full accent-brand-red"
@@ -1186,16 +1275,15 @@ export const VisualEngineStudio: React.FC = () => {
                           <span>DURÉE EXTRAIT</span>
                           <strong>{clipDurationSeconds}s</strong>
                         </div>
-                        <select
+                        <input
+                          type="range"
+                          min={5}
+                          max={120}
+                          step={1}
                           value={clipDurationSeconds}
                           onChange={(e) => setClipDurationSeconds(Number(e.target.value))}
-                          className="w-full px-2 py-1 rounded border border-black bg-brand-white font-bold"
-                        >
-                          <option value={15}>15 secondes</option>
-                          <option value={30}>30 secondes</option>
-                          <option value={45}>45 secondes</option>
-                          <option value={60}>60 secondes</option>
-                        </select>
+                          className="w-full accent-brand-red"
+                        />
                       </div>
                       <div>
                         <div className="flex justify-between mb-1">
@@ -1206,7 +1294,7 @@ export const VisualEngineStudio: React.FC = () => {
                           type="range"
                           min={0}
                           max={5}
-                          step={0.25}
+                          step={0.1}
                           value={fadeInSeconds}
                           onChange={(e) => setFadeInSeconds(Number(e.target.value))}
                           className="w-full accent-brand-red"
@@ -1221,7 +1309,7 @@ export const VisualEngineStudio: React.FC = () => {
                           type="range"
                           min={0}
                           max={5}
-                          step={0.25}
+                          step={0.1}
                           value={fadeOutSeconds}
                           onChange={(e) => setFadeOutSeconds(Number(e.target.value))}
                           className="w-full accent-brand-red"
@@ -1229,7 +1317,7 @@ export const VisualEngineStudio: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Calage fin BPM & Mesures (temps / phase du 1er temps) */}
+                    {/* Calage fin BPM & Mesures (défaut verrouillé à 0.00s) */}
                     <div className="pt-2.5 border-t border-neutral-300 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center font-mono text-[11px]">
                       <div>
                         <div className="flex justify-between mb-1">
@@ -1259,15 +1347,24 @@ export const VisualEngineStudio: React.FC = () => {
                       </div>
 
                       <div>
-                        <div className="flex justify-between mb-1">
+                        <div className="flex justify-between items-center mb-1">
                           <span>CALAGE 1ER TEMPS (OFFSET)</span>
-                          <strong>{beatOffset.toFixed(2)}s</strong>
+                          <div className="flex items-center gap-1.5">
+                            <strong>{beatOffset.toFixed(2)}s</strong>
+                            <button
+                              type="button"
+                              onClick={() => setBeatOffset(0)}
+                              className="px-1.5 py-0.5 rounded border border-black bg-brand-white text-[9px] font-bold hover:bg-brand-red hover:text-white"
+                            >
+                              ↺ 0.00s
+                            </button>
+                          </div>
                         </div>
                         <input
                           type="range"
                           min={-2}
                           max={2}
-                          step={0.02}
+                          step={0.01}
                           value={beatOffset}
                           onChange={(e) => setBeatOffset(Number(e.target.value))}
                           className="w-full accent-brand-red"

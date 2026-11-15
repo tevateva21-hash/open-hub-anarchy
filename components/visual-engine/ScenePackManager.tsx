@@ -1,19 +1,19 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
-  AI_SCENE_PACK_PROMPT,
   DEFAULT_SCENE_PACKS,
-  exportScenePackAsCpp,
   generateRandomScenePack,
-  parseScenePackFromText,
   type ScenePack,
   type ScenePackSlot,
 } from "@/lib/visual-engine/scene-packs";
+import { CPP_SHADER_ENABLED_KEY } from "@/lib/visual-engine/cpp-runtime";
 
-const PACKS_STORAGE_KEY = "openhub_visual_scene_packs_v2";
+export const PACKS_STORAGE_KEY = "openhub_visual_scene_packs_v2";
+export const ACTIVE_PACK_ID_KEY = "openhub_active_pack_id_v2";
 
 interface ScenePackManagerProps {
   authorName: string;
@@ -37,8 +37,7 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
     DEFAULT_SCENE_PACKS[0].id
   );
   const [customPackName, setCustomPackName] = useState<string>("");
-  const [showEditor, setShowEditor] = useState<boolean>(false);
-  const [rawCode, setRawCode] = useState<string>("");
+  const [cppEnabled, setCppEnabled] = useState<boolean>(false);
   const [feedback, setFeedback] = useState<string>("");
 
   useEffect(() => {
@@ -50,6 +49,13 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
           setPacks([...DEFAULT_SCENE_PACKS, ...custom]);
         }
       }
+      const savedActiveId = window.localStorage.getItem(ACTIVE_PACK_ID_KEY);
+      if (savedActiveId) {
+        setSelectedPackId(savedActiveId);
+      }
+      setCppEnabled(
+        window.localStorage.getItem(CPP_SHADER_ENABLED_KEY) === "true"
+      );
     } catch {
       // ignore
     }
@@ -60,6 +66,11 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
 
   useEffect(() => {
     onPackChange(currentPack);
+    try {
+      window.localStorage.setItem(ACTIVE_PACK_ID_KEY, currentPack.id);
+    } catch {
+      // ignore
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [currentPack.id]);
 
@@ -88,73 +99,8 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
     onSelectSlot(0, generated.scenes[0], generated);
     setCustomPackName("");
     setFeedback(
-      `Nouveau pack généré : "${generated.name}" (seed ${generated.seed}) — enchaînement BPM actif.`
+      `Nouveau pack généré : "${generated.name}" (seed ${generated.seed}).`
     );
-  };
-
-  const handleCopyPrompt = async () => {
-    try {
-      await navigator.clipboard.writeText(AI_SCENE_PACK_PROMPT);
-      setFeedback(
-        "Prompt IA copié ! Colle-le dans ChatGPT/Claude/Gemini puis importe le résultat."
-      );
-    } catch {
-      setFeedback(
-        "Impossible de copier automatiquement — ouvre l'éditeur pour voir le prompt."
-      );
-    }
-  };
-
-  const handleImportText = () => {
-    const parsed = parseScenePackFromText(rawCode, authorName);
-    if (!parsed) {
-      setFeedback(
-        "Format non reconnu. Colle un bloc C++ (AnarchySceneSlot ANARCHY_PACK[5]) ou JSON valide."
-      );
-      return;
-    }
-    const next = [parsed, ...packs];
-    setPacks(next);
-    saveCustomPacks(next);
-    setSelectedPackId(parsed.id);
-    onPackChange(parsed);
-    onSelectSlot(0, parsed.scenes[0], parsed);
-    setFeedback(
-      `Pack "${parsed.name}" (${parsed.scenes.length} scènes) importé et prêt !`
-    );
-    setRawCode("");
-  };
-
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = () => {
-      if (typeof reader.result === "string") {
-        setRawCode(reader.result);
-        setShowEditor(true);
-        setFeedback(
-          `Fichier "${file.name}" chargé. Clique sur IMPORTER & PARTAGER.`
-        );
-      }
-    };
-    reader.readAsText(file);
-  };
-
-  const handleDownload = (format: "hpp" | "json") => {
-    const content =
-      format === "hpp"
-        ? exportScenePackAsCpp(currentPack)
-        : JSON.stringify(currentPack, null, 2);
-    const blob = new Blob([content], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${currentPack.name
-      .toLowerCase()
-      .replace(/[^a-z0-9]+/g, "-")}.${format}`;
-    a.click();
-    URL.revokeObjectURL(url);
   };
 
   return (
@@ -204,54 +150,21 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
             </Button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
-            <Button
-              type="button"
-              variant="comic"
-              size="sm"
-              onClick={handleCopyPrompt}
-            >
-              📋 PROMPT IA
-            </Button>
-
-            <label className="cursor-pointer px-2 py-1 rounded border-2 border-black bg-brand-pearl hover:bg-brand-white font-mono text-[10px] font-bold">
-              📂 .CPP / .JSON
-              <input
-                type="file"
-                accept=".cpp,.hpp,.h,.json,.txt"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
-
-            <Button
-              type="button"
-              variant="clinical"
-              size="sm"
-              onClick={() => handleDownload("hpp")}
-            >
-              ⬇ .HPP
-            </Button>
-            <Button
-              type="button"
-              variant="clinical"
-              size="sm"
-              onClick={() => handleDownload("json")}
-            >
-              ⬇ .JSON
-            </Button>
-            <Button
-              type="button"
-              variant="clinical"
-              size="sm"
-              onClick={() => setShowEditor((v) => !v)}
-            >
-              {showEditor ? "FERMER" : "✏️ ÉDITER / IMPORTER"}
-            </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            {cppEnabled && (
+              <span className="px-2 py-1 rounded bg-emerald-100 border border-black font-mono text-[10px] font-bold text-emerald-900">
+                💻 CODE C++ ACTIF
+              </span>
+            )}
+            <Link href="/anarchy-visual-design/editeur">
+              <Button type="button" variant="comic" size="sm">
+                💻 ÉDITEUR C++ &amp; SCÈNES ↗
+              </Button>
+            </Link>
           </div>
         </div>
 
-        {/* 5 mini-pastilles compactes montrant l'enchaînement BPM sans fiches */}
+        {/* 5 mini-pastilles compactes montrant l'enchaînement BPM sans éditeur interne */}
         <div className="flex flex-wrap items-center gap-2">
           <span className="font-mono text-[10px] font-bold uppercase text-neutral-500">
             ENCHAÎNEMENT :
@@ -283,40 +196,6 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
           <p className="font-mono text-[11px] font-bold text-brand-red">
             {feedback}
           </p>
-        )}
-
-        {showEditor && (
-          <div className="p-4 rounded-xl bg-brand-pearl border-2 border-black space-y-3">
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-mono text-xs font-bold">
-                COLLER UN PACK C++ (.HPP/.CPP) OU JSON (NOMS OPTIONNELS)
-              </span>
-              <button
-                type="button"
-                onClick={() => setRawCode(exportScenePackAsCpp(currentPack))}
-                className="font-mono text-[10px] underline text-brand-black"
-              >
-                Voir le C++ du pack actif
-              </button>
-            </div>
-            <textarea
-              rows={6}
-              value={rawCode}
-              onChange={(e) => setRawCode(e.target.value)}
-              placeholder={AI_SCENE_PACK_PROMPT}
-              className="w-full p-2.5 rounded border-2 border-black bg-brand-white font-mono text-[11px]"
-            />
-            <div className="flex justify-end">
-              <Button
-                type="button"
-                variant="primary"
-                size="sm"
-                onClick={handleImportText}
-              >
-                IMPORTER &amp; PARTAGER LE PACK
-              </Button>
-            </div>
-          </div>
         )}
       </div>
     </Card>

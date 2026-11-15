@@ -71,9 +71,15 @@ const MILESTONES = [
   },
   {
     id: "M11",
-    commit: "ACTUEL",
+    commit: "87fe70e",
     title: "Refonte Paradigme Packs de 5 Scènes (PS2 Enter the Dragon + Générateur)",
     details: "Pack original PS2 / Enter the Dragon, générateur procédural unique par seed, enchaînement automatique des 5 scènes au BPM, noms optionnels et scènes individuelles masquées par défaut.",
+  },
+  {
+    id: "M12",
+    commit: "ACTUEL",
+    title: "Prévisualisation .NET MAUI, Éditeur C++ Externe & Calage 0.00s",
+    details: "Curseur musique continu sans crans + fenêtre 30s glissable sur la waveform, éditeur externe /anarchy-visual-design/editeur avec injection C++ live modifiant le rendu, calage BPM verrouillé à 0.00s par défaut.",
   },
 ];
 
