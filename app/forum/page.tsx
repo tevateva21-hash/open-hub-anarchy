@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
 import { useAudioPlayer } from "@/components/audio/AudioPlayerContext";
+import { useAuth } from "@/components/auth/AuthContext";
 import {
   FORUM_THREADS,
   type AvatarExpression,
@@ -25,14 +26,19 @@ const BOARD_FILTERS: { id: ForumBoard; label: string; tag: string }[] = [
   { id: "SHOWCASE", label: "SHOWCASE", tag: "/showcase/" },
 ];
 
+type ForumDrawer = "ANARCHY_OFFICIAL" | "COMMUNITY_FORUM";
+
 /**
  * Page `/forum` — Imageboard modernisé à lignes alternées (`#FFFFFF` / `#F5F5F5`),
- * avatars BD 3D (`AvatarBD`), métadonnées Roboto Mono, lecture audio des pièces jointes
- * dans le lecteur persistant et création de sujets / réponses en temps réel.
+ * tiroirs Annonces Anarchy vs Discussions Communauté, avatars BD 3D (`AvatarBD`),
+ * et création de sujets / réponses signés par le pseudo connecté.
  */
 export default function ForumPage() {
   const { playTrack, currentTrack, isPlaying } = useAudioPlayer();
+  const { user, openAuthModal } = useAuth();
 
+  const [activeDrawer, setActiveDrawer] =
+    useState<ForumDrawer>("COMMUNITY_FORUM");
   const [threads, setThreads] = useState<ForumThread[]>(FORUM_THREADS);
   const [selectedBoard, setSelectedBoard] = useState<ForumBoard>("ALL");
   const [searchQuery, setSearchQuery] = useState("");
@@ -44,7 +50,7 @@ export default function ForumPage() {
   const [showNewThreadForm, setShowNewThreadForm] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [newBoard, setNewBoard] = useState<Exclude<ForumBoard, "ALL">>("DSP_DEV");
-  const [newAuthor, setNewAuthor] = useState("Anarchy_User");
+  const [newAuthor, setNewAuthor] = useState("");
   const [newContent, setNewContent] = useState("");
   const [newTrackId, setNewTrackId] = useState("");
   const [formError, setFormError] = useState<string | null>(null);
@@ -58,6 +64,7 @@ export default function ForumPage() {
     const q = searchQuery.trim().toLowerCase();
     return threads
       .filter((t) => {
+        if (activeDrawer === "ANARCHY_OFFICIAL" && !t.pinned) return false;
         if (selectedBoard !== "ALL" && t.board !== selectedBoard) return false;
         if (!q) return true;
         return (
@@ -68,7 +75,7 @@ export default function ForumPage() {
         );
       })
       .sort((a, b) => Number(Boolean(b.pinned)) - Number(Boolean(a.pinned)));
-  }, [threads, selectedBoard, searchQuery]);
+  }, [threads, activeDrawer, selectedBoard, searchQuery]);
 
   const toggleExpand = (threadId: string) => {
     setExpandedThreadIds((prev) => ({
@@ -215,6 +222,11 @@ export default function ForumPage() {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 shrink-0">
+              {!user && (
+                <Button variant="clinical" size="md" onClick={openAuthModal}>
+                  CONNEXION (@PSEUDO)
+                </Button>
+              )}
               <Button
                 id="btn-new-thread-toggle"
                 variant="primary"
@@ -231,8 +243,34 @@ export default function ForumPage() {
             </div>
           </div>
 
+          {/* Tiroirs : Annonces Anarchy vs Discussions Communauté */}
+          <div className="mt-5 pt-4 border-t border-neutral-200 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setActiveDrawer("ANARCHY_OFFICIAL")}
+              className={`px-3.5 py-2 rounded-lg border-2 font-mono text-xs font-bold transition-all ${
+                activeDrawer === "ANARCHY_OFFICIAL"
+                  ? "bg-brand-red text-white border-black shadow-comic-sm"
+                  : "bg-brand-pearl text-brand-charcoal border-neutral-300 hover:border-black"
+              }`}
+            >
+              ⚡ ANNONCES ANARCHY (OFFICIEL)
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveDrawer("COMMUNITY_FORUM")}
+              className={`px-3.5 py-2 rounded-lg border-2 font-mono text-xs font-bold transition-all ${
+                activeDrawer === "COMMUNITY_FORUM"
+                  ? "bg-brand-black text-white border-black shadow-comic-sm"
+                  : "bg-brand-pearl text-brand-charcoal border-neutral-300 hover:border-black"
+              }`}
+            >
+              💬 DISCUSSIONS COMMUNAUTÉ ({threads.length})
+            </button>
+          </div>
+
           {/* Barre de filtres Boards & Recherche */}
-          <div className="mt-6 pt-5 border-t border-neutral-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="mt-4 pt-4 border-t border-neutral-200 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex flex-wrap items-center gap-2">
               {BOARD_FILTERS.map((board) => {
                 const active = selectedBoard === board.id;

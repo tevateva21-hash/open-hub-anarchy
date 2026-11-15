@@ -1,22 +1,25 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
 import { VST_PLUGINS } from "@/lib/openhub-data";
 
+type VstDrawer = "ANARCHY_VSTSPLUGIN" | "COMMUNITY_VST";
+
 /**
- * Page d'accueil `/` — VST Hub.
- * Affiche un état communautaire épuré tant que les plugins du dépôt GitHub
- * `VST plugin` ne sont pas encore importés, tout en mettant en avant
- * le studio Anarchy Visual Design déjà disponible.
+ * Page d'accueil `/` — VST Hub avec 2 tiroirs :
+ * 1. Plugins Anarchy (lié au dépôt `tevateva21-hash/vstsplugin`)
+ * 2. Plugins Communauté
  */
 export default function HomePage() {
+  const [activeDrawer, setActiveDrawer] =
+    useState<VstDrawer>("ANARCHY_VSTSPLUGIN");
+
   return (
     <div className="space-y-8">
-      {/* En-tête VST Hub */}
       <section aria-labelledby="vst-hub-heading">
         <Card
           moduleTitle="VST_HUB // OPEN_SOURCE_AUDIO_PLUGINS"
@@ -57,43 +60,83 @@ export default function HomePage() {
         </Card>
       </section>
 
-      {/* État vide VST Hub (prêt pour import depuis le dépôt GitHub `VST plugin`) */}
-      <section aria-label="Catalogue VST">
-        {VST_PLUGINS.length === 0 ? (
-          <Card
-            moduleTitle="CATALOGUE_VST // EN ATTENTE D'IMPORT GITHUB"
-            moduleMeta="0 PLUGIN PUBLIÉ"
-          >
-            <div className="py-6 space-y-4">
-              <h2 className="font-sans text-lg font-bold text-brand-black">
-                Aucun plugin VST n&apos;est encore importé ici
-              </h2>
-              <p className="font-sans text-sm text-neutral-600 max-w-2xl leading-relaxed">
-                Le catalogue est volontairement vierge afin d&apos;accueillir
-                exclusivement les vrais plugins de votre dépôt GitHub{" "}
-                <code className="font-mono text-xs bg-brand-pearl px-1.5 py-0.5 rounded border border-neutral-200 text-brand-black">
-                  VST plugin
-                </code>{" "}
-                et les contributions de la communauté.
-              </p>
-              <div className="flex flex-wrap items-center gap-3 pt-1">
-                <Link href="/anarchy-visual-design">
-                  <Button variant="primary" size="md">
-                    OUVRIR ANARCHY VISUAL DESIGN →
-                  </Button>
-                </Link>
-                <Link href="/radio">
-                  <Button variant="comic" size="md">
-                    OUVRIR LA RADIO
-                  </Button>
-                </Link>
-              </div>
-            </div>
-          </Card>
-        ) : null}
-      </section>
+      {/* Petits tiroirs VST Anarchy / VST Communauté */}
+      <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+        <button
+          id="tab-vst-anarchy"
+          type="button"
+          onClick={() => setActiveDrawer("ANARCHY_VSTSPLUGIN")}
+          className={`px-4 py-2 rounded-lg border-2 font-bold transition-all ${
+            activeDrawer === "ANARCHY_VSTSPLUGIN"
+              ? "bg-brand-red text-white border-black shadow-comic-sm"
+              : "bg-brand-white text-brand-charcoal border-neutral-300 hover:border-black"
+          }`}
+        >
+          ⚡ VST ANARCHY (vstsplugin)
+        </button>
+        <button
+          id="tab-vst-community"
+          type="button"
+          onClick={() => setActiveDrawer("COMMUNITY_VST")}
+          className={`px-4 py-2 rounded-lg border-2 font-bold transition-all ${
+            activeDrawer === "COMMUNITY_VST"
+              ? "bg-black text-white border-black shadow-comic-sm"
+              : "bg-brand-white text-brand-charcoal border-neutral-300 hover:border-black"
+          }`}
+        >
+          🧩 VST COMMUNAUTÉ ({VST_PLUGINS.length})
+        </button>
+      </div>
 
-      {/* Passerelle directe vers Anarchy Visual Design (le module créé et complet) */}
+      {activeDrawer === "ANARCHY_VSTSPLUGIN" ? (
+        <Card
+          moduleTitle="CATALOGUE_VST // TEVATEVA21-HASH/VSTSPLUGIN"
+          moduleMeta="EN ATTENTE D'ACCÈS"
+        >
+          <div className="py-6 space-y-4">
+            <h2 className="font-sans text-lg font-bold text-brand-black">
+              Dépôt lié :{" "}
+              <code className="font-mono text-sm bg-brand-pearl px-2 py-0.5 rounded border border-neutral-200">
+                tevateva21-hash/vstsplugin
+              </code>
+            </h2>
+            <p className="font-sans text-sm text-neutral-600 max-w-2xl leading-relaxed">
+              Ce tiroir accueillera les plugins du dépôt{" "}
+              <strong>vstsplugin</strong> dès que celui-ci sera rattaché ou
+              accessible en lecture au connecteur GitHub.
+            </p>
+            <div className="flex flex-wrap items-center gap-3 pt-1">
+              <Link href="/anarchy-visual-design">
+                <Button variant="primary" size="md">
+                  OUVRIR ANARCHY VISUAL DESIGN →
+                </Button>
+              </Link>
+              <Link href="/radio">
+                <Button variant="comic" size="md">
+                  OUVRIR LA RADIO
+                </Button>
+              </Link>
+            </div>
+          </div>
+        </Card>
+      ) : (
+        <Card
+          moduleTitle="VST_COMMUNAUTÉ // DÉPÔTS_LIBRES"
+          moduleMeta="0 PLUGIN"
+        >
+          <div className="py-8 text-center space-y-2">
+            <p className="font-sans text-base font-semibold text-brand-black">
+              Aucun plugin communautaire publié pour l&apos;instant.
+            </p>
+            <p className="font-sans text-sm text-neutral-600">
+              Les créations VST3 / CLAP partagées par la communauté apparaîtront
+              ici.
+            </p>
+          </div>
+        </Card>
+      )}
+
+      {/* Passerelle directe vers Anarchy Visual Design */}
       <section aria-label="Anarchy Visual Design Studio">
         <Card
           moduleTitle="ANARCHY_VISUAL_DESIGN // STUDIO_19_FADERS"
@@ -106,13 +149,10 @@ export default function HomePage() {
                 Studio Anarchy Visual Design V2
               </h2>
               <p className="font-sans text-sm text-neutral-600 leading-relaxed">
-                Générateur visuel audio-réactif intégré depuis{" "}
-                <code className="font-mono text-xs text-brand-black">
-                  tevateva21-hash/anarchy-visual-engine
-                </code>{" "}
-                : console à 19 faders, 5 scènes (dont Techno Therapy), 7
-                palettes avec morphing, Kick Blackout, Anaglyph 3D, Pendulum
-                Cam, analyse FFT locale MP3/WAV et export PNG 1280×720.
+                Générateur visuel audio-réactif : console à 19 faders, 5 scènes
+                (dont Techno Therapy), 7 palettes avec morphing, Kick Blackout,
+                Anaglyph 3D, Pendulum Cam, switch entre les scènes, analyse FFT
+                locale MP3/WAV et export vidéo / PNG.
               </p>
             </div>
             <Link href="/anarchy-visual-design" className="shrink-0">

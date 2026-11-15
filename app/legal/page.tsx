@@ -88,6 +88,30 @@ const COOKIE_INVENTORY = [
     purpose:
       "Sauvegarde localement vos réglages des 19 faders, scènes et verrous du studio Anarchy Visual Design.",
   },
+  {
+    name: "openhub_user_session_v1",
+    storage: "localStorage (Action utilisateur)",
+    duration: "Jusqu'à déconnexion / purge",
+    category: "Session Communauté",
+    purpose:
+      "Stocke localement votre pseudo, email et avatar BD lors de la connexion pour signer vos sons, likes et articles.",
+  },
+  {
+    name: "openhub_radio_community_v1",
+    storage: "localStorage (Action utilisateur)",
+    duration: "Jusqu'à suppression manuelle",
+    category: "Radio Générale & Ranking",
+    purpose:
+      "Conserve localement les sons ajoutés par la communauté et leurs votes (likes) sur la Radio Générale.",
+  },
+  {
+    name: "openhub_community_blog_v1",
+    storage: "localStorage (Action utilisateur)",
+    duration: "Jusqu'à suppression manuelle",
+    category: "Blog & Docs Communauté",
+    purpose:
+      "Conserve localement les articles et documentations publiés dans le tiroir Blog & Docs Communauté.",
+  },
 ];
 
 /**

@@ -5,35 +5,53 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
 import { useAudioPlayer } from "@/components/audio/AudioPlayerContext";
+import { useAuth } from "@/components/auth/AuthContext";
 import {
   SAMPLE_TRACKS,
   sampleToAudioTrack,
   type SampleTrack,
 } from "@/lib/openhub-data";
 
+type SamplesDrawer = "ANARCHY_OFFICIAL" | "COMMUNITY_SAMPLES";
+
 /**
- * Page `/samples` — Banque de samples communautaire vierge par défaut,
- * prête à être remplie par l'auteur et la communauté.
+ * Page `/samples` — Avec 2 tiroirs (Samples Anarchy Officiels & Samples Communauté)
+ * et attribution automatique au pseudo connecté (`useAuth`).
  */
 export default function SamplesPage() {
   const { playTrack, currentTrack, isPlaying } = useAudioPlayer();
+  const { user, openAuthModal } = useAuth();
+
+  const [activeDrawer, setActiveDrawer] =
+    useState<SamplesDrawer>("COMMUNITY_SAMPLES");
   const [samples, setSamples] = useState<SampleTrack[]>(SAMPLE_TRACKS);
+  const [likesMap, setLikesMap] = useState<Record<string, number>>({});
   const [showForm, setShowForm] = useState(false);
 
   const [title, setTitle] = useState("");
   const [packName, setPackName] = useState("");
-  const [author, setAuthor] = useState("");
   const [bpm, setBpm] = useState(130);
   const [musicalKey, setMusicalKey] = useState("C Minor");
   const [genre, setGenre] = useState<SampleTrack["genre"]>("INDUSTRIAL");
   const [license, setLicense] = useState<SampleTrack["license"]>("CC0 1.0");
   const [error, setError] = useState<string | null>(null);
 
+  const handleOpenForm = () => {
+    if (!user) {
+      openAuthModal();
+      return;
+    }
+    setShowForm((prev) => !prev);
+  };
+
   const handleSubmitSample = (e: React.FormEvent) => {
     e.preventDefault();
+    if (!user) {
+      openAuthModal();
+      return;
+    }
     const cleanTitle = title.trim();
     const cleanPack = packName.trim() || "COMMUNITY PACK";
-    const cleanAuthor = author.trim() || "Membre Anarchy";
 
     if (!cleanTitle) {
       setError("Veuillez saisir un nom de fichier ou de sample.");
@@ -51,8 +69,8 @@ export default function SamplesPage() {
       sampleRate: "48.0 kHz / 24-BIT",
       license,
       fileSizeMb: 12.0,
-      author: cleanAuthor,
-      avatarExpression: "spectateur-b",
+      author: user.pseudo,
+      avatarExpression: user.expression,
       waveformPeaks: [
         0.4, 0.8, 0.6, 0.9, 0.5, 0.7, 0.85, 0.45, 0.75, 0.95, 0.65, 0.5, 0.8,
         0.7, 0.55, 0.35,
@@ -66,6 +84,7 @@ export default function SamplesPage() {
     };
 
     setSamples((prev) => [nextSample, ...prev]);
+    setLikesMap((prev) => ({ ...prev, [nextSample.id]: 1 }));
     setTitle("");
     setPackName("");
     setError(null);
@@ -73,7 +92,7 @@ export default function SamplesPage() {
   };
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <Card
         moduleTitle="SAMPLES_HUB // PARTAGE_COMMUNAUTAIRE"
         moduleMeta={`${samples.length} SAMPLE(S)`}
@@ -85,10 +104,10 @@ export default function SamplesPage() {
               {"// 48.0 kHz · 24-BIT · CC0 / CC-BY"}
             </div>
             <h1 className="font-sans text-2xl sm:text-3xl font-bold text-brand-black">
-              Banque de Samples Communautaire
+              Banque de Samples
             </h1>
             <p className="font-sans text-sm text-neutral-600">
-              Espace vierge prêt à accueillir vos propres packs et stems audio.
+              Partagez vos stems et packs libres de droits avec la communauté.
             </p>
           </div>
 
@@ -96,21 +115,51 @@ export default function SamplesPage() {
             id="btn-toggle-sample-form"
             variant="primary"
             size="md"
-            onClick={() => setShowForm((prev) => !prev)}
+            onClick={handleOpenForm}
           >
-            {showForm ? "✕ FERMER" : "+ AJOUTER UN SAMPLE"}
+            {user
+              ? showForm
+                ? "✕ FERMER"
+                : "+ AJOUTER UN SAMPLE"
+              : "CONNEXION POUR AJOUTER"}
           </Button>
         </div>
       </Card>
 
-      {showForm && (
+      {/* Petits tiroirs Samples Anarchy / Communauté */}
+      <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+        <button
+          type="button"
+          onClick={() => setActiveDrawer("ANARCHY_OFFICIAL")}
+          className={`px-4 py-2 rounded-lg border-2 font-bold transition-all ${
+            activeDrawer === "ANARCHY_OFFICIAL"
+              ? "bg-brand-red text-white border-black shadow-comic-sm"
+              : "bg-brand-white text-brand-charcoal border-neutral-300 hover:border-black"
+          }`}
+        >
+          ⚡ PACKS ANARCHY (OFFICIELS)
+        </button>
+        <button
+          type="button"
+          onClick={() => setActiveDrawer("COMMUNITY_SAMPLES")}
+          className={`px-4 py-2 rounded-lg border-2 font-bold transition-all ${
+            activeDrawer === "COMMUNITY_SAMPLES"
+              ? "bg-black text-white border-black shadow-comic-sm"
+              : "bg-brand-white text-brand-charcoal border-neutral-300 hover:border-black"
+          }`}
+        >
+          🎛 SAMPLES COMMUNAUTÉ ({samples.length})
+        </button>
+      </div>
+
+      {showForm && user && (
         <Card
-          moduleTitle="SUBMIT_SAMPLE // AJOUTER À LA BANQUE"
+          moduleTitle={`SUBMIT_SAMPLE // @${user.pseudo.toUpperCase()}`}
           moduleMeta="COMMUNAUTÉ"
           activeIndicator
         >
           <form onSubmit={handleSubmitSample} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
                 <label
                   htmlFor="smp-title"
@@ -141,23 +190,6 @@ export default function SamplesPage() {
                   value={packName}
                   onChange={(e) => setPackName(e.target.value)}
                   placeholder="Ex: ANARCHY PACK 01"
-                  className="w-full px-3 py-2 rounded-lg border-2 border-black bg-brand-white font-mono text-xs"
-                />
-              </div>
-
-              <div>
-                <label
-                  htmlFor="smp-author"
-                  className="block font-mono text-[11px] font-bold uppercase text-neutral-600 mb-1"
-                >
-                  Auteur
-                </label>
-                <input
-                  id="smp-author"
-                  type="text"
-                  value={author}
-                  onChange={(e) => setAuthor(e.target.value)}
-                  placeholder="Votre pseudo"
                   className="w-full px-3 py-2 rounded-lg border-2 border-black bg-brand-white font-mono text-xs"
                 />
               </div>
@@ -266,34 +298,45 @@ export default function SamplesPage() {
         </Card>
       )}
 
-      {samples.length === 0 ? (
-        <Card
-          moduleTitle="BANQUE_SAMPLES // VIDE"
-          moduleMeta="0 FICHIER"
-        >
-          <div className="py-8 text-center space-y-3">
+      {activeDrawer === "ANARCHY_OFFICIAL" ? (
+        <Card moduleTitle="PACKS_ANARCHY // OFFICIELS" moduleMeta="0 PACK">
+          <div className="py-8 text-center space-y-2">
             <p className="font-sans text-base font-semibold text-brand-black">
-              Aucun sample publié pour l&apos;instant.
+              Aucun pack officiel Anarchy publié pour l&apos;instant.
             </p>
             <p className="font-sans text-sm text-neutral-600">
-              Cliquez sur <strong>+ AJOUTER UN SAMPLE</strong> pour commencer à
-              remplir la banque communautaire.
+              Vos prochains packs officiels apparaîtront ici.
+            </p>
+          </div>
+        </Card>
+      ) : samples.length === 0 ? (
+        <Card moduleTitle="BANQUE_SAMPLES // VIDE" moduleMeta="0 FICHIER">
+          <div className="py-8 text-center space-y-3">
+            <p className="font-sans text-base font-semibold text-brand-black">
+              Aucun sample communautaire publié pour l&apos;instant.
+            </p>
+            <p className="font-sans text-sm text-neutral-600">
+              Connectez-vous puis cliquez sur{" "}
+              <strong>+ AJOUTER UN SAMPLE</strong> pour commencer à remplir la
+              banque.
             </p>
           </div>
         </Card>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          {samples.map((smp) => {
-            const track = sampleToAudioTrack(smp);
-            const active = currentTrack?.id === track.id && isPlaying;
-            return (
-              <Card
-                key={smp.id}
-                moduleTitle={smp.packName}
-                moduleMeta={`${smp.bpm} BPM • ${smp.key}`}
-                activeIndicator={active}
-              >
-                <div className="space-y-4">
+          {[...samples]
+            .sort((a, b) => (likesMap[b.id] ?? 0) - (likesMap[a.id] ?? 0))
+            .map((smp) => {
+              const track = sampleToAudioTrack(smp);
+              const active = currentTrack?.id === track.id && isPlaying;
+              const likes = likesMap[smp.id] ?? 0;
+              return (
+                <Card
+                  key={smp.id}
+                  moduleTitle={smp.packName}
+                  moduleMeta={`${smp.bpm} BPM • ${smp.key}`}
+                  activeIndicator={active}
+                >
                   <div className="flex items-center justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <AvatarBD
@@ -307,23 +350,36 @@ export default function SamplesPage() {
                           {smp.title}
                         </h2>
                         <div className="font-mono text-[11px] text-neutral-500">
-                          {smp.author} • {smp.genre} • {smp.sampleRate}
+                          @{smp.author} • {smp.genre} • {smp.sampleRate}
                         </div>
                       </div>
                     </div>
 
-                    <Button
-                      variant={active ? "primary" : "comic"}
-                      size="sm"
-                      onClick={() => playTrack(track)}
-                    >
-                      {active ? "❚❚ PAUSE" : "▶ ÉCOUTER"}
-                    </Button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setLikesMap((prev) => ({
+                            ...prev,
+                            [smp.id]: (prev[smp.id] ?? 0) + 1,
+                          }))
+                        }
+                        className="px-2.5 py-1 rounded border-2 border-black bg-brand-pearl font-mono text-xs font-bold"
+                      >
+                        ▲ {likes}
+                      </button>
+                      <Button
+                        variant={active ? "primary" : "comic"}
+                        size="sm"
+                        onClick={() => playTrack(track)}
+                      >
+                        {active ? "❚❚ PAUSE" : "▶ ÉCOUTER"}
+                      </Button>
+                    </div>
                   </div>
-                </div>
-              </Card>
-            );
-          })}
+                </Card>
+              );
+            })}
         </div>
       )}
     </div>

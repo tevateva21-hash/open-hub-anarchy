@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AvatarBD } from "@/components/ui/AvatarBD";
 import { useAudioPlayer } from "@/components/audio/AudioPlayerContext";
+import { useAuth } from "@/components/auth/AuthContext";
 
 interface NavItem {
   id: string;
@@ -34,6 +35,7 @@ export const HeaderNav: React.FC = () => {
   const pathname = usePathname() || "/";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const { isPlaying } = useAudioPlayer();
+  const { user, openAuthModal, logout } = useAuth();
 
   const isRouteActive = (href: string): boolean => {
     if (href === "/") {
@@ -141,24 +143,49 @@ export const HeaderNav: React.FC = () => {
           })}
         </nav>
 
-        {/* Zone droite : Statut Radio si actif + AvatarBD + Toggle Mobile */}
-        <div className="flex items-center gap-2.5 shrink-0">
+        {/* Zone droite : Connexion / @pseudo + Statut Radio + AvatarBD + Toggle Mobile */}
+        <div className="flex items-center gap-2 shrink-0">
           {isPlaying && (
             <Link
               href="/radio"
-              className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded border-2 border-black bg-brand-red text-brand-white font-mono text-[10px] font-bold uppercase shadow-comic-sm"
+              className="hidden lg:inline-flex items-center gap-1.5 px-2 py-1 rounded border-2 border-black bg-brand-red text-brand-white font-mono text-[10px] font-bold uppercase shadow-comic-sm"
             >
               <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse" />
-              <span>RADIO ON</span>
+              <span>RADIO</span>
             </Link>
+          )}
+
+          {user ? (
+            <div className="hidden sm:flex items-center gap-1.5">
+              <span className="px-2 py-1 rounded bg-brand-pearl border border-black font-mono text-[11px] font-bold text-brand-black">
+                @{user.pseudo}
+              </span>
+              <button
+                type="button"
+                onClick={logout}
+                title="Se déconnecter"
+                className="px-2 py-1 rounded border border-neutral-300 bg-brand-white hover:border-black font-mono text-[10px] text-neutral-600 hover:text-brand-red"
+              >
+                QUITTER
+              </button>
+            </div>
+          ) : (
+            <button
+              id="btn-header-login"
+              type="button"
+              onClick={openAuthModal}
+              className="hidden sm:inline-flex items-center px-2.5 py-1.5 rounded border-2 border-black bg-brand-white hover:bg-brand-pearl font-mono text-[11px] font-bold text-brand-black shadow-comic-sm"
+            >
+              CONNEXION
+            </button>
           )}
 
           <AvatarBD
             id="header-user-avatar"
-            name="Anarchy Lead"
-            expression="spectateur-a"
+            name={user?.pseudo ?? "Visiteur"}
+            expression={user?.expression ?? "spectateur-a"}
             size="sm"
-            badgeText="3D"
+            badgeText={user ? "ON" : "3D"}
             audioReactive={isPlaying}
           />
 
@@ -213,6 +240,37 @@ export const HeaderNav: React.FC = () => {
               );
             })}
           </nav>
+
+          <div className="pt-2 border-t border-neutral-200 flex items-center justify-between gap-2 font-mono text-xs">
+            {user ? (
+              <>
+                <span className="font-bold text-brand-black">
+                  Connecté : @{user.pseudo}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    logout();
+                    setMobileMenuOpen(false);
+                  }}
+                  className="px-3 py-1.5 rounded border-2 border-black bg-brand-pearl font-bold text-brand-red"
+                >
+                  QUITTER
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => {
+                  setMobileMenuOpen(false);
+                  openAuthModal();
+                }}
+                className="w-full py-2 rounded border-2 border-black bg-brand-red text-brand-white font-bold shadow-comic-sm"
+              >
+                CONNEXION (MAIL + PSEUDO)
+              </button>
+            )}
+          </div>
         </div>
       )}
     </header>

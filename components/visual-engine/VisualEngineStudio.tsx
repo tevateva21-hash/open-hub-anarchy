@@ -577,6 +577,10 @@ export const VisualEngineStudio: React.FC = () => {
     setPresetError("");
   };
 
+  const [isRecordingVideo, setIsRecordingVideo] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordedChunksRef = useRef<Blob[]>([]);
+
   const handleExportSnapshot = () => {
     const src = stageCanvasRef.current;
     if (!src) return;
@@ -594,6 +598,87 @@ export const VisualEngineStudio: React.FC = () => {
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const handleToggleVideoExport = () => {
+    if (isRecordingVideo && mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop();
+      setIsRecordingVideo(false);
+      return;
+    }
+
+    const canvas = stageCanvasRef.current;
+    if (!canvas || typeof MediaRecorder === "undefined") {
+      setPresetError(
+        "L'enregistrement vidéo MediaRecorder n'est pas supporté sur ce navigateur."
+      );
+      return;
+    }
+
+    try {
+      const stream = canvas.captureStream(30);
+      const candidates = [
+        "video/mp4;codecs=avc1",
+        "video/mp4",
+        "video/webm;codecs=vp9",
+        "video/webm",
+      ];
+      const mimeType =
+        candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
+      const recorder = mimeType
+        ? new MediaRecorder(stream, { mimeType })
+        : new MediaRecorder(stream);
+
+      recordedChunksRef.current = [];
+      recorder.ondataavailable = (ev) => {
+        if (ev.data && ev.data.size > 0) {
+          recordedChunksRef.current.push(ev.data);
+        }
+      };
+      recorder.onstop = () => {
+        const finalType = recorder.mimeType || mimeType || "video/webm";
+        const ext = finalType.includes("mp4") ? "mp4" : "webm";
+        const blob = new Blob(recordedChunksRef.current, { type: finalType });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = `anarchy-visual-${preset.sceneId}-${preset.seed}.${ext}`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        setPresetMessage(`Vidéo exportée au format .${ext.toUpperCase()} !`);
+      };
+
+      recorder.start(250);
+      mediaRecorderRef.current = recorder;
+      setIsRecordingVideo(true);
+      setAutoAnimate(true);
+      setPresetError("");
+      setPresetMessage(
+        "Enregistrement vidéo en cours... Cliquez à nouveau pour télécharger."
+      );
+    } catch {
+      setPresetError("Impossible de démarrer l'enregistrement vidéo.");
+    }
+  };
+
+  const handleAutoSyncScenesToAudio = () => {
+    const totalSec = analysis?.durationSeconds ?? 30;
+    const count = project.segments.length || 5;
+    const slice = totalSec / count;
+    updateProject((curr) => ({
+      ...curr,
+      sequenceEnabled: true,
+      segments: curr.segments.map((seg, idx) => ({
+        ...seg,
+        startSeconds: Number((idx * slice).toFixed(2)),
+        endSeconds: Number(((idx + 1) * slice).toFixed(2)),
+      })),
+    }));
+    setPresetMessage(
+      `Switch entre les scènes calé automatiquement sur ${totalSec.toFixed(1)}s (${count} segments).`
+    );
   };
 
   const handleSpeechMic = () => {
@@ -647,7 +732,7 @@ export const VisualEngineStudio: React.FC = () => {
     <div className="space-y-8">
       {/* 1. Bandeau En-tête Anarchy Visual Design */}
       <Card
-        moduleTitle="ANARCHY_VISUAL_DESIGN // V2.0_M1_M6"
+        moduleTitle="ANARCHY_VISUAL_DESIGN // STUDIO_19_FADERS"
         moduleMeta={`${activeDescriptor.badge} // 19_CONSOLE_FADERS`}
         activeIndicator={isPlaying || sourceMode === "LOCAL_FILE"}
       >
@@ -717,6 +802,16 @@ export const VisualEngineStudio: React.FC = () => {
             >
               ⬇ PNG 1280×720
             </Button>
+            <Button
+              id="btn-ve-video"
+              variant={isRecordingVideo ? "comic" : "clinical"}
+              size="md"
+              onClick={handleToggleVideoExport}
+            >
+              {isRecordingVideo
+                ? "⏹ STOP & SAUVER VIDÉO"
+                : "🎬 EXPORT VIDÉO (MP4/WEBM)"}
+            </Button>
           </div>
         </div>
       </Card>
@@ -751,7 +846,7 @@ export const VisualEngineStudio: React.FC = () => {
                     </span>
                     {project.sequenceEnabled && (
                       <span className="px-1.5 py-0.5 rounded bg-brand-red text-white font-bold">
-                        TIMELINE SEG #{activeSegIndex + 1}
+                        SWITCH SCÈNE #{activeSegIndex + 1}
                       </span>
                     )}
                   </span>
@@ -813,8 +908,16 @@ export const VisualEngineStudio: React.FC = () => {
                         }
                         className="accent-brand-red"
                       />
-                      <span>Timeline M6</span>
+                      <span>Switch entre les scènes</span>
                     </label>
+                    <button
+                      type="button"
+                      onClick={handleAutoSyncScenesToAudio}
+                      title="Caler automatiquement le switch entre les scènes sur le morceau / BPM"
+                      className="px-2 py-1 rounded bg-[#00E5FF] text-black border border-black font-mono text-[10px] font-bold hover:opacity-90 transition-opacity"
+                    >
+                      ⏱ Caler sur le morceau
+                    </button>
                   </div>
 
                   <div className="flex-1 flex items-center gap-2 font-mono text-[11px] text-neutral-300">
@@ -861,10 +964,10 @@ export const VisualEngineStudio: React.FC = () => {
           </Card>
         </div>
 
-        {/* Panneau droit : Sélection des 5 scènes, 7 palettes, BPM sync, Presets M4/M6 */}
+        {/* Panneau droit : Sélection des 5 scènes, 7 palettes, BPM sync, Presets */}
         <div className="xl:col-span-5 space-y-4">
           <Card
-            moduleTitle="SCENE_&_PRESET_MATRIX // M2_M4_M6"
+            moduleTitle="SCENE_&_PRESET_MATRIX // SCÈNES_&_PRESETS"
             moduleMeta="5 SCÈNES · 7 PALETTES · JSON"
           >
             <div className="space-y-4">
@@ -1219,7 +1322,7 @@ export const VisualEngineStudio: React.FC = () => {
                 {variations.length > 0 && (
                   <div className="space-y-1.5 pt-2 border-t border-neutral-200">
                     <div className="font-mono text-[10px] font-bold uppercase text-brand-red">
-                      Variations M6 (Cliquer pour charger)
+                      Variations rapides (Cliquer pour charger)
                     </div>
                     <div className="flex flex-wrap gap-1.5">
                       {variations.map((v, idx) => (
