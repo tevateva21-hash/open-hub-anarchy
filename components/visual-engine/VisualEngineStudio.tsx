@@ -150,6 +150,20 @@ export const VisualEngineStudio: React.FC = () => {
   const [showJsonEditor, setShowJsonEditor] = useState<boolean>(false);
   const [variations, setVariations] = useState<RetroPresetConfig[]>([]);
 
+  // Extrait audio (30s par défaut) & Fondus entrée / sortie
+  const [clipStartSeconds, setClipStartSeconds] = useState<number>(0);
+  const [clipDurationSeconds, setClipDurationSeconds] = useState<number>(30);
+  const [fadeInSeconds, setFadeInSeconds] = useState<number>(1.5);
+  const [fadeOutSeconds, setFadeOutSeconds] = useState<number>(2.0);
+  const [clipActive, setClipActive] = useState<boolean>(true);
+
+  // Fenêtres / Onglets fermables et modulables
+  const [showAudioPanel, setShowAudioPanel] = useState<boolean>(true);
+  const [showStagePanel, setShowStagePanel] = useState<boolean>(true);
+  const [showMatrixPanel, setShowMatrixPanel] = useState<boolean>(true);
+  const [showFadersPanel, setShowFadersPanel] = useState<boolean>(true);
+  const [showLyricsPanel, setShowLyricsPanel] = useState<boolean>(true);
+
   const stageCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -650,13 +664,20 @@ export const VisualEngineStudio: React.FC = () => {
         setPresetMessage(`Vidéo exportée au format .${ext.toUpperCase()} !`);
       };
 
+      // Caler la lecture audio sur le début de l'extrait au lancement de l'export vidéo
+      if (localAudioRef.current) {
+        localAudioRef.current.currentTime = clipStartSeconds;
+        setLocalTime(clipStartSeconds);
+        void localAudioRef.current.play().catch(() => {});
+      }
+
       recorder.start(250);
       mediaRecorderRef.current = recorder;
       setIsRecordingVideo(true);
       setAutoAnimate(true);
       setPresetError("");
       setPresetMessage(
-        "Enregistrement vidéo en cours... Cliquez à nouveau pour télécharger."
+        `Enregistrement vidéo de l'extrait (${clipDurationSeconds}s) en cours... Cliquez à nouveau pour télécharger.`
       );
     } catch {
       setPresetError("Impossible de démarrer l'enregistrement vidéo.");
@@ -664,21 +685,74 @@ export const VisualEngineStudio: React.FC = () => {
   };
 
   const handleAutoSyncScenesToAudio = () => {
-    const totalSec = analysis?.durationSeconds ?? 30;
+    const start = clipActive ? clipStartSeconds : 0;
+    const totalAvailable = analysis?.durationSeconds ?? clipDurationSeconds;
+    const span = clipActive
+      ? Math.min(clipDurationSeconds, Math.max(4, totalAvailable - start))
+      : totalAvailable;
     const count = project.segments.length || 5;
-    const slice = totalSec / count;
+    const beatSec = 60 / Math.max(60, bpm);
+    const barSec = beatSec * 4;
+    const rawSlice = span / count;
+    // Aligner chaque segment sur des temps / mesures du BPM
+    const bpmAlignedSlice = Math.max(
+      beatSec,
+      Math.round(rawSlice / beatSec) * beatSec
+    );
+
     updateProject((curr) => ({
       ...curr,
       sequenceEnabled: true,
-      segments: curr.segments.map((seg, idx) => ({
-        ...seg,
-        startSeconds: Number((idx * slice).toFixed(2)),
-        endSeconds: Number(((idx + 1) * slice).toFixed(2)),
-      })),
+      segments: curr.segments.map((seg, idx) => {
+        const s = start + idx * bpmAlignedSlice;
+        const e =
+          idx === count - 1
+            ? start + span
+            : Math.min(start + span, start + (idx + 1) * bpmAlignedSlice);
+        return {
+          ...seg,
+          startSeconds: Number(s.toFixed(2)),
+          endSeconds: Number(Math.max(s + beatSec, e).toFixed(2)),
+        };
+      }),
     }));
     setPresetMessage(
-      `Switch entre les scènes calé automatiquement sur ${totalSec.toFixed(1)}s (${count} segments).`
+      `Scènes calées en BPM (${bpm} BPM · ${barSec.toFixed(2)}s/mesure) sur l'extrait ${start.toFixed(1)}s → ${(start + span).toFixed(1)}s.`
     );
+  };
+
+  const applyClipFadeVolume = (audioEl: HTMLAudioElement, t: number) => {
+    if (!clipActive) {
+      audioEl.volume = 1;
+      return;
+    }
+    const clipEnd = clipStartSeconds + clipDurationSeconds;
+    if (t >= clipEnd) {
+      audioEl.pause();
+      audioEl.currentTime = clipStartSeconds;
+      setLocalTime(clipStartSeconds);
+      audioEl.volume = fadeInSeconds > 0 ? 0.05 : 1;
+      return;
+    }
+    const elapsed = Math.max(0, t - clipStartSeconds);
+    const remaining = Math.max(0, clipEnd - t);
+    let vol = 1;
+    if (fadeInSeconds > 0 && elapsed < fadeInSeconds) {
+      vol = Math.min(vol, Math.max(0.02, elapsed / fadeInSeconds));
+    }
+    if (fadeOutSeconds > 0 && remaining < fadeOutSeconds) {
+      vol = Math.min(vol, Math.max(0.02, remaining / fadeOutSeconds));
+    }
+    audioEl.volume = Math.min(1, Math.max(0, vol));
+  };
+
+  const handlePlayClipExtract = () => {
+    if (!localAudioRef.current) return;
+    localAudioRef.current.currentTime = clipStartSeconds;
+    setLocalTime(clipStartSeconds);
+    setSourceMode("LOCAL_FILE");
+    setAutoAnimate(true);
+    void localAudioRef.current.play().catch(() => {});
   };
 
   const handleSpeechMic = () => {
@@ -816,10 +890,333 @@ export const VisualEngineStudio: React.FC = () => {
         </div>
       </Card>
 
-      {/* 2. Moniteur Vidéo Principal + Sélecteur de Scènes & Contrôles M4/M6 */}
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-        {/* Écran Stage 320x180 + Mappings Audio + Variations M6 */}
-        <div className="xl:col-span-7 space-y-4">
+      {/* Barre de fenêtres modulables & fermables */}
+      <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-brand-pearl border-2 border-black shadow-comic-sm font-mono text-xs">
+        <span className="font-bold text-brand-red uppercase mr-1">
+          {"// FENÊTRES :"}
+        </span>
+        {[
+          { label: "🎵 AUDIO & EXTRAIT 30S", open: showAudioPanel, toggle: () => setShowAudioPanel((v) => !v) },
+          { label: "📺 MONITEUR VIDÉO", open: showStagePanel, toggle: () => setShowStagePanel((v) => !v) },
+          { label: "🎬 SCÈNES & PALETTES", open: showMatrixPanel, toggle: () => setShowMatrixPanel((v) => !v) },
+          { label: "🎚 CONSOLE 19 FADERS", open: showFadersPanel, toggle: () => setShowFadersPanel((v) => !v) },
+          { label: "🎤 PAROLES & MICRO", open: showLyricsPanel, toggle: () => setShowLyricsPanel((v) => !v) },
+        ].map((win) => (
+          <button
+            key={win.label}
+            type="button"
+            onClick={win.toggle}
+            className={`px-3 py-1.5 rounded-lg border-2 font-bold transition-all ${
+              win.open
+                ? "bg-brand-black text-white border-black shadow-comic-sm"
+                : "bg-brand-white text-neutral-500 border-neutral-300 hover:border-black"
+            }`}
+          >
+            {win.open ? "✓ " : "+ "}
+            {win.label}
+          </button>
+        ))}
+      </div>
+
+      {showAudioPanel && (
+      <div className="space-y-4">
+          <Card
+            moduleTitle="AUDIO_LAB // FFT_24KHZ_&_OPENHUB_SYNC"
+            moduleMeta="MONO / STÉRÉO · INDEXEDDB (MAX 5)"
+          >
+            <div className="space-y-4">
+              {/* Choix source : Lecteur Open Hub persistant OU Piste MP3/WAV locale */}
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setSourceMode("LIVE_HUB")}
+                    className={`px-3 py-1.5 rounded-lg border-2 font-mono text-xs font-bold transition-all ${
+                      sourceMode === "LIVE_HUB"
+                        ? "bg-brand-red text-white border-black shadow-comic-sm"
+                        : "bg-brand-pearl text-brand-charcoal border-neutral-300"
+                    }`}
+                  >
+                    SYNCHRO LECTEUR OPEN HUB
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSourceMode("LOCAL_FILE")}
+                    disabled={!analysis}
+                    className={`px-3 py-1.5 rounded-lg border-2 font-mono text-xs font-bold transition-all disabled:opacity-50 ${
+                      sourceMode === "LOCAL_FILE"
+                        ? "bg-black text-white border-black shadow-comic-sm"
+                        : "bg-brand-pearl text-brand-charcoal border-neutral-300"
+                    }`}
+                  >
+                    PISTE LOCALE ANALYSÉE
+                  </button>
+                </div>
+
+                {sourceMode === "LIVE_HUB" && (
+                  <Button
+                    variant="clinical"
+                    size="sm"
+                    onClick={togglePlay}
+                  >
+                    {isPlaying
+                      ? `❚❚ PAUSE (${currentTrack?.title ?? "SIGNAL"})`
+                      : "▶ PLAY LECTEUR OPEN HUB"}
+                  </Button>
+                )}
+              </div>
+
+              {/* Zone upload + bouton Démo WAV 1-clic */}
+              <div className="p-4 rounded-xl bg-brand-pearl border-2 border-dashed border-neutral-400 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                <div>
+                  <label
+                    htmlFor="ve-audio-file"
+                    className="block font-mono text-xs font-bold uppercase text-brand-black mb-1.5"
+                  >
+                    Importer MP3 ou WAV (max 50 Mio · 5 min)
+                  </label>
+                  <input
+                    id="ve-audio-file"
+                    type="file"
+                    accept=".mp3,.wav,audio/mpeg,audio/wav"
+                    disabled={busy}
+                    onChange={(e) => {
+                      const f = e.target.files?.[0];
+                      e.target.value = "";
+                      if (f) void handleFileLoad(f);
+                    }}
+                    className="font-mono text-xs file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-2 file:border-black file:bg-brand-white file:font-mono file:text-xs file:font-bold file:cursor-pointer"
+                  />
+                </div>
+                <Button
+                  id="btn-load-demo-wav"
+                  variant="comic"
+                  size="sm"
+                  disabled={busy}
+                  onClick={() => void handleFileLoad(createSyntheticDemoWavFile())}
+                >
+                  ⚡ PISTE DÉMO (WAV 120 BPM)
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
+                <p role="status" aria-live="polite" className="text-brand-charcoal">
+                  {importStatus}
+                </p>
+                {busy && (
+                  <Button
+                    variant="clinical"
+                    size="sm"
+                    onClick={() => {
+                      abortControllerRef.current?.abort();
+                      setBusy(false);
+                      setImportStatus("Import annulé.");
+                    }}
+                  >
+                    Annuler
+                  </Button>
+                )}
+              </div>
+
+              {importError && (
+                <p role="alert" className="font-mono text-xs text-brand-red font-bold">
+                  {importError}
+                </p>
+              )}
+              {importWarning && (
+                <p className="font-mono text-xs text-amber-700">
+                  {importWarning}
+                </p>
+              )}
+
+              {analysis && (
+                <div className="space-y-4 pt-2 border-t border-neutral-200">
+                  <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
+                    <strong className="text-brand-black">{fileName}</strong>
+                    <span className="text-neutral-500">
+                      {analysis.durationSeconds.toFixed(2)}s ·{" "}
+                      {analysis.sampleRateHz}Hz · {analysis.timestamps.length}{" "}
+                      fenêtres
+                    </span>
+                  </div>
+                  <WaveformCanvas
+                    analysis={analysis}
+                    time={localTime}
+                    onSeek={seekLocalAudio}
+                  />
+                  {localUrl && (
+                    <audio
+                      ref={localAudioRef}
+                      controls
+                      src={localUrl}
+                      onTimeUpdate={(e) => {
+                        const t = e.currentTarget.currentTime;
+                        setLocalTime(t);
+                        applyClipFadeVolume(e.currentTarget, t);
+                      }}
+                      onSeeked={(e) => setLocalTime(e.currentTarget.currentTime)}
+                      className="w-full"
+                    />
+                  )}
+
+                  {/* Calage Extrait 30s + Fondu Entrée / Sortie + Synchro BPM */}
+                  <div className="p-3.5 rounded-xl bg-brand-pearl border-2 border-black space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <label className="inline-flex items-center gap-2 font-mono text-xs font-bold text-brand-black cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={clipActive}
+                          onChange={(e) => setClipActive(e.target.checked)}
+                          className="accent-brand-red"
+                        />
+                        <span>✂ EXTRAIT ({clipDurationSeconds}s) + FONDUS</span>
+                      </label>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Button
+                          variant="comic"
+                          size="sm"
+                          onClick={handlePlayClipExtract}
+                        >
+                          ▶ LIRE L&apos;EXTRAIT ({clipDurationSeconds}s)
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={handleAutoSyncScenesToAudio}
+                        >
+                          ⏱ CALER SCÈNES EN BPM ({bpm} BPM)
+                        </Button>
+                      </div>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 font-mono text-[11px]">
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span>DÉBUT EXTRAIT</span>
+                          <strong>{clipStartSeconds.toFixed(1)}s</strong>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={Math.max(0, (analysis?.durationSeconds ?? 60) - 5)}
+                          step={0.5}
+                          value={clipStartSeconds}
+                          onChange={(e) => setClipStartSeconds(Number(e.target.value))}
+                          className="w-full accent-brand-red"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span>DURÉE EXTRAIT</span>
+                          <strong>{clipDurationSeconds}s</strong>
+                        </div>
+                        <select
+                          value={clipDurationSeconds}
+                          onChange={(e) => setClipDurationSeconds(Number(e.target.value))}
+                          className="w-full px-2 py-1 rounded border border-black bg-brand-white font-bold"
+                        >
+                          <option value={15}>15 secondes</option>
+                          <option value={30}>30 secondes</option>
+                          <option value={45}>45 secondes</option>
+                          <option value={60}>60 secondes</option>
+                        </select>
+                      </div>
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span>FONDU ENTRÉE</span>
+                          <strong>{fadeInSeconds.toFixed(1)}s</strong>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={5}
+                          step={0.25}
+                          value={fadeInSeconds}
+                          onChange={(e) => setFadeInSeconds(Number(e.target.value))}
+                          className="w-full accent-brand-red"
+                        />
+                      </div>
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span>FONDU SORTIE</span>
+                          <strong>{fadeOutSeconds.toFixed(1)}s</strong>
+                        </div>
+                        <input
+                          type="range"
+                          min={0}
+                          max={5}
+                          step={0.25}
+                          value={fadeOutSeconds}
+                          onChange={(e) => setFadeOutSeconds(Number(e.target.value))}
+                          className="w-full accent-brand-red"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* Jauges des 5 caractéristiques audio en temps réel */}
+              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
+                {(
+                  [
+                    ["RMS", liveFeatures.rms],
+                    ["BASSES", Math.sqrt(Math.max(0, liveFeatures.bass))],
+                    ["MÉDIUMS", Math.sqrt(Math.max(0, liveFeatures.mid))],
+                    ["AIGUS", Math.sqrt(Math.max(0, liveFeatures.treble))],
+                    [
+                      "TRANSIT.",
+                      Math.min(1, Math.sqrt(Math.max(0, liveFeatures.spectralFlux)) * 2),
+                    ],
+                  ] as const
+                ).map(([label, val]) => (
+                  <div
+                    key={label}
+                    className="p-2.5 rounded-lg bg-brand-pearl border border-neutral-200 font-mono"
+                  >
+                    <div className="text-[10px] text-neutral-500 font-bold">
+                      {label}
+                    </div>
+                    <div className="text-xs font-bold text-brand-black mt-0.5">
+                      {val.toFixed(3)}
+                    </div>
+                    <meter
+                      aria-label={label}
+                      min={0}
+                      max={1}
+                      value={Math.min(1, Math.max(0, val))}
+                      className="w-full h-1.5 mt-1"
+                    />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between pt-2 border-t border-neutral-200 font-mono text-[11px] text-neutral-500">
+                <span>Cache hors-ligne IndexedDB (expire après 30 jours)</span>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      await clearAnalysisCache();
+                      setImportWarning("Cache local IndexedDB vidé.");
+                    } catch {
+                      setImportWarning("Impossible de vider le cache.");
+                    }
+                  }}
+                  className="text-brand-red font-bold underline"
+                >
+                  Vider cache FFT
+                </button>
+              </div>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {(showStagePanel || showMatrixPanel) && (
+        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
+          {showStagePanel && (
+            <div className={showMatrixPanel ? "xl:col-span-7 space-y-4" : "xl:col-span-12 space-y-4"}>
           <Card
             moduleTitle={`STAGE_OUTPUT // ${activeDescriptor.name.toUpperCase()}`}
             moduleMeta={
@@ -964,8 +1361,9 @@ export const VisualEngineStudio: React.FC = () => {
           </Card>
         </div>
 
-        {/* Panneau droit : Sélection des 5 scènes, 7 palettes, BPM sync, Presets */}
-        <div className="xl:col-span-5 space-y-4">
+          )}
+          {showMatrixPanel && (
+            <div className={showStagePanel ? "xl:col-span-5 space-y-4" : "xl:col-span-12 space-y-4"}>
           <Card
             moduleTitle="SCENE_&_PRESET_MATRIX // SCÈNES_&_PRESETS"
             moduleMeta="5 SCÈNES · 7 PALETTES · JSON"
@@ -1342,10 +1740,12 @@ export const VisualEngineStudio: React.FC = () => {
             </div>
           </Card>
         </div>
-      </div>
+          )}
+        </div>
+      )}
 
-      {/* 3. CONSOLE À 19 FADERS MODULAIRE (BANK A Audio / BANK B FX & Blackout / BANK C Caméra & Pendule) */}
-      <Card
+      {showFadersPanel && (
+        <Card
         moduleTitle="MIXING_CONSOLE // 19_PRECISION_FADERS"
         moduleMeta="DOUBLE-CLIC = RESET · OPEN/LOCK = RANDOMIZER"
         activeIndicator
@@ -1898,206 +2298,10 @@ export const VisualEngineStudio: React.FC = () => {
         </div>
       </Card>
 
-      {/* 4. AUDIO LAB (SYNTH DEMO WAV + FFT WORKER + CACHE IDB + PAROLES MICRO) */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        <div className="lg:col-span-7">
-          <Card
-            moduleTitle="AUDIO_LAB // FFT_24KHZ_&_OPENHUB_SYNC"
-            moduleMeta="MONO / STÉRÉO · INDEXEDDB (MAX 5)"
-          >
-            <div className="space-y-4">
-              {/* Choix source : Lecteur Open Hub persistant OU Piste MP3/WAV locale */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSourceMode("LIVE_HUB")}
-                    className={`px-3 py-1.5 rounded-lg border-2 font-mono text-xs font-bold transition-all ${
-                      sourceMode === "LIVE_HUB"
-                        ? "bg-brand-red text-white border-black shadow-comic-sm"
-                        : "bg-brand-pearl text-brand-charcoal border-neutral-300"
-                    }`}
-                  >
-                    SYNCHRO LECTEUR OPEN HUB
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSourceMode("LOCAL_FILE")}
-                    disabled={!analysis}
-                    className={`px-3 py-1.5 rounded-lg border-2 font-mono text-xs font-bold transition-all disabled:opacity-50 ${
-                      sourceMode === "LOCAL_FILE"
-                        ? "bg-black text-white border-black shadow-comic-sm"
-                        : "bg-brand-pearl text-brand-charcoal border-neutral-300"
-                    }`}
-                  >
-                    PISTE LOCALE ANALYSÉE
-                  </button>
-                </div>
+      )}
 
-                {sourceMode === "LIVE_HUB" && (
-                  <Button
-                    variant="clinical"
-                    size="sm"
-                    onClick={togglePlay}
-                  >
-                    {isPlaying
-                      ? `❚❚ PAUSE (${currentTrack?.title ?? "SIGNAL"})`
-                      : "▶ PLAY LECTEUR OPEN HUB"}
-                  </Button>
-                )}
-              </div>
-
-              {/* Zone upload + bouton Démo WAV 1-clic */}
-              <div className="p-4 rounded-xl bg-brand-pearl border-2 border-dashed border-neutral-400 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
-                  <label
-                    htmlFor="ve-audio-file"
-                    className="block font-mono text-xs font-bold uppercase text-brand-black mb-1.5"
-                  >
-                    Importer MP3 ou WAV (max 50 Mio · 5 min)
-                  </label>
-                  <input
-                    id="ve-audio-file"
-                    type="file"
-                    accept=".mp3,.wav,audio/mpeg,audio/wav"
-                    disabled={busy}
-                    onChange={(e) => {
-                      const f = e.target.files?.[0];
-                      e.target.value = "";
-                      if (f) void handleFileLoad(f);
-                    }}
-                    className="font-mono text-xs file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-2 file:border-black file:bg-brand-white file:font-mono file:text-xs file:font-bold file:cursor-pointer"
-                  />
-                </div>
-                <Button
-                  id="btn-load-demo-wav"
-                  variant="comic"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void handleFileLoad(createSyntheticDemoWavFile())}
-                >
-                  ⚡ PISTE DÉMO (WAV 120 BPM)
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
-                <p role="status" aria-live="polite" className="text-brand-charcoal">
-                  {importStatus}
-                </p>
-                {busy && (
-                  <Button
-                    variant="clinical"
-                    size="sm"
-                    onClick={() => {
-                      abortControllerRef.current?.abort();
-                      setBusy(false);
-                      setImportStatus("Import annulé.");
-                    }}
-                  >
-                    Annuler
-                  </Button>
-                )}
-              </div>
-
-              {importError && (
-                <p role="alert" className="font-mono text-xs text-brand-red font-bold">
-                  {importError}
-                </p>
-              )}
-              {importWarning && (
-                <p className="font-mono text-xs text-amber-700">
-                  {importWarning}
-                </p>
-              )}
-
-              {analysis && (
-                <div className="space-y-4 pt-2 border-t border-neutral-200">
-                  <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
-                    <strong className="text-brand-black">{fileName}</strong>
-                    <span className="text-neutral-500">
-                      {analysis.durationSeconds.toFixed(2)}s ·{" "}
-                      {analysis.sampleRateHz}Hz · {analysis.timestamps.length}{" "}
-                      fenêtres
-                    </span>
-                  </div>
-                  <WaveformCanvas
-                    analysis={analysis}
-                    time={localTime}
-                    onSeek={seekLocalAudio}
-                  />
-                  {localUrl && (
-                    <audio
-                      ref={localAudioRef}
-                      controls
-                      src={localUrl}
-                      onTimeUpdate={(e) =>
-                        setLocalTime(e.currentTarget.currentTime)
-                      }
-                      onSeeked={(e) => setLocalTime(e.currentTarget.currentTime)}
-                      className="w-full"
-                    />
-                  )}
-                </div>
-              )}
-
-              {/* Jauges des 5 caractéristiques audio en temps réel */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
-                {(
-                  [
-                    ["RMS", liveFeatures.rms],
-                    ["BASSES", Math.sqrt(Math.max(0, liveFeatures.bass))],
-                    ["MÉDIUMS", Math.sqrt(Math.max(0, liveFeatures.mid))],
-                    ["AIGUS", Math.sqrt(Math.max(0, liveFeatures.treble))],
-                    [
-                      "TRANSIT.",
-                      Math.min(1, Math.sqrt(Math.max(0, liveFeatures.spectralFlux)) * 2),
-                    ],
-                  ] as const
-                ).map(([label, val]) => (
-                  <div
-                    key={label}
-                    className="p-2.5 rounded-lg bg-brand-pearl border border-neutral-200 font-mono"
-                  >
-                    <div className="text-[10px] text-neutral-500 font-bold">
-                      {label}
-                    </div>
-                    <div className="text-xs font-bold text-brand-black mt-0.5">
-                      {val.toFixed(3)}
-                    </div>
-                    <meter
-                      aria-label={label}
-                      min={0}
-                      max={1}
-                      value={Math.min(1, Math.max(0, val))}
-                      className="w-full h-1.5 mt-1"
-                    />
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex items-center justify-between pt-2 border-t border-neutral-200 font-mono text-[11px] text-neutral-500">
-                <span>Cache hors-ligne IndexedDB (expire après 30 jours)</span>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await clearAnalysisCache();
-                      setImportWarning("Cache local IndexedDB vidé.");
-                    } catch {
-                      setImportWarning("Impossible de vider le cache.");
-                    }
-                  }}
-                  className="text-brand-red font-bold underline"
-                >
-                  Vider cache FFT
-                </button>
-              </div>
-            </div>
-          </Card>
-        </div>
-
-        {/* Paroles incrustées Bitmap 5x5 + Micro Vocal */}
-        <div className="lg:col-span-5">
+      {showLyricsPanel && (
+      <div>
           <Card
             moduleTitle="LYRICS_OVERLAY // BITMAP_5X5_&_MIC"
             moduleMeta="SYNCHRO VOCALE MÉDIUMS"
@@ -2175,7 +2379,8 @@ export const VisualEngineStudio: React.FC = () => {
             </div>
           </Card>
         </div>
-      </div>
+      )}
+
     </div>
   );
 };
