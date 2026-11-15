@@ -27,7 +27,6 @@ import {
   type PaletteId,
   type PresetParameterPath,
   type RetroPresetConfig,
-  type SceneId,
   type StudioProject,
 } from "@/lib/visual-engine/contracts";
 import {
@@ -39,15 +38,11 @@ import {
 import { clearAnalysisCache } from "@/lib/visual-engine/cache";
 import { importAudio } from "@/lib/visual-engine/importAudio";
 import {
-  createDefaultPresetConfig,
   createDefaultStudioProject,
   evaluateSequenceAt,
   generatePresetVariations,
-  parsePresetConfig,
-  serializePresetConfig,
 } from "@/lib/visual-engine/presets";
 import {
-  SCENE_CATALOG,
   STUDY_FPS,
   STUDY_PALETTES,
   STUDY_SIZE,
@@ -59,8 +54,6 @@ import {
 type AudioSourceMode = "LIVE_HUB" | "LOCAL_FILE";
 type BankFilter = "ALL" | "AUDIO" | "FX" | "CAMERA";
 
-const PRESET_STORAGE_KEY = "openhub.visualEngine.savedPreset.v2";
-
 const ZERO_FEATURES: AudioFeatures = {
   rms: 0,
   bass: 0,
@@ -70,15 +63,11 @@ const ZERO_FEATURES: AudioFeatures = {
 };
 
 /**
- * Composant `VisualEngineStudio` — Intégration complète V2 (`d925fd4` M1–M6)
- * d'Anarchy Visual Engine dans Open Hub :
- * - Console modulaire à 19 Faders DAW/VJ regroupés en 3 banques (Audio, FX/Psyche/Blackout, Caméra/Pendule)
- * - 5 scènes (Industrial City, PS1 Nightmare, Rave Dungeon, Digital Void, Techno Therapy)
- * - 7 palettes avec Morphing inter-palettes & Blood Red / Anarchy Anaglyph 3D
- * - BPM detector (`estimateTempoBpm`), Kick Blackout (`duck-on-kick` / `open-on-kick`) & Auto Scene Switch
+ * Composant `VisualEngineStudio` — Intégration complète V2 dans Open Hub :
+ * - Console modulaire à 10 Faders DAW/VJ essentiels (Basses, Aigus/Clap, Strobe Aigu, Psyché, Caméra)
+ * - Packs de 5 scènes enchaînées au BPM + 4 Variations rapides & Changement de couleur / Color Morph
  * - Incrustation de paroles bitmap 5x5 + Micro Web Speech API
- * - M4 Presets (seed, locks, JSON, LocalStorage) & M6 (Undo/Redo, 4 Variations, Timeline Multi-Scènes)
- * - Synthèse piste démo WAV instantanée + Import MP3/WAV FFT Worker + Synchro Lecteur Persistant Open Hub
+ * - Synthèse piste démo WAV + Import MP3/WAV FFT Worker + Export MP4 avec son
  */
 export const VisualEngineStudio: React.FC = () => {
   const {
@@ -123,14 +112,17 @@ export const VisualEngineStudio: React.FC = () => {
   // BPM, Beat Sync & Kick Blackout
   const [bpm, setBpm] = useState<number>(128);
   const [beatOffset, setBeatOffset] = useState<number>(0);
-  const [bpmConfidence, setBpmConfidence] = useState<number | null>(null);
   const [autoSceneSwitchBeats, setAutoSceneSwitchBeats] = useState<number>(16);
-  const [kickBlackoutMode, setKickBlackoutMode] = useState<
-    "duck-on-kick" | "open-on-kick"
-  >("duck-on-kick");
+  const kickBlackoutMode = "duck-on-kick" as const;
   const activePackRef = useRef<ScenePack>(DEFAULT_SCENE_PACKS[0]);
   const [livePackSlotIndex, setLivePackSlotIndex] = useState<number>(0);
   const livePackSlotIndexRef = useRef<number>(0);
+  const [useCustomPalette, setUseCustomPalette] = useState<boolean>(false);
+  const useCustomPaletteRef = useRef<boolean>(false);
+  const [activeVariationIdx, setActiveVariationIdx] = useState<number | null>(
+    null
+  );
+  const variationSeedNonceRef = useRef<number>(1);
 
   // Paroles incrustées & Micro
   const [lyricsEnabled, setLyricsEnabled] = useState<boolean>(false);
@@ -153,15 +145,15 @@ export const VisualEngineStudio: React.FC = () => {
   const [busy, setBusy] = useState<boolean>(false);
   const [localTime, setLocalTime] = useState<number>(0);
 
-  // Presets, JSON, Variations & Télémétrie scène
+  // Variations rapides, Changement de couleur & Télémétrie scène
   const [liveFeatures, setLiveFeatures] =
     useState<AudioFeatures>(ZERO_FEATURES);
   const [renderReport, setRenderReport] = useState<SceneRenderReport>();
   const [presetMessage, setPresetMessage] = useState<string>("");
   const [presetError, setPresetError] = useState<string>("");
-  const [jsonDraft, setJsonDraft] = useState<string>("");
-  const [showJsonEditor, setShowJsonEditor] = useState<boolean>(false);
-  const [variations, setVariations] = useState<RetroPresetConfig[]>([]);
+  const [variations, setVariations] = useState<RetroPresetConfig[]>(() =>
+    generatePresetVariations(createDefaultStudioProject().activePreset, 4)
+  );
 
   // Extrait audio (30s par défaut) & Fondus entrée / sortie
   const [clipStartSeconds, setClipStartSeconds] = useState<number>(0);
@@ -174,7 +166,7 @@ export const VisualEngineStudio: React.FC = () => {
   // Fenêtres / Onglets fermables et modulables
   const [showAudioPanel, setShowAudioPanel] = useState<boolean>(true);
   const [showStagePanel, setShowStagePanel] = useState<boolean>(true);
-  const [showMatrixPanel, setShowMatrixPanel] = useState<boolean>(false);
+  const [showMatrixPanel, setShowMatrixPanel] = useState<boolean>(true);
   const [showFadersPanel, setShowFadersPanel] = useState<boolean>(true);
   const [showLyricsPanel, setShowLyricsPanel] = useState<boolean>(true);
 
@@ -283,7 +275,6 @@ export const VisualEngineStudio: React.FC = () => {
       setBpm(est.bpm);
       // Toujours garder le calage vidéo BPM à 0.00s par défaut au chargement d'une musique
       setBeatOffset(0);
-      setBpmConfidence(est.confidence);
     }
   }, [analysis]);
 
@@ -526,9 +517,10 @@ export const VisualEngineStudio: React.FC = () => {
       if (ctx) {
         const nextReport = renderSceneFrame(ctx, {
           sceneId: activeSlot ? activeSlot.sceneId : effectivePreset.sceneId,
-          paletteId: activeSlot
-            ? activeSlot.paletteId
-            : effectivePreset.paletteId,
+          paletteId:
+            useCustomPaletteRef.current || !activeSlot
+              ? effectivePreset.paletteId
+              : activeSlot.paletteId,
           timeSeconds,
           analysis: sourceMode === "LOCAL_FILE" ? analysis : undefined,
           liveAudioOverride: useLiveOverride ? nextSmoothed : undefined,
@@ -621,34 +613,7 @@ export const VisualEngineStudio: React.FC = () => {
     trebleGain,
   ]);
 
-  // Actions M4/M6
-  const handleSceneChange = (nextSceneId: SceneId) => {
-    setPresetError("");
-    updatePreset((curr) => {
-      const defaults = createDefaultPresetConfig(
-        nextSceneId,
-        curr.paletteId,
-        curr.seed
-      );
-      return {
-        ...defaults,
-        intensity: curr.intensity,
-        locks: curr.locks,
-        effects: {
-          ...curr.effects,
-          vertexSnap:
-            defaults.render.style === "lowpoly-32"
-              ? curr.effects.vertexSnap || true
-              : false,
-          affineTextures:
-            defaults.render.style === "lowpoly-32"
-              ? curr.effects.affineTextures || true
-              : false,
-        },
-      };
-    });
-  };
-
+  // Actions Couleurs, Variations & Historique
   const toggleLock = (path: PresetParameterPath) => {
     updatePreset((curr) => {
       const nextLocks = { ...curr.locks };
@@ -658,65 +623,33 @@ export const VisualEngineStudio: React.FC = () => {
     }, false);
   };
 
-  const handleSaveLocal = () => {
-    setPresetError("");
-    try {
-      const serialized = serializePresetConfig(preset);
-      window.localStorage.setItem(PRESET_STORAGE_KEY, serialized);
-      setJsonDraft(serialized);
-      setPresetMessage("Preset sauvegardé localement dans votre navigateur.");
-    } catch (cause) {
-      setPresetError(
-        cause instanceof Error ? cause.message : "Sauvegarde locale impossible."
-      );
-    }
-  };
-
-  const handleLoadLocal = () => {
-    setPresetError("");
-    try {
-      const raw = window.localStorage.getItem(PRESET_STORAGE_KEY);
-      if (!raw) {
-        setPresetError("Aucun preset sauvegardé localement pour le moment.");
-        return;
-      }
-      const loaded = parsePresetConfig(raw);
-      updatePreset(() => loaded);
-      setJsonDraft(raw);
-      setPresetMessage(
-        `Preset chargé (${loaded.sceneId} / seed ${loaded.seed}).`
-      );
-    } catch (cause) {
-      setPresetError(
-        cause instanceof Error ? cause.message : "Chargement local impossible."
-      );
-    }
-  };
-
-  const handleImportJson = () => {
-    setPresetError("");
-    try {
-      const parsed = parsePresetConfig(jsonDraft);
-      updatePreset(() => parsed);
-      setPresetMessage(`JSON validé et appliqué (${parsed.sceneId}).`);
-    } catch (cause) {
-      setPresetError(
-        cause instanceof Error ? cause.message : "JSON de preset invalide."
-      );
-    }
-  };
-
   const handleGenerateVariations = () => {
     setPresetError("");
+    variationSeedNonceRef.current += 1;
+    const derivedBaseSeed =
+      ((preset.seed >>> 0) + variationSeedNonceRef.current * 0x9e3779b9) >>> 0;
     try {
-      const nextVars = generatePresetVariations(preset, 4, preset.seed);
+      const nextVars = generatePresetVariations(preset, 4, derivedBaseSeed);
       setVariations(nextVars);
-      setPresetMessage("4 variations contraintes générées sans modifier le preset actif.");
+      setActiveVariationIdx(null);
+      setPresetMessage("4 nouvelles variations rapides générées.");
     } catch (cause) {
       setPresetError(
         cause instanceof Error ? cause.message : "Génération impossible."
       );
     }
+  };
+
+  const handleApplyVariation = (v: RetroPresetConfig, idx: number) => {
+    setPresetError("");
+    useCustomPaletteRef.current = true;
+    setUseCustomPalette(true);
+    setActiveVariationIdx(idx);
+    setAutoSceneSwitchBeats(0);
+    updatePreset(() => v);
+    setPresetMessage(
+      `Variation #${idx + 1} appliquée (${v.sceneId} · ${v.paletteId}).`
+    );
   };
 
   const handleUndo = () => {
@@ -733,15 +666,6 @@ export const VisualEngineStudio: React.FC = () => {
     setHistoryFuture((future) => future.slice(1));
     setHistoryPast((past) => [...past, project]);
     setProject(next);
-  };
-
-  const handleReset = () => {
-    updateProject(() => createDefaultStudioProject());
-    setBassGain(110);
-    setTrebleGain(125);
-    setAutoSceneSwitchBeats(0);
-    setPresetMessage("Console et projet réinitialisés aux valeurs d'usine.");
-    setPresetError("");
   };
 
   const handleExportSnapshot = () => {
@@ -1080,7 +1004,7 @@ export const VisualEngineStudio: React.FC = () => {
         {[
           { label: "🎵 AUDIO & EXTRAIT 30S", open: showAudioPanel, toggle: () => setShowAudioPanel((v) => !v) },
           { label: "📺 MONITEUR VIDÉO", open: showStagePanel, toggle: () => setShowStagePanel((v) => !v) },
-          { label: "🎛️ MODE AVANCÉ (SCÈNES)", open: showMatrixPanel, toggle: () => setShowMatrixPanel((v) => !v) },
+          { label: "🎨 COULEURS & VARIATIONS", open: showMatrixPanel, toggle: () => setShowMatrixPanel((v) => !v) },
           { label: "🎚 CONSOLE 10 FADERS", open: showFadersPanel, toggle: () => setShowFadersPanel((v) => !v) },
           { label: "🎤 PAROLES & MICRO", open: showLyricsPanel, toggle: () => setShowLyricsPanel((v) => !v) },
         ].map((win) => (
@@ -1520,6 +1444,12 @@ export const VisualEngineStudio: React.FC = () => {
           livePackSlotIndexRef.current = idx;
           setLivePackSlotIndex(idx);
           setBpm(pack.bpm);
+          useCustomPaletteRef.current = false;
+          setUseCustomPalette(false);
+          if (activeVariationIdx !== null && pack.beatsPerScene > 0) {
+            setAutoSceneSwitchBeats(pack.beatsPerScene);
+          }
+          setActiveVariationIdx(null);
           updatePreset((curr) => ({
             ...curr,
             sceneId: slot.sceneId,
@@ -1625,6 +1555,22 @@ export const VisualEngineStudio: React.FC = () => {
                     </Button>
                   </div>
                 </div>
+                {presetMessage && (
+                  <p
+                    role="status"
+                    className="p-2 rounded bg-brand-white border-l-4 border-[#00E5FF] font-mono text-[11px] text-brand-black"
+                  >
+                    {presetMessage}
+                  </p>
+                )}
+                {presetError && (
+                  <p
+                    role="alert"
+                    className="p-2 rounded bg-brand-white border-l-4 border-brand-red font-mono text-[11px] text-brand-red font-bold"
+                  >
+                    {presetError}
+                  </p>
+                )}
               </div>
             </div>
           </Card>
@@ -1634,377 +1580,211 @@ export const VisualEngineStudio: React.FC = () => {
           {showMatrixPanel && (
             <div className={showStagePanel ? "xl:col-span-5 space-y-4" : "xl:col-span-12 space-y-4"}>
           <Card
-            moduleTitle="SCENE_&_PRESET_MATRIX // SCÈNES_&_PRESETS"
-            moduleMeta="5 SCÈNES · 7 PALETTES · JSON"
+            moduleTitle="COLOR_&_VARIATIONS // COULEURS_&_VARIATIONS"
+            moduleMeta="7 PALETTES · COLOR MORPH · 4 VARIATIONS"
+            activeIndicator={useCustomPalette || activeVariationIdx !== null}
           >
             <div className="space-y-4">
-              {/* Sélecteur des 5 Scènes */}
-              <div>
-                <div className="flex items-center justify-between mb-2">
-                  <span className="font-mono text-xs font-bold uppercase text-brand-black">
-                    01 // Choisir la scène
-                  </span>
-                  <button
-                    type="button"
-                    onClick={() => toggleLock("sceneId")}
-                    className={`px-2 py-0.5 rounded font-mono text-[10px] font-bold border ${
-                      preset.locks["sceneId"]
-                        ? "bg-black text-white border-black"
-                        : "bg-brand-pearl text-neutral-600 border-neutral-300"
-                    }`}
-                  >
-                    {preset.locks["sceneId"] ? "🔒 SCÈNE LOCKED" : "🔓 LOCK SCÈNE"}
-                  </button>
-                </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                  {SCENE_CATALOG.map((scene) => {
-                    const active = scene.id === preset.sceneId;
-                    return (
-                      <button
-                        key={scene.id}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => handleSceneChange(scene.id)}
-                        className={[
-                          "p-2.5 rounded-lg text-left transition-all border-2",
-                          active
-                            ? "bg-brand-pearl border-black shadow-comic-sm"
-                            : "bg-brand-white border-neutral-200 hover:border-black",
-                        ].join(" ")}
-                      >
-                        <div className="flex items-center justify-between font-mono text-[10px]">
-                          <span className="font-bold text-brand-red">
-                            {scene.index} {"//"} {scene.style}
-                          </span>
-                        </div>
-                        <div className="font-bold text-xs text-brand-black mt-0.5">
-                          {scene.name}
-                        </div>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
+              {/* Changement de couleur : Palette Principale & Palette Cible Color Morph */}
+              {(() => {
+                const displayedPaletteId = useCustomPalette
+                  ? preset.paletteId
+                  : renderReport?.paletteId ?? preset.paletteId;
+                const activePal =
+                  STUDY_PALETTES.find((p) => p.id === displayedPaletteId) ??
+                  STUDY_PALETTES[0];
+                const morphRatio = Math.max(
+                  0,
+                  Math.min(1, preset.effects.colorTransition ?? 0)
+                );
+                const targetPal =
+                  STUDY_PALETTES.find(
+                    (p) =>
+                      p.id ===
+                      (preset.effects.targetPaletteId ?? "techno-therapy")
+                  ) ?? STUDY_PALETTES[0];
 
-              {/* Sélecteur Palette Principale & Palette Cible Morphing */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-2 border-t border-neutral-200">
-                <div>
-                  <div className="flex items-center justify-between mb-1">
-                    <label
-                      htmlFor="ve-palette-select"
-                      className="font-mono text-[10px] font-bold uppercase text-brand-charcoal"
-                    >
-                      Palette principale
-                    </label>
-                    <button
-                      type="button"
-                      onClick={() => toggleLock("paletteId")}
-                      className="font-mono text-[9px] font-bold text-brand-red underline"
-                    >
-                      {preset.locks["paletteId"] ? "🔒" : "🔓"}
-                    </button>
+                return (
+                  <div className="space-y-3">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                      <div>
+                        <div className="flex items-center justify-between mb-1">
+                          <label
+                            htmlFor="ve-palette-select"
+                            className="font-mono text-[10px] font-bold uppercase text-brand-charcoal"
+                          >
+                            Palette principale
+                          </label>
+                          <div className="flex items-center gap-1.5">
+                            {useCustomPalette && (
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  useCustomPaletteRef.current = false;
+                                  setUseCustomPalette(false);
+                                }}
+                                className="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded border border-black bg-brand-pearl hover:bg-brand-white text-brand-black"
+                                title="Revenir aux couleurs automatiques du pack"
+                              >
+                                ↺ Pack
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => toggleLock("paletteId")}
+                              className="font-mono text-[9px] font-bold text-brand-red underline"
+                              title="Verrouiller la palette lors des variations"
+                            >
+                              {preset.locks["paletteId"] ? "🔒" : "🔓"}
+                            </button>
+                          </div>
+                        </div>
+                        <select
+                          id="ve-palette-select"
+                          value={displayedPaletteId}
+                          onChange={(e) => {
+                            const nextPal = e.target.value as PaletteId;
+                            useCustomPaletteRef.current = true;
+                            setUseCustomPalette(true);
+                            updatePreset((curr) => ({
+                              ...curr,
+                              paletteId: nextPal,
+                            }));
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-lg border-2 border-black bg-brand-white font-mono text-xs text-brand-black font-bold"
+                        >
+                          {STUDY_PALETTES.map((pal) => (
+                            <option key={pal.id} value={pal.id}>
+                              {pal.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div>
+                        <label
+                          htmlFor="ve-target-palette-select"
+                          className="block font-mono text-[10px] font-bold uppercase text-brand-charcoal mb-1"
+                        >
+                          Cible Color Morph{" "}
+                          {morphRatio > 0.01 && (
+                            <span className="text-brand-red">
+                              ({Math.round(morphRatio * 100)}%)
+                            </span>
+                          )}
+                        </label>
+                        <select
+                          id="ve-target-palette-select"
+                          value={
+                            preset.effects.targetPaletteId ?? "techno-therapy"
+                          }
+                          onChange={(e) => {
+                            const nextTarget = e.target.value as PaletteId;
+                            useCustomPaletteRef.current = true;
+                            setUseCustomPalette(true);
+                            updatePreset((curr) => ({
+                              ...curr,
+                              paletteId: displayedPaletteId,
+                              effects: {
+                                ...curr.effects,
+                                targetPaletteId: nextTarget,
+                                colorTransition:
+                                  (curr.effects.colorTransition ?? 0) <= 0.02
+                                    ? 0.5
+                                    : curr.effects.colorTransition,
+                              },
+                            }));
+                          }}
+                          className="w-full px-2.5 py-1.5 rounded-lg border-2 border-neutral-400 bg-brand-white font-mono text-xs text-brand-charcoal font-bold"
+                        >
+                          {STUDY_PALETTES.map((pal) => (
+                            <option key={`target-${pal.id}`} value={pal.id}>
+                              → {pal.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    {/* Aperçu nuancier de la palette active (+ morph cible) */}
+                    <div className="space-y-1">
+                      <div className="flex h-3.5 rounded overflow-hidden border border-black">
+                        {[
+                          activePal.shadow,
+                          activePal.structure,
+                          activePal.distant,
+                          activePal.face,
+                          activePal.haze,
+                          activePal.reflection,
+                          activePal.glow,
+                          activePal.light,
+                        ].map((hex, i) => (
+                          <span
+                            key={`base-${hex}-${i}`}
+                            className="flex-1"
+                            style={{ backgroundColor: hex }}
+                          />
+                        ))}
+                      </div>
+                      {morphRatio > 0.01 && (
+                        <div className="flex h-2 rounded overflow-hidden border border-neutral-400">
+                          {[
+                            targetPal.shadow,
+                            targetPal.structure,
+                            targetPal.distant,
+                            targetPal.face,
+                            targetPal.haze,
+                            targetPal.reflection,
+                            targetPal.glow,
+                            targetPal.light,
+                          ].map((hex, i) => (
+                            <span
+                              key={`target-${hex}-${i}`}
+                              className="flex-1"
+                              style={{ backgroundColor: hex }}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                  <select
-                    id="ve-palette-select"
-                    value={preset.paletteId}
-                    onChange={(e) =>
-                      updatePreset((curr) => ({
-                        ...curr,
-                        paletteId: e.target.value as PaletteId,
-                      }))
-                    }
-                    className="w-full px-2.5 py-1.5 rounded-lg border-2 border-black bg-brand-white font-mono text-xs text-brand-black"
-                  >
-                    {STUDY_PALETTES.map((pal) => (
-                      <option key={pal.id} value={pal.id}>
-                        {pal.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                );
+              })()}
 
-                <div>
-                  <label
-                    htmlFor="ve-target-palette-select"
-                    className="block font-mono text-[10px] font-bold uppercase text-brand-charcoal mb-1"
-                  >
-                    Cible Color Morph
-                  </label>
-                  <select
-                    id="ve-target-palette-select"
-                    value={
-                      preset.effects.targetPaletteId ?? "techno-therapy"
-                    }
-                    onChange={(e) =>
-                      updatePreset((curr) => ({
-                        ...curr,
-                        effects: {
-                          ...curr.effects,
-                          targetPaletteId: e.target.value as PaletteId,
-                        },
-                      }))
-                    }
-                    className="w-full px-2.5 py-1.5 rounded-lg border border-neutral-300 bg-brand-white font-mono text-xs text-brand-charcoal"
-                  >
-                    {STUDY_PALETTES.map((pal) => (
-                      <option key={`target-${pal.id}`} value={pal.id}>
-                        → {pal.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Aperçu nuancier de la palette active */}
-              <div className="flex h-3 rounded overflow-hidden border border-black">
-                {(() => {
-                  const pal =
-                    STUDY_PALETTES.find((p) => p.id === preset.paletteId) ??
-                    STUDY_PALETTES[0];
-                  return [
-                    pal.shadow,
-                    pal.structure,
-                    pal.distant,
-                    pal.face,
-                    pal.haze,
-                    pal.reflection,
-                    pal.glow,
-                    pal.light,
-                  ].map((hex, i) => (
-                    <span
-                      key={`${hex}-${i}`}
-                      className="flex-1"
-                      style={{ backgroundColor: hex }}
-                    />
-                  ));
-                })()}
-              </div>
-
-              {/* BPM, Beat Sync & Paramètres Low-Poly PS1 */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5 pt-2 border-t border-neutral-200 font-mono text-xs">
-                <div>
-                  <label
-                    htmlFor="ve-bpm"
-                    className="block text-[10px] font-bold text-neutral-500 uppercase mb-1"
-                  >
-                    BPM {bpmConfidence !== null ? `(${Math.round(bpmConfidence * 100)}%)` : ""}
-                  </label>
-                  <input
-                    id="ve-bpm"
-                    type="number"
-                    min={60}
-                    max={220}
-                    value={bpm}
-                    onChange={(e) =>
-                      setBpm(
-                        Math.max(60, Math.min(220, Number(e.target.value) || 128))
-                      )
-                    }
-                    className="w-full px-2 py-1 rounded border border-neutral-300 bg-brand-pearl text-xs font-bold"
-                  />
-                </div>
-                <div>
-                  <label
-                    htmlFor="ve-bpm-switch"
-                    className="block text-[10px] font-bold text-neutral-500 uppercase mb-1"
-                  >
-                    Auto Switch
-                  </label>
-                  <select
-                    id="ve-bpm-switch"
-                    value={autoSceneSwitchBeats}
-                    onChange={(e) =>
-                      setAutoSceneSwitchBeats(Number(e.target.value))
-                    }
-                    className="w-full px-2 py-1 rounded border border-neutral-300 bg-brand-pearl text-xs"
-                  >
-                    <option value={0}>Fixe</option>
-                    <option value={4}>4 temps</option>
-                    <option value={8}>8 temps</option>
-                    <option value={16}>16 temps</option>
-                    <option value={32}>32 temps</option>
-                  </select>
-                </div>
-                <div className="col-span-2 sm:col-span-1">
-                  <label
-                    htmlFor="ve-blackout-mode"
-                    className="block text-[10px] font-bold text-neutral-500 uppercase mb-1"
-                  >
-                    Kick Mode
-                  </label>
-                  <select
-                    id="ve-blackout-mode"
-                    value={kickBlackoutMode}
-                    onChange={(e) =>
-                      setKickBlackoutMode(
-                        e.target.value as "duck-on-kick" | "open-on-kick"
-                      )
-                    }
-                    className="w-full px-2 py-1 rounded border border-neutral-300 bg-brand-pearl text-xs"
-                  >
-                    <option value="duck-on-kick">Noir au Kick</option>
-                    <option value="open-on-kick">Ouvre au Kick</option>
-                  </select>
-                </div>
-              </div>
-
-              {isLowPoly && (
-                <div className="flex flex-wrap gap-3 pt-1 font-mono text-xs">
-                  <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preset.effects.vertexSnap}
-                      onChange={(e) =>
-                        updatePreset((curr) => ({
-                          ...curr,
-                          effects: {
-                            ...curr.effects,
-                            vertexSnap: e.target.checked,
-                          },
-                        }))
-                      }
-                      className="accent-brand-red"
-                    />
-                    <span>Vertex Snap PS1</span>
-                  </label>
-                  <label className="inline-flex items-center gap-1.5 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={preset.effects.affineTextures}
-                      onChange={(e) =>
-                        updatePreset((curr) => ({
-                          ...curr,
-                          effects: {
-                            ...curr.effects,
-                            affineTextures: e.target.checked,
-                          },
-                        }))
-                      }
-                      className="accent-brand-red"
-                    />
-                    <span>Textures affines</span>
-                  </label>
-                </div>
-              )}
-
-              {/* Seed & Actions M4/M6 Presets */}
-              <div className="pt-2 border-t border-neutral-200 space-y-2.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <label
-                    htmlFor="ve-seed-input"
-                    className="font-mono text-[10px] font-bold uppercase text-neutral-500"
-                  >
-                    Seed:
-                  </label>
-                  <input
-                    id="ve-seed-input"
-                    type="number"
-                    min={0}
-                    max={4294967295}
-                    value={preset.seed}
-                    onChange={(e) => {
-                      const val = Math.max(
-                        0,
-                        Math.min(0xffffffff, Math.floor(Number(e.target.value) || 0))
-                      );
-                      updatePreset((curr) => ({ ...curr, seed: val }));
-                    }}
-                    className="w-28 px-2 py-1 rounded border border-neutral-300 font-mono text-xs font-bold"
-                  />
+              {/* Variations rapides pour expérimenter */}
+              <div className="space-y-2 pt-3 border-t border-neutral-200">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono text-[10px] font-bold uppercase text-brand-red">
+                    Variations rapides (Cliquer pour charger)
+                  </span>
                   <Button
+                    id="btn-ve-variations"
                     variant="clinical"
                     size="sm"
                     onClick={handleGenerateVariations}
                   >
-                    4 Variations
-                  </Button>
-                  <Button
-                    variant="clinical"
-                    size="sm"
-                    onClick={() => {
-                      setJsonDraft(serializePresetConfig(preset));
-                      setShowJsonEditor((v) => !v);
-                    }}
-                  >
-                    {showJsonEditor ? "Fermer JSON" : "JSON"}
+                    🎲 4 Variations
                   </Button>
                 </div>
-
-                <div className="flex flex-wrap gap-2">
-                  <Button
-                    variant="clinical"
-                    size="sm"
-                    onClick={handleSaveLocal}
-                  >
-                    Sauver Preset
-                  </Button>
-                  <Button
-                    variant="clinical"
-                    size="sm"
-                    onClick={handleLoadLocal}
-                  >
-                    Charger Preset
-                  </Button>
-                  <Button variant="clinical" size="sm" onClick={handleReset}>
-                    Reset Usine
-                  </Button>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                  {variations.map((v, idx) => {
+                    const isSelected = activeVariationIdx === idx;
+                    return (
+                      <button
+                        key={`${v.seed}-${idx}`}
+                        type="button"
+                        onClick={() => handleApplyVariation(v, idx)}
+                        className={`px-2.5 py-1.5 rounded-lg border-2 font-mono text-[11px] font-bold text-left transition-all ${
+                          isSelected
+                            ? "border-black bg-brand-red text-white shadow-comic-sm"
+                            : "border-black bg-brand-pearl hover:bg-brand-white text-brand-black shadow-comic-sm"
+                        }`}
+                      >
+                        #{idx + 1} · {v.sceneId.split("-")[0]} ({v.paletteId.split("-")[0]})
+                      </button>
+                    );
+                  })}
                 </div>
-
-                {presetMessage && (
-                  <p
-                    role="status"
-                    className="p-2 rounded bg-brand-pearl border-l-4 border-[#00E5FF] font-mono text-[11px] text-brand-black"
-                  >
-                    {presetMessage}
-                  </p>
-                )}
-                {presetError && (
-                  <p
-                    role="alert"
-                    className="p-2 rounded bg-brand-pearl border-l-4 border-brand-red font-mono text-[11px] text-brand-red font-bold"
-                  >
-                    {presetError}
-                  </p>
-                )}
-
-                {showJsonEditor && (
-                  <div className="space-y-2 pt-2">
-                    <textarea
-                      aria-label="Configuration JSON du preset"
-                      rows={5}
-                      value={jsonDraft}
-                      onChange={(e) => setJsonDraft(e.target.value)}
-                      className="w-full p-2 rounded border-2 border-black bg-brand-charcoal text-brand-white font-mono text-[11px]"
-                    />
-                    <Button
-                      variant="primary"
-                      size="sm"
-                      onClick={handleImportJson}
-                    >
-                      Valider &amp; Appliquer JSON
-                    </Button>
-                  </div>
-                )}
-
-                {variations.length > 0 && (
-                  <div className="space-y-1.5 pt-2 border-t border-neutral-200">
-                    <div className="font-mono text-[10px] font-bold uppercase text-brand-red">
-                      Variations rapides (Cliquer pour charger)
-                    </div>
-                    <div className="flex flex-wrap gap-1.5">
-                      {variations.map((v, idx) => (
-                        <button
-                          key={`${v.seed}-${idx}`}
-                          type="button"
-                          onClick={() => updatePreset(() => v)}
-                          className="px-2 py-1 rounded border border-black bg-brand-pearl hover:bg-brand-white font-mono text-[10px] font-bold shadow-comic-sm"
-                        >
-                          #{idx + 1} · {v.sceneId.split("-")[0]} ({v.paletteId.split("-")[0]})
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </Card>

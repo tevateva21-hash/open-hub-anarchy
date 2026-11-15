@@ -95,9 +95,15 @@ const MILESTONES = [
   },
   {
     id: "M15",
-    commit: "ACTUEL",
+    commit: "af6f620",
     title: "Console 10 Faders Live & Strobe Aigu (Flash Fond sur Clap)",
     details: "Correction de la boucle temps réel pour que les 10 faders agissent immédiatement même lors du défilement de packs ; ajout d'un flash clair d'arrière-plan sur les aigus/claps (Strobe Aigu), zoom caméra unifié 2D/3D, bass punch, psychédélie et anaglyphe.",
+  },
+  {
+    id: "M16",
+    commit: "ACTUEL",
+    title: "Panneau Couleurs & Variations Rapides Live",
+    details: "Suppression des contrôles redondants (sélecteur 5 scènes, BPM/Auto Switch/Kick Mode, Vertex Snap, Seed, JSON, Sauver/Charger/Reset) ; conservation uniquement du changement de couleur (Palette principale + Cible Color Morph) et des 4 Variations rapides, avec application immédiate vérifiée sur le rendu vidéo.",
   },
 ];
 
