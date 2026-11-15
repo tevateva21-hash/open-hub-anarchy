@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
 import { useAudioPlayer } from "@/components/audio/AudioPlayerContext";
 import { ConsoleFader } from "@/components/visual-engine/ConsoleFader";
+import { ScenePackManager } from "@/components/visual-engine/ScenePackManager";
+import type { ScenePackSlot } from "@/lib/visual-engine/scene-packs";
 import { WaveformCanvas } from "@/components/visual-engine/WaveformCanvas";
 import {
   RANDOMIZER_VERSION,
@@ -1324,6 +1326,27 @@ export const VisualEngineStudio: React.FC = () => {
           </Card>
         </div>
       )}
+
+      <ScenePackManager
+        authorName="Anarchy Community"
+        onApplySlot={(slot: ScenePackSlot, meta) => {
+          setBpm(meta.bpm);
+          setAutoSceneSwitchBeats(meta.beatsPerScene);
+          updatePreset((curr) => ({
+            ...curr,
+            sceneId: slot.sceneId,
+            paletteId: slot.paletteId,
+            intensity: slot.intensity,
+            effects: {
+              ...curr.effects,
+              strobe: slot.strobe,
+              kaleidoscope: slot.kaleidoscope,
+              feedbackTrails: slot.feedbackTrails,
+              acidHueShift: slot.acidHueShift,
+            },
+          }));
+        }}
+      />
 
       {(showStagePanel || showMatrixPanel) && (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
