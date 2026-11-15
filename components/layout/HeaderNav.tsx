@@ -22,8 +22,9 @@ const NAV_ITEMS: NavItem[] = [
     label: "03.VISUAL_DESIGN",
   },
   { id: "nav-radio", href: "/radio", label: "04.RADIO" },
-  { id: "nav-forum", href: "/forum", label: "05.FORUM" },
-  { id: "nav-blog", href: "/blog", label: "06.BLOG_&_DOCS" },
+  { id: "nav-sons-commu", href: "/sons-communaute", label: "05.SONS_COMMU" },
+  { id: "nav-forum", href: "/forum", label: "06.FORUM" },
+  { id: "nav-blog", href: "/blog", label: "07.BLOG_&_DOCS" },
 ];
 
 /**

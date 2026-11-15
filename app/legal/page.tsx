@@ -112,6 +112,22 @@ const COOKIE_INVENTORY = [
     purpose:
       "Conserve localement les articles et documentations publiés dans le tiroir Blog & Docs Communauté.",
   },
+  {
+    name: "openhub_soundcloud_url_v1",
+    storage: "localStorage (Action utilisateur)",
+    duration: "Jusqu'à suppression manuelle",
+    category: "Radio Anarchy (SoundCloud)",
+    purpose:
+      "Mémorise le lien SoundCloud chargé dans le lecteur Radio Anarchy.",
+  },
+  {
+    name: "openhub_community_stems_v1 / openhub_community_vst_v1 / openhub_vst_presets_v1",
+    storage: "localStorage (Action utilisateur)",
+    duration: "Jusqu'à suppression manuelle",
+    category: "Contributions Communauté",
+    purpose:
+      "Conserve localement les dépôts de sons/stems, remixes, plugins VST et presets VST publiés.",
+  },
 ];
 
 /**
