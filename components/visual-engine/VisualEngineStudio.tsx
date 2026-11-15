@@ -7,7 +7,11 @@ import { AvatarBD } from "@/components/ui/AvatarBD";
 import { useAudioPlayer } from "@/components/audio/AudioPlayerContext";
 import { ConsoleFader } from "@/components/visual-engine/ConsoleFader";
 import { ScenePackManager } from "@/components/visual-engine/ScenePackManager";
-import type { ScenePackSlot } from "@/lib/visual-engine/scene-packs";
+import {
+  DEFAULT_SCENE_PACKS,
+  type ScenePack,
+  type ScenePackSlot,
+} from "@/lib/visual-engine/scene-packs";
 import { WaveformCanvas } from "@/components/visual-engine/WaveformCanvas";
 import {
   RANDOMIZER_VERSION,
@@ -115,10 +119,13 @@ export const VisualEngineStudio: React.FC = () => {
   const [bpm, setBpm] = useState<number>(128);
   const [beatOffset, setBeatOffset] = useState<number>(0);
   const [bpmConfidence, setBpmConfidence] = useState<number | null>(null);
-  const [autoSceneSwitchBeats, setAutoSceneSwitchBeats] = useState<number>(0);
+  const [autoSceneSwitchBeats, setAutoSceneSwitchBeats] = useState<number>(16);
   const [kickBlackoutMode, setKickBlackoutMode] = useState<
     "duck-on-kick" | "open-on-kick"
   >("duck-on-kick");
+  const activePackRef = useRef<ScenePack>(DEFAULT_SCENE_PACKS[0]);
+  const [livePackSlotIndex, setLivePackSlotIndex] = useState<number>(0);
+  const livePackSlotIndexRef = useRef<number>(0);
 
   // Paroles incrustées & Micro
   const [lyricsEnabled, setLyricsEnabled] = useState<boolean>(false);
@@ -163,7 +170,7 @@ export const VisualEngineStudio: React.FC = () => {
   // Fenêtres / Onglets fermables et modulables
   const [showAudioPanel, setShowAudioPanel] = useState<boolean>(true);
   const [showStagePanel, setShowStagePanel] = useState<boolean>(true);
-  const [showMatrixPanel, setShowMatrixPanel] = useState<boolean>(true);
+  const [showMatrixPanel, setShowMatrixPanel] = useState<boolean>(false);
   const [showFadersPanel, setShowFadersPanel] = useState<boolean>(true);
   const [showLyricsPanel, setShowLyricsPanel] = useState<boolean>(true);
 
@@ -420,19 +427,42 @@ export const VisualEngineStudio: React.FC = () => {
       setActiveSegIndex(sequenceEval.segmentIndex);
 
       const effectivePreset = sequenceEval.activePreset;
+      const pack = activePackRef.current;
+      let activeSlot: ScenePackSlot | undefined;
+      if (autoSceneSwitchBeats > 0 && pack.scenes.length > 0) {
+        const beatFloat = Math.max(0, (timeSeconds - beatOffset) * (bpm / 60));
+        const slotIdx =
+          Math.floor(beatFloat / autoSceneSwitchBeats) % pack.scenes.length;
+        activeSlot = pack.scenes[slotIdx];
+        if (livePackSlotIndexRef.current !== slotIdx) {
+          livePackSlotIndexRef.current = slotIdx;
+          setLivePackSlotIndex(slotIdx);
+        }
+      }
+
       const canvas = stageCanvasRef.current;
       const ctx = canvas?.getContext("2d");
 
       if (ctx) {
         const nextReport = renderSceneFrame(ctx, {
-          sceneId: effectivePreset.sceneId,
-          paletteId: effectivePreset.paletteId,
+          sceneId: activeSlot ? activeSlot.sceneId : effectivePreset.sceneId,
+          paletteId: activeSlot
+            ? activeSlot.paletteId
+            : effectivePreset.paletteId,
           timeSeconds,
           analysis: sourceMode === "LOCAL_FILE" ? analysis : undefined,
           liveAudioOverride: useLiveOverride ? nextSmoothed : undefined,
-          intensity: effectivePreset.intensity,
+          intensity: activeSlot ? activeSlot.intensity : effectivePreset.intensity,
           reducedMotion: project.reducedMotion,
-          effects: effectivePreset.effects,
+          effects: activeSlot
+            ? {
+                ...effectivePreset.effects,
+                strobeGlow: activeSlot.strobe / 100,
+                psychedelic: activeSlot.kaleidoscope / 100,
+                colorTransition: activeSlot.acidHueShift / 100,
+                anaglyphSplit: activeSlot.feedbackTrails / 100,
+              }
+            : effectivePreset.effects,
           bandRouting: {
             bassGain: bassGain / 100,
             midGain: midGain / 100,
@@ -455,12 +485,12 @@ export const VisualEngineStudio: React.FC = () => {
               ? {
                   bpm,
                   beatOffsetSeconds: beatOffset,
-                  autoSceneSwitchBeats,
+                  autoSceneSwitchBeats: 0,
                   kickBlackoutMode,
                 }
               : undefined,
           camera: effectivePreset.render.camera,
-          seed: effectivePreset.seed,
+          seed: activeSlot?.seed ?? effectivePreset.seed,
         });
         setRenderReport(nextReport);
       }
@@ -933,7 +963,7 @@ export const VisualEngineStudio: React.FC = () => {
         {[
           { label: "🎵 AUDIO & EXTRAIT 30S", open: showAudioPanel, toggle: () => setShowAudioPanel((v) => !v) },
           { label: "📺 MONITEUR VIDÉO", open: showStagePanel, toggle: () => setShowStagePanel((v) => !v) },
-          { label: "🎬 SCÈNES & PALETTES", open: showMatrixPanel, toggle: () => setShowMatrixPanel((v) => !v) },
+          { label: "🎛️ MODE AVANCÉ (SCÈNES)", open: showMatrixPanel, toggle: () => setShowMatrixPanel((v) => !v) },
           { label: "🎚 CONSOLE 19 FADERS", open: showFadersPanel, toggle: () => setShowFadersPanel((v) => !v) },
           { label: "🎤 PAROLES & MICRO", open: showLyricsPanel, toggle: () => setShowLyricsPanel((v) => !v) },
         ].map((win) => (
@@ -1329,20 +1359,31 @@ export const VisualEngineStudio: React.FC = () => {
 
       <ScenePackManager
         authorName="Anarchy Community"
-        onApplySlot={(slot: ScenePackSlot, meta) => {
-          setBpm(meta.bpm);
-          setAutoSceneSwitchBeats(meta.beatsPerScene);
+        liveSlotIndex={livePackSlotIndex}
+        bpm={bpm}
+        beatsPerScene={autoSceneSwitchBeats}
+        onPackChange={(pack: ScenePack) => {
+          activePackRef.current = pack;
+          setBpm(pack.bpm);
+          setAutoSceneSwitchBeats(pack.beatsPerScene);
+        }}
+        onSelectSlot={(idx: number, slot: ScenePackSlot, pack: ScenePack) => {
+          activePackRef.current = pack;
+          livePackSlotIndexRef.current = idx;
+          setLivePackSlotIndex(idx);
+          setBpm(pack.bpm);
           updatePreset((curr) => ({
             ...curr,
             sceneId: slot.sceneId,
             paletteId: slot.paletteId,
             intensity: slot.intensity,
+            seed: slot.seed ?? curr.seed,
             effects: {
               ...curr.effects,
-              strobe: slot.strobe,
-              kaleidoscope: slot.kaleidoscope,
-              feedbackTrails: slot.feedbackTrails,
-              acidHueShift: slot.acidHueShift,
+              strobeGlow: slot.strobe / 100,
+              psychedelic: slot.kaleidoscope / 100,
+              colorTransition: slot.acidHueShift / 100,
+              anaglyphSplit: slot.feedbackTrails / 100,
             },
           }));
         }}

@@ -65,9 +65,15 @@ const MILESTONES = [
   },
   {
     id: "M10",
-    commit: "ACTUEL",
+    commit: "b9222be",
     title: "Rétroplanning caché & Packs de 5 Scènes (JSON/C++ + Prompt IA)",
     details: "Documentation GitHub/Drive/Site + éditeur communautaire de packs de 5 scènes avec import C++/.json et Prompt IA.",
+  },
+  {
+    id: "M11",
+    commit: "ACTUEL",
+    title: "Refonte Paradigme Packs de 5 Scènes (PS2 Enter the Dragon + Générateur)",
+    details: "Pack original PS2 / Enter the Dragon, générateur procédural unique par seed, enchaînement automatique des 5 scènes au BPM, noms optionnels et scènes individuelles masquées par défaut.",
   },
 ];
 

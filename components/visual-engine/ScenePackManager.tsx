@@ -7,27 +7,36 @@ import {
   AI_SCENE_PACK_PROMPT,
   DEFAULT_SCENE_PACKS,
   exportScenePackAsCpp,
+  generateRandomScenePack,
   parseScenePackFromText,
   type ScenePack,
   type ScenePackSlot,
 } from "@/lib/visual-engine/scene-packs";
 
-const PACKS_STORAGE_KEY = "openhub_visual_scene_packs_v1";
+const PACKS_STORAGE_KEY = "openhub_visual_scene_packs_v2";
 
 interface ScenePackManagerProps {
   authorName: string;
-  onApplySlot: (slot: ScenePackSlot, packMeta: { bpm: number; beatsPerScene: number }) => void;
+  liveSlotIndex: number;
+  bpm: number;
+  beatsPerScene: number;
+  onPackChange: (pack: ScenePack) => void;
+  onSelectSlot: (slotIndex: number, slot: ScenePackSlot, pack: ScenePack) => void;
 }
 
 export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
   authorName,
-  onApplySlot,
+  liveSlotIndex,
+  bpm,
+  beatsPerScene,
+  onPackChange,
+  onSelectSlot,
 }) => {
   const [packs, setPacks] = useState<ScenePack[]>(DEFAULT_SCENE_PACKS);
   const [selectedPackId, setSelectedPackId] = useState<string>(
     DEFAULT_SCENE_PACKS[0].id
   );
-  const [activeSlotIdx, setActiveSlotIdx] = useState<number>(0);
+  const [customPackName, setCustomPackName] = useState<string>("");
   const [showEditor, setShowEditor] = useState<boolean>(false);
   const [rawCode, setRawCode] = useState<string>("");
   const [feedback, setFeedback] = useState<string>("");
@@ -49,6 +58,11 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
   const currentPack =
     packs.find((p) => p.id === selectedPackId) ?? packs[0];
 
+  useEffect(() => {
+    onPackChange(currentPack);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentPack.id]);
+
   const saveCustomPacks = (allPacks: ScenePack[]) => {
     const defaultsIds = new Set(DEFAULT_SCENE_PACKS.map((p) => p.id));
     const customOnly = allPacks.filter((p) => !defaultsIds.has(p.id));
@@ -59,23 +73,35 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
     }
   };
 
-  const handleSelectSlot = (idx: number) => {
-    const slot = currentPack.scenes[idx];
-    if (!slot) return;
-    setActiveSlotIdx(idx);
-    onApplySlot(slot, {
-      bpm: currentPack.bpm,
-      beatsPerScene: currentPack.beatsPerScene,
-    });
-    setFeedback(`Scène ${idx + 1}/5 appliquée : ${slot.label}`);
+  const handleGenerateNewPack = () => {
+    const generated = generateRandomScenePack(
+      authorName,
+      customPackName,
+      bpm,
+      beatsPerScene > 0 ? beatsPerScene : 16
+    );
+    const next = [generated, ...packs];
+    setPacks(next);
+    saveCustomPacks(next);
+    setSelectedPackId(generated.id);
+    onPackChange(generated);
+    onSelectSlot(0, generated.scenes[0], generated);
+    setCustomPackName("");
+    setFeedback(
+      `Nouveau pack généré : "${generated.name}" (seed ${generated.seed}) — enchaînement BPM actif.`
+    );
   };
 
   const handleCopyPrompt = async () => {
     try {
       await navigator.clipboard.writeText(AI_SCENE_PACK_PROMPT);
-      setFeedback("Prompt IA copié ! Colle-le dans ChatGPT/Claude/Gemini puis importe le résultat.");
+      setFeedback(
+        "Prompt IA copié ! Colle-le dans ChatGPT/Claude/Gemini puis importe le résultat."
+      );
     } catch {
-      setFeedback("Impossible de copier automatiquement — ouvre l'éditeur pour voir le prompt.");
+      setFeedback(
+        "Impossible de copier automatiquement — ouvre l'éditeur pour voir le prompt."
+      );
     }
   };
 
@@ -91,12 +117,11 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
     setPacks(next);
     saveCustomPacks(next);
     setSelectedPackId(parsed.id);
-    setActiveSlotIdx(0);
-    onApplySlot(parsed.scenes[0], {
-      bpm: parsed.bpm,
-      beatsPerScene: parsed.beatsPerScene,
-    });
-    setFeedback(`Pack "${parsed.name}" (${parsed.scenes.length} scènes) importé et partagé !`);
+    onPackChange(parsed);
+    onSelectSlot(0, parsed.scenes[0], parsed);
+    setFeedback(
+      `Pack "${parsed.name}" (${parsed.scenes.length} scènes) importé et prêt !`
+    );
     setRawCode("");
   };
 
@@ -108,7 +133,9 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
       if (typeof reader.result === "string") {
         setRawCode(reader.result);
         setShowEditor(true);
-        setFeedback(`Fichier "${file.name}" chargé. Clique sur IMPORTER LE PACK.`);
+        setFeedback(
+          `Fichier "${file.name}" chargé. Clique sur IMPORTER & PARTAGER.`
+        );
       }
     };
     reader.readAsText(file);
@@ -123,42 +150,72 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = `${currentPack.name.toLowerCase().replace(/[^a-z0-9]+/g, "-")}.${format}`;
+    a.download = `${currentPack.name
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "-")}.${format}`;
     a.click();
     URL.revokeObjectURL(url);
   };
 
   return (
     <Card
-      moduleTitle="PRESETS // PACKS_5_SCÈNES_(C++/JSON)"
-      moduleMeta={`${currentPack.scenes.length} SCÈNES · ${currentPack.bpm} BPM`}
+      moduleTitle="PACK DE 5 SCÈNES // ENCHAÎNEMENT BPM"
+      moduleMeta={`${currentPack.name} · SEED ${currentPack.seed}`}
       activeIndicator
     >
-      <div className="space-y-4">
+      <div className="space-y-3">
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <select
               aria-label="Choisir un pack de 5 scènes"
               value={currentPack.id}
               onChange={(e) => {
-                setSelectedPackId(e.target.value);
-                setActiveSlotIdx(0);
+                const found = packs.find((p) => p.id === e.target.value);
+                if (found) {
+                  setSelectedPackId(found.id);
+                  onPackChange(found);
+                  onSelectSlot(0, found.scenes[0], found);
+                }
               }}
               className="px-2.5 py-1.5 rounded border-2 border-black bg-brand-white font-mono text-xs font-bold"
             >
               {packs.map((p) => (
                 <option key={p.id} value={p.id}>
-                  {p.name} — par {p.author}
+                  {p.name}
                 </option>
               ))}
             </select>
 
-            <Button type="button" variant="comic" size="sm" onClick={handleCopyPrompt}>
-              📋 COPIER PROMPT IA
+            <input
+              type="text"
+              value={customPackName}
+              onChange={(e) => setCustomPackName(e.target.value)}
+              placeholder="Nom optionnel..."
+              className="w-36 px-2 py-1.5 rounded border border-neutral-400 bg-brand-white font-mono text-[11px]"
+            />
+
+            <Button
+              type="button"
+              variant="primary"
+              size="sm"
+              onClick={handleGenerateNewPack}
+            >
+              🎲 GÉNÉRER UN PACK
+            </Button>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-1.5">
+            <Button
+              type="button"
+              variant="comic"
+              size="sm"
+              onClick={handleCopyPrompt}
+            >
+              📋 PROMPT IA
             </Button>
 
-            <label className="cursor-pointer px-2.5 py-1.5 rounded border-2 border-black bg-brand-pearl hover:bg-brand-white font-mono text-[11px] font-bold">
-              📂 CHARGER .CPP / .HPP / .JSON
+            <label className="cursor-pointer px-2 py-1 rounded border-2 border-black bg-brand-pearl hover:bg-brand-white font-mono text-[10px] font-bold">
+              📂 .CPP / .JSON
               <input
                 type="file"
                 accept=".cpp,.hpp,.h,.json,.txt"
@@ -166,16 +223,14 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                 className="hidden"
               />
             </label>
-          </div>
 
-          <div className="flex flex-wrap items-center gap-1.5">
             <Button
               type="button"
               variant="clinical"
               size="sm"
               onClick={() => handleDownload("hpp")}
             >
-              ⬇ .HPP (C++)
+              ⬇ .HPP
             </Button>
             <Button
               type="button"
@@ -187,39 +242,38 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
             </Button>
             <Button
               type="button"
-              variant="primary"
+              variant="clinical"
               size="sm"
               onClick={() => setShowEditor((v) => !v)}
             >
-              {showEditor ? "FERMER ÉDITEUR" : "✏️ ÉDITEUR / IMPORTER"}
+              {showEditor ? "FERMER" : "✏️ ÉDITER / IMPORTER"}
             </Button>
           </div>
         </div>
 
-        {/* 5 Boutons de Scènes du Pack */}
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+        {/* 5 mini-pastilles compactes montrant l'enchaînement BPM sans fiches */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="font-mono text-[10px] font-bold uppercase text-neutral-500">
+            ENCHAÎNEMENT :
+          </span>
           {currentPack.scenes.map((slot, idx) => {
-            const isActive = activeSlotIdx === idx;
+            const isActive = liveSlotIndex === idx;
             return (
               <button
-                key={`${currentPack.id}-${idx}`}
+                key={`${currentPack.id}-pill-${idx}`}
                 type="button"
-                onClick={() => handleSelectSlot(idx)}
-                className={`p-2.5 rounded-lg border-2 text-left transition-all ${
+                onClick={() => onSelectSlot(idx, slot, currentPack)}
+                title={`${slot.label || `Scène ${idx + 1}`} (${slot.sceneId} · ${slot.paletteId})`}
+                className={`px-3 py-1 rounded-full border-2 font-mono text-[11px] font-bold transition-all ${
                   isActive
-                    ? "border-black bg-brand-black text-white shadow-comic-sm"
+                    ? "border-black bg-brand-red text-white shadow-comic-sm scale-105"
                     : "border-black bg-brand-pearl hover:bg-brand-white text-brand-black"
                 }`}
               >
-                <div className="font-mono text-[10px] font-bold opacity-75">
-                  SCÈNE {idx + 1}/5
-                </div>
-                <div className="font-mono text-xs font-bold truncate mt-0.5">
-                  {slot.label}
-                </div>
-                <div className="font-mono text-[9px] opacity-75 truncate mt-0.5">
-                  {slot.sceneId} · {slot.paletteId}
-                </div>
+                {idx + 1}
+                {slot.label && !slot.label.startsWith("Scène ")
+                  ? ` · ${slot.label}`
+                  : ""}
               </button>
             );
           })}
@@ -235,25 +289,30 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
           <div className="p-4 rounded-xl bg-brand-pearl border-2 border-black space-y-3">
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-mono text-xs font-bold">
-                COLLER UN PACK C++ (.HPP/.CPP) OU JSON GÉNÉRÉ PAR IA
+                COLLER UN PACK C++ (.HPP/.CPP) OU JSON (NOMS OPTIONNELS)
               </span>
               <button
                 type="button"
                 onClick={() => setRawCode(exportScenePackAsCpp(currentPack))}
                 className="font-mono text-[10px] underline text-brand-black"
               >
-                Charger le C++ du pack actuel comme exemple
+                Voir le C++ du pack actif
               </button>
             </div>
             <textarea
-              rows={7}
+              rows={6}
               value={rawCode}
               onChange={(e) => setRawCode(e.target.value)}
               placeholder={AI_SCENE_PACK_PROMPT}
               className="w-full p-2.5 rounded border-2 border-black bg-brand-white font-mono text-[11px]"
             />
             <div className="flex justify-end">
-              <Button type="button" variant="primary" size="sm" onClick={handleImportText}>
+              <Button
+                type="button"
+                variant="primary"
+                size="sm"
+                onClick={handleImportText}
+              >
                 IMPORTER &amp; PARTAGER LE PACK
               </Button>
             </div>

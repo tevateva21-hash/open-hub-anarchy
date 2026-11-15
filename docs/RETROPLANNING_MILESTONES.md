@@ -18,7 +18,8 @@ Document de suivi complet des jalons réalisés sur **Open Hub by Anarchy** (`te
 | **M7 — SoundCloud & Sons Communauté** | `d825a0a` | Remplacement Google Drive par SoundCloud sur `/radio`, création `/sons-communaute` (audio + `.zip` stems + réponses/remix) | ✅ Terminé |
 | **M8 — Supabase, Sociabilité & Avatars** | `a69a3e5` / `19a6b2c` | Schéma SQL complet, Storage helper, `/api/health/supabase`, `/reseau` (Follow, Mur social, Profils), nouveaux avatars + upload, `site-texts.ts` | ✅ Terminé |
 | **M9 — Now Playing & Émulation DAW** | `f74830b` | Badge « son en cours » global en haut à droite, suppression des fiches/commentaires VST au profit de l'émulation DAW pure | ✅ Terminé |
-| **M10 — Docs & Packs de 5 Scènes (C++/JSON + IA)** | *En cours* | Rétroplanning GitHub/Drive/Site (`/docs/retroplanning`) + Packs de 5 scènes Visual Studio (JSON & C++ `.hpp`/`.cpp`, Prompt IA, partage communauté) | ✅ Terminé |
+| **M10 — Docs & Packs de 5 Scènes (C++/JSON + IA)** | `b9222be` | Rétroplanning GitHub/Drive/Site (`/docs/retroplanning`) + Packs de 5 scènes Visual Studio (JSON & C++ `.hpp`/`.cpp`, Prompt IA, partage communauté) | ✅ Terminé |
+| **M11 — Refonte Paradigme Packs de 5 Scènes** | *Actuel* | Pack original `PS2 // Enter the Dragon`, générateur procédural par seed (`🎲 GÉNÉRER UN PACK`), enchaînement automatique 5 scènes au BPM, noms optionnels, scènes individuelles masquées par défaut | ✅ Terminé |
 
 ---
 
