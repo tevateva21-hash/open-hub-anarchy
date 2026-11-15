@@ -1,7 +1,6 @@
 "use client";
 
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import Link from "next/link";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
@@ -10,6 +9,16 @@ import { useAuth } from "@/components/auth/AuthContext";
 import type { AudioTrackItem, AvatarExpression } from "@/lib/openhub-data";
 
 type RadioDrawer = "ANARCHY_OFFICIAL" | "GENERAL_COMMUNITY";
+
+interface DriveRadioTrack {
+  id: string;
+  name: string;
+  title: string;
+  mimeType: string;
+  sizeLabel: string;
+  streamUrl: string;
+  driveUrl: string;
+}
 
 interface CommunityRadioTrack {
   id: string;
@@ -36,7 +45,7 @@ function formatTimecode(seconds: number): string {
 const DEFAULT_RADIO_STREAM: AudioTrackItem = {
   id: "anarchy-radio-stream",
   title: "ANARCHY RADIO // SIGNAL LIVE",
-  subtitle: "WEBAUDIO DSP STREAM • 48.0 kHz / 24-BIT",
+  subtitle: "GOOGLE DRIVE SONS • 48.0 kHz / WAV",
   sourceType: "VST_DEMO",
   bpm: 136,
   key: "F Minor",
@@ -45,7 +54,7 @@ const DEFAULT_RADIO_STREAM: AudioTrackItem = {
 
 /**
  * Page `/radio` — Avec 2 tiroirs :
- * 1. Radio Anarchy (Officielle)
+ * 1. Radio Anarchy (Officielle — synchronisée en continu avec le dossier Drive `Sons`)
  * 2. Radio Générale (Communauté : dépôt de sons, Likes & Ranking)
  */
 export default function RadioPage() {
@@ -74,6 +83,18 @@ export default function RadioPage() {
 
   const [activeDrawer, setActiveDrawer] =
     useState<RadioDrawer>("ANARCHY_OFFICIAL");
+
+  // Playlist Google Drive `Sons/`
+  const [driveTracks, setDriveTracks] = useState<DriveRadioTrack[]>([]);
+  const [driveSyncSource, setDriveSyncSource] = useState<string>("loading");
+  const [driveSyncedAt, setDriveSyncedAt] = useState<string | null>(null);
+  const [isSyncingDrive, setIsSyncingDrive] = useState(false);
+  const [activeDriveIndex, setActiveDriveIndex] = useState<number>(0);
+  const [isDrivePlaying, setIsDrivePlaying] = useState(false);
+  const [driveTime, setDriveTime] = useState(0);
+  const [driveDuration, setDriveDuration] = useState(0);
+  const driveAudioRef = useRef<HTMLAudioElement | null>(null);
+
   const [communityTracks, setCommunityTracks] = useState<CommunityRadioTrack[]>(
     []
   );
@@ -92,6 +113,93 @@ export default function RadioPage() {
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  const syncDriveSons = useCallback(async () => {
+    setIsSyncingDrive(true);
+    try {
+      const res = await fetch("/api/radio/anarchy", { cache: "no-store" });
+      if (res.ok) {
+        const data = (await res.json()) as {
+          source: string;
+          syncedAt: string;
+          tracks: DriveRadioTrack[];
+        };
+        if (Array.isArray(data.tracks)) {
+          setDriveTracks(data.tracks);
+          setDriveSyncSource(data.source);
+          setDriveSyncedAt(data.syncedAt);
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setIsSyncingDrive(false);
+    }
+  }, []);
+
+  // Synchronisation initiale + rafraîchissement périodique (60s) avec le dossier Drive Sons
+  useEffect(() => {
+    void syncDriveSons();
+    const interval = window.setInterval(() => {
+      void syncDriveSons();
+    }, 60000);
+    return () => window.clearInterval(interval);
+  }, [syncDriveSons]);
+
+  // Synchroniser le volume du lecteur Drive avec le slider volume
+  useEffect(() => {
+    if (driveAudioRef.current) {
+      driveAudioRef.current.volume = isMuted ? 0 : Math.min(1, Math.max(0, volume));
+    }
+  }, [volume, isMuted]);
+
+  const activeDriveTrack = driveTracks[activeDriveIndex] ?? null;
+
+  const handlePlayDriveTrack = (index: number) => {
+    const target = driveTracks[index];
+    if (!target || !driveAudioRef.current) return;
+    setActiveDriveIndex(index);
+    if (driveAudioRef.current.src !== window.location.origin + target.streamUrl) {
+      driveAudioRef.current.src = target.streamUrl;
+    }
+    void driveAudioRef.current.play().then(
+      () => setIsDrivePlaying(true),
+      () => setIsDrivePlaying(false)
+    );
+  };
+
+  const handleToggleDrivePlay = () => {
+    if (!driveAudioRef.current || driveTracks.length === 0) return;
+    if (isDrivePlaying) {
+      driveAudioRef.current.pause();
+      setIsDrivePlaying(false);
+    } else {
+      const target = driveTracks[activeDriveIndex] ?? driveTracks[0];
+      if (
+        target &&
+        driveAudioRef.current.src !== window.location.origin + target.streamUrl
+      ) {
+        driveAudioRef.current.src = target.streamUrl;
+      }
+      void driveAudioRef.current.play().then(
+        () => setIsDrivePlaying(true),
+        () => setIsDrivePlaying(false)
+      );
+    }
+  };
+
+  const handleNextDriveTrack = () => {
+    if (driveTracks.length === 0) return;
+    const nextIdx = (activeDriveIndex + 1) % driveTracks.length;
+    handlePlayDriveTrack(nextIdx);
+  };
+
+  const handlePrevDriveTrack = () => {
+    if (driveTracks.length === 0) return;
+    const prevIdx =
+      (activeDriveIndex - 1 + driveTracks.length) % driveTracks.length;
+    handlePlayDriveTrack(prevIdx);
+  };
 
   // Charger les morceaux communautaires depuis localStorage
   useEffect(() => {
@@ -368,13 +476,17 @@ export default function RadioPage() {
                   size="lg"
                   onClick={handleToggleRadio}
                 >
-                  {isPlaying ? "❚❚ PAUSE RADIO" : "▶ LANCER LA RADIO"}
+                  {isPlaying ? "❚❚ PAUSE SYNTH" : "▶ SYNTH LIVE"}
                 </Button>
-                <Link href="/anarchy-visual-design">
-                  <Button variant="clinical" size="lg">
-                    ⚡ SYNCHRO VISUAL DESIGN
-                  </Button>
-                </Link>
+                <Button
+                  id="btn-radio-sync-drive"
+                  variant="clinical"
+                  size="lg"
+                  onClick={() => void syncDriveSons()}
+                  disabled={isSyncingDrive}
+                >
+                  {isSyncingDrive ? "↻ SYNCHRO..." : "↻ SYNCHRONISER DRIVE"}
+                </Button>
               </div>
             </div>
 
@@ -493,6 +605,147 @@ export default function RadioPage() {
                     />
                   </div>
                 </div>
+              </div>
+            </div>
+
+            {/* Lecteur & Playlist synchronisée Google Drive `Sons` */}
+            <div className="pt-5 border-t border-neutral-200 space-y-4">
+              <audio
+                ref={driveAudioRef}
+                className="hidden"
+                onTimeUpdate={(e) => setDriveTime(e.currentTarget.currentTime)}
+                onLoadedMetadata={(e) =>
+                  setDriveDuration(e.currentTarget.duration || 0)
+                }
+                onEnded={handleNextDriveTrack}
+                onPause={() => setIsDrivePlaying(false)}
+                onPlay={() => setIsDrivePlaying(true)}
+              />
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-brand-pearl border-2 border-black rounded-xl p-4 shadow-comic-sm">
+                <div className="space-y-1">
+                  <div className="font-mono text-[11px] font-bold uppercase text-brand-red flex flex-wrap items-center gap-2">
+                    <span>{"// LECTEUR RADIO ANARCHY · DRIVE / SONS"}</span>
+                    <span className="px-1.5 py-0.5 rounded bg-black text-white text-[10px]">
+                      {driveSyncSource === "gdrive_live"
+                        ? "SYNC LIVE"
+                        : "DRIVE CONNECTÉ"}
+                    </span>
+                  </div>
+                  <div className="font-sans text-base font-bold text-brand-black">
+                    {activeDriveTrack
+                      ? activeDriveTrack.title
+                      : "Chargement de la playlist Drive..."}
+                  </div>
+                  <div className="font-mono text-[11px] text-neutral-600">
+                    {activeDriveTrack
+                      ? `${activeDriveTrack.name} · ${activeDriveTrack.sizeLabel}`
+                      : "Dossier Open Hub by Anarchy / Sons"}
+                    {driveSyncedAt &&
+                      ` · Synchro ${new Date(driveSyncedAt).toLocaleTimeString("fr-FR")}`}
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2 shrink-0">
+                  <Button
+                    variant="clinical"
+                    size="sm"
+                    onClick={handlePrevDriveTrack}
+                    disabled={driveTracks.length === 0}
+                  >
+                    ⏮ PRÉC.
+                  </Button>
+                  <Button
+                    id="btn-drive-radio-toggle"
+                    variant={isDrivePlaying ? "primary" : "comic"}
+                    size="md"
+                    onClick={handleToggleDrivePlay}
+                    disabled={driveTracks.length === 0}
+                  >
+                    {isDrivePlaying ? "❚❚ PAUSE" : "▶ LIRE LA PLAYLIST"}
+                  </Button>
+                  <Button
+                    variant="clinical"
+                    size="sm"
+                    onClick={handleNextDriveTrack}
+                    disabled={driveTracks.length === 0}
+                  >
+                    SUIV. ⏭
+                  </Button>
+                </div>
+              </div>
+
+              {/* Barre de progression du morceau Drive */}
+              <div className="flex items-center gap-3 font-mono text-xs text-neutral-600 px-1">
+                <span className="w-12">{formatTimecode(driveTime)}</span>
+                <input
+                  type="range"
+                  min={0}
+                  max={driveDuration > 0 ? driveDuration : 100}
+                  value={driveDuration > 0 ? driveTime : 0}
+                  onChange={(e) => {
+                    const next = Number(e.target.value);
+                    if (driveAudioRef.current && driveDuration > 0) {
+                      driveAudioRef.current.currentTime = next;
+                      setDriveTime(next);
+                    }
+                  }}
+                  aria-label="Progression du morceau Radio Anarchy"
+                  className="flex-1 accent-brand-red"
+                />
+                <span className="w-12 text-right">
+                  {formatTimecode(driveDuration)}
+                </span>
+              </div>
+
+              {/* Liste des sons synchronisés depuis Google Drive */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                {driveTracks.map((track, idx) => {
+                  const isCurrent = idx === activeDriveIndex;
+                  const isTrackPlaying = isCurrent && isDrivePlaying;
+                  return (
+                    <div
+                      key={track.id}
+                      className={`flex items-center justify-between gap-3 p-3 rounded-xl border-2 transition-all ${
+                        isCurrent
+                          ? "bg-brand-white border-black shadow-comic-sm"
+                          : "bg-brand-pearl border-neutral-200 hover:border-black"
+                      }`}
+                    >
+                      <div className="min-w-0">
+                        <div className="font-sans text-sm font-bold text-brand-black truncate">
+                          {idx + 1}. {track.title}
+                        </div>
+                        <div className="font-mono text-[11px] text-neutral-500 truncate">
+                          {track.name} · {track.sizeLabel}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <Button
+                          variant={isTrackPlaying ? "primary" : "clinical"}
+                          size="sm"
+                          onClick={() => {
+                            if (isTrackPlaying) {
+                              handleToggleDrivePlay();
+                            } else {
+                              handlePlayDriveTrack(idx);
+                            }
+                          }}
+                        >
+                          {isTrackPlaying ? "❚❚" : "▶"}
+                        </Button>
+                        <a
+                          href={track.driveUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-[10px] font-bold text-neutral-500 hover:text-brand-red underline"
+                        >
+                          Drive ↗
+                        </a>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
             </div>
           </div>

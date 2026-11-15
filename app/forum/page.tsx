@@ -1,7 +1,6 @@
 "use client";
 
 import React, { useMemo, useState } from "react";
-import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
@@ -235,11 +234,6 @@ export default function ForumPage() {
               >
                 {showNewThreadForm ? "✕ FERMER ÉDITEUR" : "+ NOUVEAU SUJET"}
               </Button>
-              <Link href="/anarchy-visual-design">
-                <Button variant="comic" size="md">
-                  ⚡ VISUAL DESIGN
-                </Button>
-              </Link>
             </div>
           </div>
 
