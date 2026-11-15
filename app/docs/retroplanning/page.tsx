@@ -83,9 +83,15 @@ const MILESTONES = [
   },
   {
     id: "M13",
-    commit: "ACTUEL",
+    commit: "9db0926",
     title: "Export MP4 avec Son & Cohérence Zone Prévisualisée",
     details: "Boutons Randomize, Undo/Redo, Snapshot PNG et Export MP4 déplacés au plus près du moniteur vidéo et de l'extrait audio ; capture muxée vidéo + audio (piste locale avec fondus ou flux Open Hub) enregistrant automatiquement la zone prévisualisée.",
+  },
+  {
+    id: "M14",
+    commit: "ACTUEL",
+    title: "Épuration Studio & Pause Audio Globale du Site",
+    details: "Suppression des éléments superflus (curseur libre doublon, lecteur HTML natif, bandeaux au-dessus/dessous de la vidéo, Randomize, grille 4 bandes et slider Début extrait) ; bouton Pause relié à pauseAllAudio() pour couper toute musique sur le site.",
   },
 ];
 

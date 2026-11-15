@@ -51,6 +51,7 @@ export interface AudioPlayerContextValue {
   getFrequencyData: (target: Uint8Array) => void;
   triggerGlitchBurst: (type?: "glitch" | "strobe" | "invert") => void;
   getCaptureAudioStream: () => MediaStream | null;
+  pauseAllAudio: () => void;
 }
 
 const AUDIO_PREFS_STORAGE_KEY = "openhub_audio_prefs";
@@ -753,6 +754,21 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
     return streamDestRef.current.stream;
   }, [ensureAudioGraph]);
 
+  const pauseAllAudio = useCallback(() => {
+    setIsPlaying(false);
+    setExternalAudio(null);
+    if (typeof document !== "undefined") {
+      document.querySelectorAll("audio, video").forEach((el) => {
+        if (el instanceof HTMLMediaElement && !el.paused) {
+          el.pause();
+        }
+      });
+    }
+    if (typeof window !== "undefined") {
+      window.dispatchEvent(new CustomEvent("openhub:pause-all"));
+    }
+  }, []);
+
   const contextValue = useMemo<AudioPlayerContextValue>(
     () => ({
       currentTrack,
@@ -779,6 +795,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       getFrequencyData,
       triggerGlitchBurst,
       getCaptureAudioStream,
+      pauseAllAudio,
     }),
     [
       currentTrack,
@@ -805,6 +822,7 @@ export const AudioPlayerProvider: React.FC<{ children: React.ReactNode }> = ({
       getFrequencyData,
       triggerGlitchBurst,
       getCaptureAudioStream,
+      pauseAllAudio,
     ]
   );
 

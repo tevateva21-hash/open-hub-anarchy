@@ -37,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
 export const HeaderNav: React.FC = () => {
   const pathname = usePathname() || "/";
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const { isPlaying, currentTrack, externalAudio, togglePlay } = useAudioPlayer();
+  const { isPlaying, currentTrack, externalAudio, pauseAllAudio } = useAudioPlayer();
   const { user, openAuthModal, logout } = useAuth();
 
   const isRouteActive = (href: string): boolean => {
@@ -173,14 +173,8 @@ export const HeaderNav: React.FC = () => {
               </span>
               <button
                 type="button"
-                onClick={() => {
-                  if (externalAudio?.isPlaying) {
-                    externalAudio.pause();
-                  } else {
-                    togglePlay();
-                  }
-                }}
-                aria-label="Mettre en pause le son en cours"
+                onClick={pauseAllAudio}
+                aria-label="Mettre en pause toute la musique du site"
                 className="ml-0.5 px-1 rounded bg-black/25 hover:bg-black/50 text-[9px] shrink-0"
               >
                 ❚❚

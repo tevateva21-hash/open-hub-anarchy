@@ -21,7 +21,6 @@ import {
 } from "@/lib/visual-engine/cpp-runtime";
 import { WaveformCanvas } from "@/components/visual-engine/WaveformCanvas";
 import {
-  RANDOMIZER_VERSION,
   type AudioAnalysis,
   type AudioFeatures,
   type LyricsDisplayStyle,
@@ -45,13 +44,11 @@ import {
   evaluateSequenceAt,
   generatePresetVariations,
   parsePresetConfig,
-  randomizePresetConfig,
   serializePresetConfig,
 } from "@/lib/visual-engine/presets";
 import {
   SCENE_CATALOG,
   STUDY_FPS,
-  STUDY_LAST_FRAME,
   STUDY_PALETTES,
   STUDY_SIZE,
   getSceneDescriptor,
@@ -80,7 +77,7 @@ const ZERO_FEATURES: AudioFeatures = {
  * - 7 palettes avec Morphing inter-palettes & Blood Red / Anarchy Anaglyph 3D
  * - BPM detector (`estimateTempoBpm`), Kick Blackout (`duck-on-kick` / `open-on-kick`) & Auto Scene Switch
  * - Incrustation de paroles bitmap 5x5 + Micro Web Speech API
- * - M4 Presets (seed, locks, Randomize, JSON, LocalStorage) & M6 (Undo/Redo, 4 Variations, Timeline Multi-Scènes)
+ * - M4 Presets (seed, locks, JSON, LocalStorage) & M6 (Undo/Redo, 4 Variations, Timeline Multi-Scènes)
  * - Synthèse piste démo WAV instantanée + Import MP3/WAV FFT Worker + Synchro Lecteur Persistant Open Hub
  */
 export const VisualEngineStudio: React.FC = () => {
@@ -91,6 +88,7 @@ export const VisualEngineStudio: React.FC = () => {
     getTimeDomainData,
     getFrequencyData,
     getCaptureAudioStream,
+    pauseAllAudio,
   } = useAudioPlayer();
 
   // Projet M6 complet + pile Undo/Redo
@@ -160,7 +158,6 @@ export const VisualEngineStudio: React.FC = () => {
   const [liveFeatures, setLiveFeatures] =
     useState<AudioFeatures>(ZERO_FEATURES);
   const [renderReport, setRenderReport] = useState<SceneRenderReport>();
-  const [activeSegIndex, setActiveSegIndex] = useState<number>(0);
   const [presetMessage, setPresetMessage] = useState<string>("");
   const [presetError, setPresetError] = useState<string>("");
   const [jsonDraft, setJsonDraft] = useState<string>("");
@@ -509,7 +506,6 @@ export const VisualEngineStudio: React.FC = () => {
             dissolveFactor: 0,
             segmentIndex: 0,
           };
-      setActiveSegIndex(sequenceEval.segmentIndex);
 
       const effectivePreset = sequenceEval.activePreset;
       const pack = activePackRef.current;
@@ -673,27 +669,6 @@ export const VisualEngineStudio: React.FC = () => {
       else nextLocks[path] = true;
       return { ...curr, locks: nextLocks };
     }, false);
-  };
-
-  const handleRandomize = () => {
-    setPresetError("");
-    setPresetMessage("");
-    try {
-      const nextSeed = (preset.seed + 0x9e3779b9) >>> 0 || 1;
-      const randomized = randomizePresetConfig({
-        randomizerVersion: RANDOMIZER_VERSION,
-        seed: nextSeed,
-        current: preset,
-      });
-      updatePreset(() => randomized);
-      setPresetMessage(
-        `Seed ${randomized.seed} appliquée (${randomized.sceneId} / ${randomized.paletteId}).`
-      );
-    } catch (cause) {
-      setPresetError(
-        cause instanceof Error ? cause.message : "Tirage impossible."
-      );
-    }
   };
 
   const handleSaveLocal = () => {
@@ -1005,11 +980,17 @@ export const VisualEngineStudio: React.FC = () => {
 
   const handlePlayClipExtract = () => {
     if (!localAudioRef.current) return;
+    pauseAllAudio();
     localAudioRef.current.currentTime = clipStartSeconds;
     setLocalTime(clipStartSeconds);
     setSourceMode("LOCAL_FILE");
     setAutoAnimate(true);
     void localAudioRef.current.play().catch(() => {});
+  };
+
+  const handlePauseSiteMusic = () => {
+    pauseAllAudio();
+    setPresetMessage("Musique du site mise en pause.");
   };
 
   const handleSpeechMic = () => {
@@ -1269,31 +1250,9 @@ export const VisualEngineStudio: React.FC = () => {
                     onClipStartChange={setClipStartSeconds}
                   />
 
-                  {/* Curseur continu type .NET MAUI (déplacement libre au centième de seconde sans crans) */}
-                  <div className="p-2.5 rounded-xl bg-brand-pearl/70 border border-neutral-300 font-mono text-[11px] space-y-1">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-brand-black">
-                        CURSEUR MUSIQUE (DÉPLACEMENT LIBRE)
-                      </span>
-                      <span className="text-brand-red font-bold">
-                        {localTime.toFixed(2)}s / {analysis.durationSeconds.toFixed(2)}s
-                      </span>
-                    </div>
-                    <input
-                      type="range"
-                      min={0}
-                      max={Math.max(0.1, analysis.durationSeconds)}
-                      step={0.05}
-                      value={Math.min(localTime, analysis.durationSeconds)}
-                      onChange={(e) => seekLocalAudio(Number(e.target.value))}
-                      className="w-full accent-brand-black cursor-ew-resize"
-                    />
-                  </div>
-
                   {localUrl && (
                     <audio
                       ref={localAudioRef}
-                      controls
                       src={localUrl}
                       data-track-title={fileName || "Visual Studio"}
                       onTimeUpdate={(e) => {
@@ -1302,7 +1261,8 @@ export const VisualEngineStudio: React.FC = () => {
                         applyClipFadeVolume(e.currentTarget, t);
                       }}
                       onSeeked={(e) => setLocalTime(e.currentTarget.currentTime)}
-                      className="w-full"
+                      className="hidden"
+                      aria-hidden="true"
                     />
                   )}
 
@@ -1338,6 +1298,14 @@ export const VisualEngineStudio: React.FC = () => {
                           ▶ LIRE L&apos;EXTRAIT ({clipDurationSeconds}s)
                         </Button>
                         <Button
+                          id="btn-ve-global-pause"
+                          variant="clinical"
+                          size="sm"
+                          onClick={handlePauseSiteMusic}
+                        >
+                          ⏸ PAUSE
+                        </Button>
+                        <Button
                           variant={isRecordingVideo ? "comic" : "primary"}
                           size="sm"
                           onClick={() => void handleToggleVideoExport()}
@@ -1369,22 +1337,7 @@ export const VisualEngineStudio: React.FC = () => {
                       </span>
                     </div>
 
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-3 font-mono text-[11px]">
-                      <div>
-                        <div className="flex justify-between mb-1">
-                          <span>DÉBUT EXTRAIT</span>
-                          <strong>{clipStartSeconds.toFixed(2)}s</strong>
-                        </div>
-                        <input
-                          type="range"
-                          min={0}
-                          max={Math.max(0, (analysis?.durationSeconds ?? 60) - 5)}
-                          step={0.05}
-                          value={clipStartSeconds}
-                          onChange={(e) => setClipStartSeconds(Number(e.target.value))}
-                          className="w-full accent-brand-red"
-                        />
-                      </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-[11px]">
                       <div>
                         <div className="flex justify-between mb-1">
                           <span>DURÉE EXTRAIT</span>
@@ -1617,29 +1570,6 @@ export const VisualEngineStudio: React.FC = () => {
             <div className="space-y-4">
               {/* Cadre moniteur encré style BD / Figma */}
               <div className="relative rounded-xl border-4 border-black bg-[#08090c] p-2 shadow-comic">
-                <div className="flex flex-wrap items-center justify-between gap-2 pb-2 px-1 font-mono text-[10px] text-neutral-300">
-                  <span className="flex items-center gap-1.5">
-                    <span
-                      className={`w-2 h-2 rounded-full ${
-                        isPlaying || sourceMode === "LOCAL_FILE"
-                          ? "bg-brand-red animate-pulse"
-                          : "bg-[#00E5FF]"
-                      }`}
-                    />
-                    <span className="font-bold text-white">
-                      {activeDescriptor.sectorCaption}
-                    </span>
-                    {project.sequenceEnabled && (
-                      <span className="px-1.5 py-0.5 rounded bg-brand-red text-white font-bold">
-                        SWITCH SCÈNE #{activeSegIndex + 1}
-                      </span>
-                    )}
-                  </span>
-                  <span className="text-[#00E5FF]">
-                    SEED: {preset.seed} {"//"} {bpm} BPM
-                  </span>
-                </div>
-
                 <canvas
                   ref={stageCanvasRef}
                   width={STUDY_SIZE.width}
@@ -1649,81 +1579,6 @@ export const VisualEngineStudio: React.FC = () => {
                   className="w-full aspect-video rounded border-2 border-neutral-800 bg-black"
                   style={{ imageRendering: "pixelated" }}
                 />
-
-                {/* Barre de transport temporel & Reduced Motion */}
-                <div className="mt-3 flex flex-col sm:flex-row sm:items-center justify-between gap-3 px-1">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setAutoAnimate((prev) => !prev)}
-                      className={`px-2.5 py-1 rounded border-2 border-black font-mono text-[11px] font-bold shadow-comic-sm transition-colors ${
-                        autoAnimate
-                          ? "bg-brand-red text-white"
-                          : "bg-brand-white text-black"
-                      }`}
-                    >
-                      {autoAnimate ? "❚❚ PAUSE_MOTEUR" : "▶ ANIMER_MOTEUR"}
-                    </button>
-                    <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-neutral-900 border border-neutral-700 font-mono text-[10px] text-neutral-200 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={project.reducedMotion}
-                        onChange={(e) =>
-                          updateProject(
-                            (curr) => ({
-                              ...curr,
-                              reducedMotion: e.target.checked,
-                            }),
-                            false
-                          )
-                        }
-                        className="accent-brand-red"
-                      />
-                      <span>Mouvement sûr</span>
-                    </label>
-                    <label className="inline-flex items-center gap-1.5 px-2 py-1 rounded bg-neutral-900 border border-neutral-700 font-mono text-[10px] text-[#00E5FF] cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={project.sequenceEnabled}
-                        onChange={(e) =>
-                          updateProject((curr) => ({
-                            ...curr,
-                            sequenceEnabled: e.target.checked,
-                          }))
-                        }
-                        className="accent-brand-red"
-                      />
-                      <span>Switch entre les scènes</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={handleAutoSyncScenesToAudio}
-                      title="Caler automatiquement le switch entre les scènes sur le morceau / BPM"
-                      className="px-2 py-1 rounded bg-[#00E5FF] text-black border border-black font-mono text-[10px] font-bold hover:opacity-90 transition-opacity"
-                    >
-                      ⏱ Caler sur le morceau
-                    </button>
-                  </div>
-
-                  <div className="flex-1 flex items-center gap-2 font-mono text-[11px] text-neutral-300">
-                    <label htmlFor="ve-scrub-frame" className="shrink-0">
-                      FRM {String(frame).padStart(3, "0")}/{STUDY_LAST_FRAME}
-                    </label>
-                    <input
-                      id="ve-scrub-frame"
-                      type="range"
-                      min={0}
-                      max={STUDY_LAST_FRAME}
-                      step={1}
-                      value={frame}
-                      onChange={(e) => {
-                        setAutoAnimate(false);
-                        setFrame(Number(e.target.value));
-                      }}
-                      className="w-full accent-brand-red"
-                    />
-                  </div>
-                </div>
               </div>
 
               {/* Barre Actions & Export MP4 synchronisée (proche du son et de l'image) */}
@@ -1746,14 +1601,6 @@ export const VisualEngineStudio: React.FC = () => {
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      id="btn-ve-randomize"
-                      variant="comic"
-                      size="sm"
-                      onClick={handleRandomize}
-                    >
-                      🎲 RANDOMIZE (SEED)
-                    </Button>
                     <Button
                       id="btn-ve-undo"
                       variant="clinical"
@@ -1795,26 +1642,6 @@ export const VisualEngineStudio: React.FC = () => {
                     </Button>
                   </div>
                 </div>
-              </div>
-
-              {/* Matrice des 4 Mappings Audio-Visuels de la scène active */}
-              <div
-                className="grid grid-cols-2 sm:grid-cols-4 gap-2"
-                aria-label="Mappings audio-visuels actifs"
-              >
-                {activeDescriptor.audioMappings.map((m) => (
-                  <div
-                    key={m.band}
-                    className="p-2.5 rounded-lg bg-brand-pearl border border-neutral-200 font-mono"
-                  >
-                    <div className="text-[10px] font-bold text-brand-red uppercase">
-                      {m.band}
-                    </div>
-                    <div className="text-[11px] text-brand-charcoal mt-0.5 leading-snug">
-                      {m.target}
-                    </div>
-                  </div>
-                ))}
               </div>
             </div>
           </Card>
