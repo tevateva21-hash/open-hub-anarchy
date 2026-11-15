@@ -156,6 +156,7 @@ export const VisualEngineStudio: React.FC = () => {
   const [fadeInSeconds, setFadeInSeconds] = useState<number>(1.5);
   const [fadeOutSeconds, setFadeOutSeconds] = useState<number>(2.0);
   const [clipActive, setClipActive] = useState<boolean>(true);
+  const [clipLoop, setClipLoop] = useState<boolean>(true);
 
   // Fenêtres / Onglets fermables et modulables
   const [showAudioPanel, setShowAudioPanel] = useState<boolean>(true);
@@ -290,6 +291,40 @@ export const VisualEngineStudio: React.FC = () => {
     }
   };
 
+  const applyClipFadeVolume = useCallback(
+    (audioEl: HTMLAudioElement, t: number) => {
+      if (!clipActive) {
+        audioEl.volume = 1;
+        return;
+      }
+      const clipEnd = clipStartSeconds + clipDurationSeconds;
+      if (t >= clipEnd) {
+        if (clipLoop) {
+          audioEl.currentTime = clipStartSeconds;
+          setLocalTime(clipStartSeconds);
+          audioEl.volume = fadeInSeconds > 0 ? 0.05 : 1;
+        } else {
+          audioEl.pause();
+          audioEl.currentTime = clipStartSeconds;
+          setLocalTime(clipStartSeconds);
+          audioEl.volume = fadeInSeconds > 0 ? 0.05 : 1;
+        }
+        return;
+      }
+      const elapsed = Math.max(0, t - clipStartSeconds);
+      const remaining = Math.max(0, clipEnd - t);
+      let vol = 1;
+      if (fadeInSeconds > 0 && elapsed < fadeInSeconds) {
+        vol = Math.min(vol, Math.max(0.02, elapsed / fadeInSeconds));
+      }
+      if (fadeOutSeconds > 0 && remaining < fadeOutSeconds) {
+        vol = Math.min(vol, Math.max(0.02, remaining / fadeOutSeconds));
+      }
+      audioEl.volume = Math.min(1, Math.max(0, vol));
+    },
+    [clipActive, clipDurationSeconds, clipLoop, clipStartSeconds, fadeInSeconds, fadeOutSeconds]
+  );
+
   // Boucle de rendu déterministe / temps-réel (pilote le Canvas 320x180)
   useEffect(() => {
     let rafId = 0;
@@ -307,8 +342,23 @@ export const VisualEngineStudio: React.FC = () => {
 
       if (sourceMode === "LOCAL_FILE" && analysis) {
         const audioEl = localAudioRef.current;
-        const t = audioEl ? audioEl.currentTime : localTime;
+        let t = audioEl ? audioEl.currentTime : localTime;
         if (audioEl && !audioEl.paused) {
+          if (clipActive) {
+            const clipEnd = Math.min(
+              analysis.durationSeconds,
+              clipStartSeconds + clipDurationSeconds
+            );
+            if (t >= clipEnd) {
+              if (clipLoop) {
+                audioEl.currentTime = clipStartSeconds;
+                t = clipStartSeconds;
+              } else {
+                audioEl.pause();
+              }
+            }
+            applyClipFadeVolume(audioEl, t);
+          }
           setLocalTime(t);
         }
         timeSeconds = Math.max(0, t);
@@ -420,11 +470,16 @@ export const VisualEngineStudio: React.FC = () => {
     return () => window.cancelAnimationFrame(rafId);
   }, [
     analysis,
+    applyClipFadeVolume,
     autoAnimate,
     autoSceneSwitchBeats,
     bassGain,
     beatOffset,
     bpm,
+    clipActive,
+    clipDurationSeconds,
+    clipLoop,
+    clipStartSeconds,
     envelopeSmooth,
     frame,
     getFrequencyData,
@@ -716,34 +771,12 @@ export const VisualEngineStudio: React.FC = () => {
         };
       }),
     }));
+    if (autoSceneSwitchBeats === 0) {
+      setAutoSceneSwitchBeats(16);
+    }
     setPresetMessage(
       `Scènes calées en BPM (${bpm} BPM · ${barSec.toFixed(2)}s/mesure) sur l'extrait ${start.toFixed(1)}s → ${(start + span).toFixed(1)}s.`
     );
-  };
-
-  const applyClipFadeVolume = (audioEl: HTMLAudioElement, t: number) => {
-    if (!clipActive) {
-      audioEl.volume = 1;
-      return;
-    }
-    const clipEnd = clipStartSeconds + clipDurationSeconds;
-    if (t >= clipEnd) {
-      audioEl.pause();
-      audioEl.currentTime = clipStartSeconds;
-      setLocalTime(clipStartSeconds);
-      audioEl.volume = fadeInSeconds > 0 ? 0.05 : 1;
-      return;
-    }
-    const elapsed = Math.max(0, t - clipStartSeconds);
-    const remaining = Math.max(0, clipEnd - t);
-    let vol = 1;
-    if (fadeInSeconds > 0 && elapsed < fadeInSeconds) {
-      vol = Math.min(vol, Math.max(0.02, elapsed / fadeInSeconds));
-    }
-    if (fadeOutSeconds > 0 && remaining < fadeOutSeconds) {
-      vol = Math.min(vol, Math.max(0.02, remaining / fadeOutSeconds));
-    }
-    audioEl.volume = Math.min(1, Math.max(0, vol));
   };
 
   const handlePlayClipExtract = () => {
@@ -1062,15 +1095,26 @@ export const VisualEngineStudio: React.FC = () => {
                   {/* Calage Extrait 30s + Fondu Entrée / Sortie + Synchro BPM */}
                   <div className="p-3.5 rounded-xl bg-brand-pearl border-2 border-black space-y-3">
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <label className="inline-flex items-center gap-2 font-mono text-xs font-bold text-brand-black cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={clipActive}
-                          onChange={(e) => setClipActive(e.target.checked)}
-                          className="accent-brand-red"
-                        />
-                        <span>✂ EXTRAIT ({clipDurationSeconds}s) + FONDUS</span>
-                      </label>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <label className="inline-flex items-center gap-2 font-mono text-xs font-bold text-brand-black cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={clipActive}
+                            onChange={(e) => setClipActive(e.target.checked)}
+                            className="accent-brand-red"
+                          />
+                          <span>✂ EXTRAIT ({clipDurationSeconds}s) + FONDUS</span>
+                        </label>
+                        <label className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-brand-red cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={clipLoop}
+                            onChange={(e) => setClipLoop(e.target.checked)}
+                            className="accent-brand-red"
+                          />
+                          <span>🔁 BOUCLE</span>
+                        </label>
+                      </div>
                       <div className="flex flex-wrap items-center gap-2">
                         <Button
                           variant="comic"
@@ -1150,6 +1194,74 @@ export const VisualEngineStudio: React.FC = () => {
                           onChange={(e) => setFadeOutSeconds(Number(e.target.value))}
                           className="w-full accent-brand-red"
                         />
+                      </div>
+                    </div>
+
+                    {/* Calage fin BPM & Mesures (temps / phase du 1er temps) */}
+                    <div className="pt-2.5 border-t border-neutral-300 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center font-mono text-[11px]">
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span>SWITCH SCÈNES (MESURES)</span>
+                          <strong className="text-brand-red">
+                            {autoSceneSwitchBeats === 0
+                              ? "FIXE"
+                              : `${autoSceneSwitchBeats} TEMPS`}
+                          </strong>
+                        </div>
+                        <select
+                          value={autoSceneSwitchBeats}
+                          onChange={(e) =>
+                            setAutoSceneSwitchBeats(Number(e.target.value))
+                          }
+                          className="w-full px-2 py-1 rounded border border-black bg-brand-white font-bold"
+                        >
+                          <option value={0}>Fixe (manuel)</option>
+                          <option value={1}>1 temps (rapide)</option>
+                          <option value={2}>2 temps (1/2 mes.)</option>
+                          <option value={4}>4 temps (1 mesure)</option>
+                          <option value={8}>8 temps (2 mesures)</option>
+                          <option value={16}>16 temps (4 mesures)</option>
+                          <option value={32}>32 temps (8 mesures)</option>
+                          <option value={64}>64 temps (16 mesures)</option>
+                        </select>
+                      </div>
+
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span>CALAGE 1ER TEMPS (OFFSET)</span>
+                          <strong>{beatOffset.toFixed(2)}s</strong>
+                        </div>
+                        <input
+                          type="range"
+                          min={-2}
+                          max={2}
+                          step={0.02}
+                          value={beatOffset}
+                          onChange={(e) => setBeatOffset(Number(e.target.value))}
+                          className="w-full accent-brand-red"
+                        />
+                      </div>
+
+                      <div className="flex items-end h-full">
+                        <Button
+                          variant="clinical"
+                          size="sm"
+                          onClick={() => {
+                            const t =
+                              localAudioRef.current?.currentTime ?? localTime;
+                            const beatDur = 60 / Math.max(60, bpm);
+                            const phase = Number((t % beatDur).toFixed(2));
+                            setBeatOffset(phase);
+                            if (autoSceneSwitchBeats === 0) {
+                              setAutoSceneSwitchBeats(16);
+                            }
+                            setPresetMessage(
+                              `1er temps calé sur ${t.toFixed(2)}s (phase ${phase}s @ ${bpm} BPM).`
+                            );
+                          }}
+                        >
+                          ⚡ CALER 1ER TEMPS ICI
+                        </Button>
                       </div>
                     </div>
                   </div>
