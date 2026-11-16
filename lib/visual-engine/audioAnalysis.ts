@@ -9,9 +9,9 @@ export const SAMPLE_RATE = 24000;
 export const WINDOW = 2048;
 export const HOP = 512;
 export const LIMITS = {
-  bytes: 50 * 1024 * 1024,
-  seconds: 300,
-  pcmBytes: 64 * 1024 * 1024,
+  bytes: 70 * 1024 * 1024,
+  seconds: 480,
+  pcmBytes: 96 * 1024 * 1024,
 } as const;
 export const FEATURE_KEYS = [
   "rms",
@@ -26,7 +26,7 @@ export function validateFileSize(bytes: number): void {
     throw new Error("Le fichier est vide.");
   }
   if (bytes > LIMITS.bytes) {
-    throw new Error("Fichier trop volumineux : maximum 50 Mio.");
+    throw new Error("Fichier trop volumineux : maximum 70 Mio.");
   }
 }
 
@@ -35,7 +35,7 @@ export function validateDuration(seconds: number): void {
     throw new Error("Durée audio invalide.");
   }
   if (seconds > LIMITS.seconds) {
-    throw new Error("Morceau trop long : maximum 5 minutes.");
+    throw new Error("Morceau trop long : maximum 8 minutes.");
   }
 }
 

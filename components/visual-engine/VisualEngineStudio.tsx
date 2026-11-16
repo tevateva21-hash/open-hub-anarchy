@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
@@ -1097,6 +1098,12 @@ export const VisualEngineStudio: React.FC = () => {
           </div>
 
           <div className="flex flex-wrap items-center gap-2 shrink-0 font-mono text-[11px]">
+            <Link
+              href="/docs/visual-studio"
+              className="px-2.5 py-1 rounded border-2 border-black bg-brand-red text-white font-bold shadow-comic-sm hover:bg-black transition-colors"
+            >
+              📖 DOCS STUDIO
+            </Link>
             <span className="px-2.5 py-1 rounded border-2 border-black bg-brand-pearl text-brand-black font-bold">
               SEED #{preset.seed}
             </span>
@@ -1190,7 +1197,7 @@ export const VisualEngineStudio: React.FC = () => {
                     htmlFor="ve-audio-file"
                     className="block font-mono text-xs font-bold uppercase text-brand-black mb-1.5"
                   >
-                    Importer MP3 ou WAV (max 50 Mio · 5 min)
+                    Importer MP3 ou WAV (max 70 Mio · 8 min)
                   </label>
                   <input
                     id="ve-audio-file"

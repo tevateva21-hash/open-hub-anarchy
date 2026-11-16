@@ -107,9 +107,15 @@ const MILESTONES = [
   },
   {
     id: "M17",
-    commit: "ACTUEL",
+    commit: "4ebe405",
     title: "Formats TikTok/Insta (9:16, 4:5, 1:1), Whisper, Scénario LRC & C++ Paroles",
-    details: "Ajout du sélecteur de format vidéo (16:9, 9:16 TikTok/Reels + Safe Zone, 4:5 Insta, 1:1 Carré) sur le moteur et l'export PNG/MP4 ; intégration Whisper (/api/whisper) sur l'extrait audio, scénario LRC horodaté (#INTRO, #DROP), variables C++ paroles/dimensions et Prompts IA dédiés.",
+    details: "Ajout du sélecteur de formats vidéo (16:9, 9:16 TikTok/Reels + Safe Zone, 4:5 Insta, 1:1 Carré) sur le moteur et l'export PNG/MP4 ; intégration Whisper (/api/whisper) sur l'extrait audio, scénario LRC horodaté (#INTRO, #DROP), variables C++ paroles/dimensions et Prompts IA dédiés.",
+  },
+  {
+    id: "M18",
+    commit: "ACTUEL",
+    title: "Audio 70 Mio, Documentation Complète (/docs/visual-studio) & En-tête Épuré",
+    details: "Passage de la limite audio locale à 70 Mio (8 min / 96 Mio PCM), création du guide complet Anarchy Visual Studio (/docs/visual-studio et docs/VISUAL_STUDIO_GUIDE.md) couvrant Prompts IA, C++ live, Whisper/LRC, 10 faders et formats sociaux, et suppression de l'en-tête donnant accès aux autres catégories (Samples, VSTs...).",
   },
 ];
 
@@ -128,12 +134,20 @@ export default function HiddenRetroplanningPage() {
             Historique complet des évolutions déployées sur GitHub, Vercel et Google Drive.
           </p>
         </div>
-        <Link
-          href="/"
-          className="px-3 py-1.5 rounded border-2 border-black bg-brand-white hover:bg-brand-pearl font-mono text-xs font-bold shadow-comic-sm"
-        >
-          ← RETOUR HUB
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link
+            href="/docs/visual-studio"
+            className="px-3 py-1.5 rounded border-2 border-black bg-brand-red text-white hover:bg-black font-mono text-xs font-bold shadow-comic-sm transition-colors"
+          >
+            📖 GUIDE VISUAL STUDIO
+          </Link>
+          <Link
+            href="/anarchy-visual-design"
+            className="px-3 py-1.5 rounded border-2 border-black bg-brand-white hover:bg-brand-pearl font-mono text-xs font-bold shadow-comic-sm"
+          >
+            ← RETOUR STUDIO
+          </Link>
+        </div>
       </div>
 
       <div className="space-y-3">

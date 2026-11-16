@@ -176,7 +176,7 @@ async function decodeChannels(
       decoded.length * decoded.numberOfChannels * 4 > LIMITS.pcmBytes
     ) {
       throw new Error(
-        "Audio trop complexe : mono/stéréo et 64 Mio de PCM maximum."
+        "Audio trop complexe : mono/stéréo et 96 Mio de PCM maximum."
       );
     }
     return Array.from({ length: decoded.numberOfChannels }, (_, i) =>

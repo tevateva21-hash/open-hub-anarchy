@@ -14,25 +14,15 @@ interface NavItem {
   label: string;
 }
 
-const NAV_ITEMS: NavItem[] = [
-  { id: "nav-vst", href: "/", label: SITE_TEXTS.nav.vst },
-  { id: "nav-samples", href: "/samples", label: SITE_TEXTS.nav.samples },
-  {
-    id: "nav-visual-design",
-    href: "/anarchy-visual-design",
-    label: SITE_TEXTS.nav.visualDesign,
-  },
-  { id: "nav-radio", href: "/radio", label: SITE_TEXTS.nav.radio },
-  { id: "nav-sons-commu", href: "/sons-communaute", label: SITE_TEXTS.nav.sonsCommu },
-  { id: "nav-reseau", href: "/reseau", label: SITE_TEXTS.nav.social },
-  { id: "nav-forum", href: "/forum", label: SITE_TEXTS.nav.forum },
-  { id: "nav-blog", href: "/blog", label: SITE_TEXTS.nav.blog },
+const STUDIO_NAV_ITEMS: NavItem[] = [
+  { id: "nav-visual-design", href: "/anarchy-visual-design", label: "🎨 VISUAL STUDIO" },
+  { id: "nav-visual-editeur", href: "/anarchy-visual-design/editeur", label: "💻 ÉDITEUR C++" },
+  { id: "nav-visual-docs", href: "/docs/visual-studio", label: "📖 DOCUMENTATION" },
 ];
 
 /**
- * Composant `HeaderNav` — Navigation principale directe (VST Hub, Samples,
- * Visual Design, Radio, Forum, Blog & Docs) sans onglet Communauté séparé,
- * chaque section intégrant ses propres tiroirs Anarchy / Communauté.
+ * Composant `HeaderNav` — En-tête épuré centré sur Anarchy Visual Studio
+ * et sa documentation, sans liens vers les autres catégories (Samples, VST, etc.).
  */
 export const HeaderNav: React.FC = () => {
   const pathname = usePathname() || "/";
@@ -41,20 +31,8 @@ export const HeaderNav: React.FC = () => {
   const { user, openAuthModal, logout } = useAuth();
 
   const isRouteActive = (href: string): boolean => {
-    if (href === "/") {
-      return pathname === "/" || pathname.startsWith("/vst");
-    }
-    if (
-      href === "/samples" &&
-      pathname.startsWith("/communaute/samples")
-    ) {
-      return true;
-    }
-    if (href === "/forum" && pathname.startsWith("/communaute/forum")) {
-      return true;
-    }
-    if (href === "/blog" && pathname.startsWith("/communaute/blog")) {
-      return true;
+    if (href === "/anarchy-visual-design") {
+      return pathname === "/anarchy-visual-design";
     }
     return pathname === href || pathname.startsWith(`${href}/`);
   };
@@ -67,7 +45,7 @@ export const HeaderNav: React.FC = () => {
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between gap-3">
         {/* Identité visuelle & Titre technique */}
         <Link
-          href="/"
+          href="/anarchy-visual-design"
           className="flex items-center gap-3 focus:outline-none group shrink-0"
         >
           {/* Emblème Lunettes 3D Anaglyphes encré style BD */}
@@ -131,13 +109,13 @@ export const HeaderNav: React.FC = () => {
           </span>
         </Link>
 
-        {/* Navigation Principale Desktop */}
+        {/* Navigation Studio & Documentation uniquement */}
         <nav
           id="primary-navigation"
-          aria-label="Navigation principale"
-          className="hidden md:flex items-center gap-1 font-mono text-xs"
+          aria-label="Navigation Studio"
+          className="hidden md:flex items-center gap-1.5 font-mono text-xs"
         >
-          {NAV_ITEMS.map((item) => {
+          {STUDIO_NAV_ITEMS.map((item) => {
             const active = isRouteActive(item.href);
             return (
               <Link
@@ -158,7 +136,7 @@ export const HeaderNav: React.FC = () => {
           })}
         </nav>
 
-        {/* Zone droite : Connexion / @pseudo + Statut Radio + AvatarBD + Toggle Mobile */}
+        {/* Zone droite : Connexion / @pseudo + Statut Audio + AvatarBD + Toggle Mobile */}
         <div className="flex items-center gap-2 shrink-0">
           {(isPlaying || externalAudio?.isPlaying) && (
             <div
@@ -184,12 +162,9 @@ export const HeaderNav: React.FC = () => {
 
           {user ? (
             <div className="hidden sm:flex items-center gap-1.5">
-              <Link
-                href="/reseau"
-                className="px-2 py-1 rounded bg-brand-pearl border border-black font-mono text-[11px] font-bold text-brand-black hover:bg-brand-white"
-              >
+              <span className="px-2 py-1 rounded bg-brand-pearl border border-black font-mono text-[11px] font-bold text-brand-black">
                 @{user.pseudo}
-              </Link>
+              </span>
               <button
                 type="button"
                 onClick={logout}
@@ -210,17 +185,15 @@ export const HeaderNav: React.FC = () => {
             </button>
           )}
 
-          <Link href="/reseau" aria-label="Profil et réseau communautaire">
-            <AvatarBD
-              id="header-user-avatar"
-              name={user?.pseudo ?? "Visiteur"}
-              expression={user?.expression ?? "spectateur-a"}
-              src={user?.avatarUrl}
-              size="sm"
-              badgeText={user ? "ON" : "3D"}
-              audioReactive={isPlaying}
-            />
-          </Link>
+          <AvatarBD
+            id="header-user-avatar"
+            name={user?.pseudo ?? "Visiteur"}
+            expression={user?.expression ?? "spectateur-a"}
+            src={user?.avatarUrl}
+            size="sm"
+            badgeText={user ? "ON" : "3D"}
+            audioReactive={isPlaying}
+          />
 
           {/* Bouton Hamburger / Drawer Mobile (<768px) */}
           <button
@@ -253,7 +226,7 @@ export const HeaderNav: React.FC = () => {
             aria-label="Navigation mobile"
             className="flex flex-col gap-1.5 font-mono text-xs"
           >
-            {NAV_ITEMS.map((item) => {
+            {STUDIO_NAV_ITEMS.map((item) => {
               const active = isRouteActive(item.href);
               return (
                 <Link

@@ -201,11 +201,18 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
           </p>
         </div>
 
-        <Link href="/anarchy-visual-design">
-          <Button variant="primary" size="md">
-            ← RETOUR AU STUDIO
-          </Button>
-        </Link>
+        <div className="flex flex-wrap items-center gap-2">
+          <Link href="/docs/visual-studio">
+            <Button variant="clinical" size="md">
+              📖 DOCS STUDIO
+            </Button>
+          </Link>
+          <Link href="/anarchy-visual-design">
+            <Button variant="primary" size="md">
+              ← RETOUR AU STUDIO
+            </Button>
+          </Link>
+        </div>
       </div>
 
       {statusMsg && (
