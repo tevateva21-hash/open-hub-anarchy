@@ -28,7 +28,16 @@ import {
   type PresetParameterPath,
   type RetroPresetConfig,
   type StudioProject,
+  type TimedLyricWord,
+  type VideoAspectRatio,
 } from "@/lib/visual-engine/contracts";
+import {
+  VIDEO_ASPECT_FORMATS,
+  evaluateLyricsAt,
+  extractAudioClipWav,
+  formatLrcTimestamp,
+  formatWhisperToLrc,
+} from "@/lib/visual-engine/lyrics-scenario";
 import {
   createAudioFeatureAccessor,
   createSyntheticDemoWavFile,
@@ -45,7 +54,6 @@ import {
 import {
   STUDY_FPS,
   STUDY_PALETTES,
-  STUDY_SIZE,
   getSceneDescriptor,
   renderSceneFrame,
   type SceneRenderReport,
@@ -124,14 +132,22 @@ export const VisualEngineStudio: React.FC = () => {
   );
   const variationSeedNonceRef = useRef<number>(1);
 
-  // Paroles incrustées & Micro
+  // Paroles incrustées, Scénario LRC, Whisper & Micro
   const [lyricsEnabled, setLyricsEnabled] = useState<boolean>(false);
   const [lyricsText, setLyricsText] = useState<string>(
-    "ANARCHY VISUAL ENGINE\nTECHNO THERAPY LOCKED\nOPEN HUB 3D"
+    "[00:00.00] #INTRO ANARCHY VISUAL ENGINE\n[00:05.00] #DROP TECHNO THERAPY LOCKED\n[00:10.00] #REFRAIN OPEN HUB 3D"
   );
   const [lyricsStyle, setLyricsStyle] =
     useState<LyricsDisplayStyle>("cinema-sub");
   const [speechActive, setSpeechActive] = useState<boolean>(false);
+  const [timedWords, setTimedWords] = useState<TimedLyricWord[]>([]);
+  const [whisperBusy, setWhisperBusy] = useState<boolean>(false);
+  const [whisperStatus, setWhisperStatus] = useState<string>("");
+
+  // Format vidéo Réseaux Sociaux (16:9, 9:16 TikTok/Reels, 4:5 Insta, 1:1 Carré)
+  const [aspectRatio, setAspectRatio] = useState<VideoAspectRatio>("16:9");
+  const [showSafeZone, setShowSafeZone] = useState<boolean>(true);
+  const aspectSpec = VIDEO_ASPECT_FORMATS[aspectRatio];
 
   // Import MP3/WAV + Web Worker FFT + IndexedDB
   const [analysis, setAnalysis] = useState<AudioAnalysis>();
@@ -542,6 +558,7 @@ export const VisualEngineStudio: React.FC = () => {
             text: lyricsText,
             style: lyricsStyle,
             autoVocalSync: true,
+            timedWords,
           },
           bpmConfig:
             autoSceneSwitchBeats > 0 ||
@@ -555,23 +572,38 @@ export const VisualEngineStudio: React.FC = () => {
               : undefined,
           camera: effectivePreset.render.camera,
           seed: activeSlot?.seed ?? effectivePreset.seed,
+          aspectRatio,
         });
 
         if (cppFnRef.current) {
           try {
             const beatFloat = Math.max(0, (timeSeconds - beatOffset) * (bpm / 60));
-            const cppCtx = createCppRenderContext(ctx, 320, 180, {
-              t: timeSeconds,
-              bpm,
-              beat: Math.floor(beatFloat),
-              beatPhase: beatFloat - Math.floor(beatFloat),
-              bass: nextReport.audio.bassEnvelope,
-              mid: nextReport.audio.midEnvelope,
-              treble: nextReport.audio.trebleEnvelope,
-              rms: nextReport.audio.rmsEnvelope,
-              flux: nextReport.audio.transientPulse,
-              sceneIndex: livePackSlotIndexRef.current,
-            });
+            const lyricEval = evaluateLyricsAt(
+              lyricsText,
+              timeSeconds,
+              timedWords
+            );
+            const cppCtx = createCppRenderContext(
+              ctx,
+              aspectSpec.width,
+              aspectSpec.height,
+              {
+                t: timeSeconds,
+                bpm,
+                beat: Math.floor(beatFloat),
+                beatPhase: beatFloat - Math.floor(beatFloat),
+                bass: nextReport.audio.bassEnvelope,
+                mid: nextReport.audio.midEnvelope,
+                treble: nextReport.audio.trebleEnvelope,
+                rms: nextReport.audio.rmsEnvelope,
+                flux: nextReport.audio.transientPulse,
+                sceneIndex: livePackSlotIndexRef.current,
+                lyricLine: lyricEval.line,
+                lyricWord: lyricEval.activeWord,
+                lyricProgress: lyricEval.progress,
+                lyricSection: lyricEval.section,
+              }
+            );
             cppFnRef.current(cppCtx);
           } catch {
             // ignore runtime errors from custom C++
@@ -589,6 +621,9 @@ export const VisualEngineStudio: React.FC = () => {
   }, [
     analysis,
     applyClipFadeVolume,
+    aspectRatio,
+    aspectSpec.height,
+    aspectSpec.width,
     autoAnimate,
     autoSceneSwitchBeats,
     bassGain,
@@ -610,6 +645,7 @@ export const VisualEngineStudio: React.FC = () => {
     project,
     sourceMode,
     stopActiveRecording,
+    timedWords,
     trebleGain,
   ]);
 
@@ -672,19 +708,94 @@ export const VisualEngineStudio: React.FC = () => {
     const src = stageCanvasRef.current;
     if (!src) return;
     const exportCanvas = document.createElement("canvas");
-    exportCanvas.width = 1280;
-    exportCanvas.height = 720;
+    exportCanvas.width = aspectSpec.exportWidth;
+    exportCanvas.height = aspectSpec.exportHeight;
     const ectx = exportCanvas.getContext("2d");
     if (!ectx) return;
     ectx.imageSmoothingEnabled = false;
-    ectx.drawImage(src, 0, 0, 1280, 720);
+    ectx.drawImage(
+      src,
+      0,
+      0,
+      aspectSpec.exportWidth,
+      aspectSpec.exportHeight
+    );
     const url = exportCanvas.toDataURL("image/png");
     const a = document.createElement("a");
     a.href = url;
-    a.download = `anarchy-visual-${preset.sceneId}-${preset.paletteId}-${preset.seed}.png`;
+    a.download = `anarchy-visual-${aspectRatio.replace(":", "x")}-${preset.sceneId}-${preset.seed}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+  };
+
+  const handleWhisperTranscribe = async () => {
+    if (!localUrl) {
+      setWhisperStatus(
+        "Importez d'abord une piste MP3/WAV (ou chargez la piste démo) pour la transcrire avec Whisper."
+      );
+      return;
+    }
+    setWhisperBusy(true);
+    setWhisperStatus(
+      `Découpage de l'extrait (${clipStartSeconds.toFixed(1)}s → ${(clipStartSeconds + clipDurationSeconds).toFixed(1)}s) & envoi Whisper...`
+    );
+    try {
+      const wavFile = await extractAudioClipWav(
+        localUrl,
+        clipStartSeconds,
+        clipDurationSeconds
+      );
+      const fd = new FormData();
+      fd.append("file", wavFile);
+      fd.append("language", "fr");
+      const res = await fetch("/api/whisper", { method: "POST", body: fd });
+      const data = await res.json();
+      if (!res.ok) {
+        setWhisperStatus(data.error || "Erreur Whisper.");
+        return;
+      }
+
+      const rawWords = Array.isArray(data.words)
+        ? (data.words as Array<{ word: string; start: number; end: number }>)
+        : [];
+      const shiftedWords: TimedLyricWord[] = rawWords.map((w) => ({
+        word: w.word,
+        start: Number((w.start + clipStartSeconds).toFixed(2)),
+        end: Number((w.end + clipStartSeconds).toFixed(2)),
+      }));
+      setTimedWords(shiftedWords);
+
+      const segments = Array.isArray(data.segments) ? data.segments : [];
+      const lrc =
+        segments.length > 0
+          ? formatWhisperToLrc(segments, clipStartSeconds)
+          : `${formatLrcTimestamp(clipStartSeconds)} ${String(data.text || "").toUpperCase()}`;
+      if (lrc) {
+        setLyricsText(lrc);
+      }
+      setLyricsEnabled(true);
+      setWhisperStatus(
+        `✅ Whisper (${data.provider}) : ${shiftedWords.length} mots synchronisés au centième de seconde !`
+      );
+    } catch (err) {
+      setWhisperStatus(
+        err instanceof Error
+          ? err.message
+          : "Impossible de contacter /api/whisper."
+      );
+    } finally {
+      setWhisperBusy(false);
+    }
+  };
+
+  const handleInsertLrcTimecode = () => {
+    const t = localAudioRef.current?.currentTime ?? localTime;
+    const stamp = formatLrcTimestamp(t);
+    setLyricsText((prev) =>
+      prev.trim().length > 0 ? `${prev.trimEnd()}\n${stamp} ` : `${stamp} `
+    );
+    setLyricsEnabled(true);
   };
 
   const handleToggleVideoExport = async () => {
@@ -1475,23 +1586,93 @@ export const VisualEngineStudio: React.FC = () => {
             moduleTitle={`STAGE_OUTPUT // ${activeDescriptor.name.toUpperCase()}`}
             moduleMeta={
               isLowPoly && renderReport
-                ? `${STUDY_SIZE.width}×${STUDY_SIZE.height} // ${renderReport.triangleCount}/${activeDescriptor.geometryBudget.maxTriangles} TRI`
-                : `${STUDY_SIZE.width}×${STUDY_SIZE.height} PIXEL-PERFECT`
+                ? `${aspectSpec.width}×${aspectSpec.height} (${aspectRatio}) // ${renderReport.triangleCount}/${activeDescriptor.geometryBudget.maxTriangles} TRI`
+                : `${aspectSpec.width}×${aspectSpec.height} (${aspectRatio}) PIXEL-PERFECT`
             }
             activeIndicator
           >
             <div className="space-y-4">
-              {/* Cadre moniteur encré style BD / Figma */}
-              <div className="relative rounded-xl border-4 border-black bg-[#08090c] p-2 shadow-comic">
-                <canvas
-                  ref={stageCanvasRef}
-                  width={STUDY_SIZE.width}
-                  height={STUDY_SIZE.height}
-                  role="img"
-                  aria-label={activeDescriptor.ariaLabel}
-                  className="w-full aspect-video rounded border-2 border-neutral-800 bg-black"
-                  style={{ imageRendering: "pixelated" }}
-                />
+              {/* Sélecteur de format Réseaux Sociaux (TikTok / Insta / YouTube) */}
+              <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-brand-pearl border-2 border-black font-mono text-[10px]">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="font-bold text-brand-red uppercase mr-1">
+                    FORMAT :
+                  </span>
+                  {(["16:9", "9:16", "4:5", "1:1"] as const).map((ratio) => {
+                    const spec = VIDEO_ASPECT_FORMATS[ratio];
+                    const active = aspectRatio === ratio;
+                    return (
+                      <button
+                        key={ratio}
+                        type="button"
+                        id={`btn-aspect-${ratio.replace(":", "x")}`}
+                        onClick={() => setAspectRatio(ratio)}
+                        title={spec.label}
+                        className={`px-2 py-1 rounded border-2 font-bold transition-all ${
+                          active
+                            ? "bg-black text-white border-black shadow-comic-sm"
+                            : "bg-brand-white text-brand-black border-neutral-300 hover:border-black"
+                        }`}
+                      >
+                        {spec.shortLabel}
+                      </button>
+                    );
+                  })}
+                </div>
+                {(aspectRatio === "9:16" || aspectRatio === "4:5") && (
+                  <label className="inline-flex items-center gap-1.5 font-bold text-brand-black cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showSafeZone}
+                      onChange={(e) => setShowSafeZone(e.target.checked)}
+                      className="accent-brand-red"
+                    />
+                    <span>Safe Zone TikTok/Reels</span>
+                  </label>
+                )}
+              </div>
+
+              {/* Cadre moniteur encré style BD / Figma adapté au ratio */}
+              <div className="relative rounded-xl border-4 border-black bg-[#08090c] p-2 shadow-comic flex justify-center">
+                <div
+                  className="relative"
+                  style={{
+                    width:
+                      aspectRatio === "9:16"
+                        ? "min(100%, 270px)"
+                        : aspectRatio === "4:5"
+                        ? "min(100%, 340px)"
+                        : aspectRatio === "1:1"
+                        ? "min(100%, 360px)"
+                        : "100%",
+                  }}
+                >
+                  <canvas
+                    ref={stageCanvasRef}
+                    width={aspectSpec.width}
+                    height={aspectSpec.height}
+                    role="img"
+                    aria-label={activeDescriptor.ariaLabel}
+                    className="w-full h-auto rounded border-2 border-neutral-800 bg-black block"
+                    style={{
+                      imageRendering: "pixelated",
+                      aspectRatio: `${aspectSpec.width} / ${aspectSpec.height}`,
+                    }}
+                  />
+                  {showSafeZone &&
+                    (aspectRatio === "9:16" || aspectRatio === "4:5") && (
+                      <div
+                        aria-hidden="true"
+                        className="pointer-events-none absolute inset-0 rounded border-2 border-dashed border-[#00E5FF]/60"
+                      >
+                        <div className="absolute top-[11%] left-[6%] right-[16%] bottom-[22%] border border-dashed border-brand-red/70 rounded">
+                          <span className="inline-block bg-black/75 text-[#00E5FF] font-mono text-[8px] px-1">
+                            SAFE ZONE {aspectRatio}
+                          </span>
+                        </div>
+                      </div>
+                    )}
+                </div>
               </div>
 
               {/* Barre Actions & Export MP4 synchronisée (proche du son et de l'image) */}
@@ -1508,8 +1689,8 @@ export const VisualEngineStudio: React.FC = () => {
                     {isRecordingVideo
                       ? "⏺ Enregistrement en cours (arrêt auto fin d'extrait)..."
                       : sourceMode === "LOCAL_FILE"
-                        ? "Prêt : piste locale + fondus + vidéo"
-                        : "Prêt : flux Open Hub + vidéo"}
+                        ? `Prêt : ${aspectSpec.exportWidth}×${aspectSpec.exportHeight} + son`
+                        : `Prêt : ${aspectSpec.exportWidth}×${aspectSpec.exportHeight} + flux Hub`}
                   </span>
                 </div>
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -1541,7 +1722,7 @@ export const VisualEngineStudio: React.FC = () => {
                       size="sm"
                       onClick={handleExportSnapshot}
                     >
-                      ⬇ PNG 1280×720
+                      ⬇ PNG {aspectSpec.exportWidth}×{aspectSpec.exportHeight}
                     </Button>
                     <Button
                       id="btn-ve-video"
@@ -1551,7 +1732,7 @@ export const VisualEngineStudio: React.FC = () => {
                     >
                       {isRecordingVideo
                         ? "⏹ STOP & SAUVER MP4"
-                        : `🎬 EXPORTER EXTRAIT MP4 (${clipDurationSeconds}s + SON)`}
+                        : `🎬 EXPORTER MP4 ${aspectRatio} (${clipDurationSeconds}s + SON)`}
                     </Button>
                   </div>
                 </div>
@@ -2112,8 +2293,12 @@ export const VisualEngineStudio: React.FC = () => {
       {showLyricsPanel && (
       <div>
           <Card
-            moduleTitle="LYRICS_OVERLAY // BITMAP_5X5_&_MIC"
-            moduleMeta="SYNCHRO VOCALE MÉDIUMS"
+            moduleTitle="LYRICS_&_SCENARIO // WHISPER_LRC_&_BITMAP"
+            moduleMeta={
+              timedWords.length > 0
+                ? `WHISPER SYNC (${timedWords.length} MOTS)`
+                : "LRC HORODATÉ · #SECTION · C++"
+            }
             activeIndicator={lyricsEnabled}
           >
             <div className="space-y-4">
@@ -2129,39 +2314,88 @@ export const VisualEngineStudio: React.FC = () => {
                     onChange={(e) => setLyricsEnabled(e.target.checked)}
                     className="accent-brand-red w-4 h-4"
                   />
-                  <span>Activer incrustation paroles</span>
+                  <span>Activer paroles &amp; scénario</span>
                 </label>
 
-                <Button
-                  id="btn-ve-mic"
-                  variant={speechActive ? "primary" : "comic"}
-                  size="sm"
-                  onClick={handleSpeechMic}
-                >
-                  {speechActive ? "● ÉCOUTE MICRO..." : "🎙 MICRO PAROLES"}
-                </Button>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    id="btn-ve-whisper"
+                    variant="primary"
+                    size="sm"
+                    disabled={whisperBusy}
+                    onClick={() => void handleWhisperTranscribe()}
+                  >
+                    {whisperBusy ? "⏳ WHISPER..." : "✨ TRANSCRIRE (WHISPER)"}
+                  </Button>
+                  <Button
+                    id="btn-ve-timecode"
+                    variant="clinical"
+                    size="sm"
+                    onClick={handleInsertLrcTimecode}
+                  >
+                    ⏱ + TIMECODE
+                  </Button>
+                  <Button
+                    id="btn-ve-mic"
+                    variant={speechActive ? "primary" : "comic"}
+                    size="sm"
+                    onClick={handleSpeechMic}
+                  >
+                    {speechActive ? "● ÉCOUTE MICRO..." : "🎙 MICRO"}
+                  </Button>
+                </div>
               </div>
 
-              <div>
-                <label
-                  htmlFor="ve-lyrics-style"
-                  className="block font-mono text-[10px] font-bold uppercase text-neutral-500 mb-1"
+              {whisperStatus && (
+                <p
+                  role="status"
+                  className="p-2.5 rounded bg-brand-pearl border-l-4 border-[#00E5FF] font-mono text-[11px] text-brand-black"
                 >
-                  Style typographique pixel
-                </label>
-                <select
-                  id="ve-lyrics-style"
-                  value={lyricsStyle}
-                  onChange={(e) =>
-                    setLyricsStyle(e.target.value as LyricsDisplayStyle)
-                  }
-                  className="w-full px-3 py-1.5 rounded-lg border-2 border-black bg-brand-white font-mono text-xs font-bold"
+                  {whisperStatus}
+                </p>
+              )}
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
+                <div>
+                  <label
+                    htmlFor="ve-lyrics-style"
+                    className="block font-mono text-[10px] font-bold uppercase text-neutral-500 mb-1"
+                  >
+                    Style typographique pixel
+                  </label>
+                  <select
+                    id="ve-lyrics-style"
+                    value={lyricsStyle}
+                    onChange={(e) =>
+                      setLyricsStyle(e.target.value as LyricsDisplayStyle)
+                    }
+                    className="w-full px-3 py-1.5 rounded-lg border-2 border-black bg-brand-white font-mono text-xs font-bold"
+                  >
+                    <option value="cinema-sub">Sous-titre Cinéma 16-bit</option>
+                    <option value="center-impact">Impact Central Brutaliste</option>
+                    <option value="hud-terminal">Terminal HUD Haut</option>
+                    <option value="psyche-wave">Onde Psychédélique</option>
+                  </select>
+                </div>
+
+                <Button
+                  type="button"
+                  variant="comic"
+                  size="sm"
+                  onClick={() => {
+                    const scenarioPrompt = `Transforme ces paroles en scénario LRC horodaté pour Anarchy Visual Studio (${bpm} BPM, extrait ${clipStartSeconds.toFixed(1)}s → ${(clipStartSeconds + clipDurationSeconds).toFixed(1)}s) :\nFormat exact par ligne : [mm:ss.xx] #SECTION TEXTE COURT\nSections disponibles : #INTRO, #COUPLET, #PRE_DROP, #DROP, #REFRAIN, #OUTRO.\nGarde 3 à 6 mots max par ligne pour un rendu TikTok / 9:16 lisible.`;
+                    navigator.clipboard
+                      ?.writeText(scenarioPrompt)
+                      .then(() =>
+                        setWhisperStatus(
+                          "📋 Prompt IA Scénario LRC copié ! Colle-le dans ton IA avec tes paroles."
+                        )
+                      )
+                      .catch(() => {});
+                  }}
                 >
-                  <option value="cinema-sub">Sous-titre Cinéma 16-bit</option>
-                  <option value="center-impact">Impact Central Brutaliste</option>
-                  <option value="hud-terminal">Terminal HUD Haut</option>
-                  <option value="psyche-wave">Onde Psychédélique</option>
-                </select>
+                  📋 PROMPT IA SCÉNARIO LRC
+                </Button>
               </div>
 
               <div>
@@ -2169,21 +2403,27 @@ export const VisualEngineStudio: React.FC = () => {
                   htmlFor="ve-lyrics-text"
                   className="block font-mono text-[10px] font-bold uppercase text-neutral-500 mb-1"
                 >
-                  Texte affiché sur la scène (1 ligne / 2.5s)
+                  Scénario &amp; Paroles LRC ([mm:ss.xx] #SECTION Texte)
                 </label>
                 <textarea
                   id="ve-lyrics-text"
                   rows={5}
                   value={lyricsText}
-                  onChange={(e) => setLyricsText(e.target.value)}
-                  placeholder="Entrez vos paroles ou slogans..."
+                  onChange={(e) => {
+                    setLyricsText(e.target.value);
+                    if (timedWords.length > 0) setTimedWords([]);
+                  }}
+                  placeholder="[00:00.00] #INTRO ANARCHY VISUAL ENGINE"
                   className="w-full p-3 rounded-lg border-2 border-black bg-brand-pearl font-mono text-xs text-brand-black focus:outline-none focus:border-brand-red"
                 />
               </div>
 
               <div className="p-3 rounded-lg bg-brand-pearl border-l-4 border-brand-red font-mono text-[11px] text-neutral-600">
-                Chaque mot s&apos;illumine dynamiquement selon la bande médiums
-                (250–2000 Hz) avec police bitmap 5×5 intégrée au moteur.
+                Supporte les timecodes LRC (<code>[00:08.50]</code>), les sections
+                scénario (<code>#INTRO</code>, <code>#DROP</code>,{" "}
+                <code>#REFRAIN</code>) transmises au runtime C++ (
+                <code>ctx.lyricWord</code>, <code>ctx.lyricSection</code>), et
+                l&apos;alignement mot-à-mot via <strong>Whisper</strong>.
               </div>
             </div>
           </Card>

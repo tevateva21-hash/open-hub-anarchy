@@ -88,11 +88,20 @@ export type LyricsDisplayStyle =
   | "hud-terminal"
   | "psyche-wave";
 
+export type VideoAspectRatio = "16:9" | "9:16" | "4:5" | "1:1";
+
+export interface TimedLyricWord {
+  word: string;
+  start: number;
+  end: number;
+}
+
 export interface LyricsOverlayConfig {
   enabled: boolean;
   text: string;
   style: LyricsDisplayStyle;
   autoVocalSync: boolean;
+  timedWords?: readonly TimedLyricWord[];
 }
 
 export interface OrthographicCameraSettings {
@@ -263,6 +272,7 @@ export interface SceneFrameInput {
   bpmConfig?: BpmSyncConfig;
   camera?: OrthographicCameraSettings | PerspectiveCameraSettings;
   seed?: number;
+  aspectRatio?: VideoAspectRatio;
 }
 
 export type TransitionKind = "cut" | "dither-dissolve";

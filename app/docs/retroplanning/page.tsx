@@ -101,9 +101,15 @@ const MILESTONES = [
   },
   {
     id: "M16",
-    commit: "ACTUEL",
+    commit: "fed2173",
     title: "Panneau Couleurs & Variations Rapides Live",
     details: "Suppression des contrôles redondants (sélecteur 5 scènes, BPM/Auto Switch/Kick Mode, Vertex Snap, Seed, JSON, Sauver/Charger/Reset) ; conservation uniquement du changement de couleur (Palette principale + Cible Color Morph) et des 4 Variations rapides, avec application immédiate vérifiée sur le rendu vidéo.",
+  },
+  {
+    id: "M17",
+    commit: "ACTUEL",
+    title: "Formats TikTok/Insta (9:16, 4:5, 1:1), Whisper, Scénario LRC & C++ Paroles",
+    details: "Ajout du sélecteur de format vidéo (16:9, 9:16 TikTok/Reels + Safe Zone, 4:5 Insta, 1:1 Carré) sur le moteur et l'export PNG/MP4 ; intégration Whisper (/api/whisper) sur l'extrait audio, scénario LRC horodaté (#INTRO, #DROP), variables C++ paroles/dimensions et Prompts IA dédiés.",
   },
 ];
 

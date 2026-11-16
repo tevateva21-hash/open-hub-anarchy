@@ -14,6 +14,10 @@ export interface CppRenderContext {
   width: number;
   height: number;
   sceneIndex: number;
+  lyricLine: string;
+  lyricWord: string;
+  lyricProgress: number;
+  lyricSection: string;
   clear: (color?: string) => void;
   background: (r: number, g: number, b: number, alpha?: number) => void;
   tint: (color: string, alpha?: number) => void;
@@ -131,7 +135,66 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
   ctx.scanlines(0.18f);
 }`,
   },
+  {
+    id: "cpp-tiktok-karaoke",
+    name: "TikTok / Reels // Paroles Karaoké & Glitch",
+    code: `// Animation paroles mot-à-mot (adaptée 9:16, 4:5, 1:1, 16:9)
+void renderAnarchyFrame(AnarchyCtx& ctx) {
+  float cx = ctx.width * 0.5f;
+  float cy = ctx.height * 0.72f;
+  float pulse = 1.0f + ctx.bass * 0.12f;
+  ctx.zoom(pulse);
+
+  if (ctx.flux > 0.35f) {
+    ctx.glitchSlices(ctx.flux * 0.5f);
+  }
+  if (ctx.lyricWord.length > 0) {
+    float x = _clamp(cx - ctx.lyricWord.length * 4.5f, 8.0f, ctx.width - 40.0f);
+    ctx.rect(x - 6, cy - 16, ctx.lyricWord.length * 9 + 12, 22, "#000000");
+    ctx.text(ctx.lyricWord, x - 1, cy, "#FF1B24", 13);
+    ctx.text(ctx.lyricWord, x + 1, cy, "#00E5FF", 13);
+    ctx.text(ctx.lyricWord, x, cy, "#FFFFFF", 13);
+  }
+  ctx.scanlines(0.15f);
+}`,
+  },
+  {
+    id: "cpp-scenario-storyboard",
+    name: "Scénario // Sections & Barre Progression",
+    code: `// Réagit aux sections #INTRO / #DROP et à la progression des paroles
+void renderAnarchyFrame(AnarchyCtx& ctx) {
+  float barW = (ctx.width - 20.0f) * ctx.lyricProgress;
+  ctx.rect(10, ctx.height - 16, ctx.width - 20, 4, "#15161A");
+  ctx.rect(10, ctx.height - 16, barW, 4, "#FF1B24");
+
+  if (ctx.lyricSection == "DROP") {
+    ctx.ring(ctx.width * 0.5f, ctx.height * 0.45f, 20.0f + ctx.bass * 55.0f, 2.0f, "#00E5FF");
+  }
+  ctx.text(ctx.lyricSection, 10, 22, "#00E5FF", 10);
+  if (ctx.lyricLine.length > 0) {
+    ctx.text(ctx.lyricLine, 10, ctx.height - 26, "#FFFFFF", 9);
+  }
+}`,
+  },
 ];
+
+export const CPP_SHADER_AI_PROMPT = `Tu es un artiste shader C++ pour Open Hub / Anarchy Visual Studio.
+Génère une fonction C++ compatible avec le runtime navigateur :
+void renderAnarchyFrame(AnarchyCtx& ctx) { ... }
+
+Variables disponibles sur ctx :
+- Temps & BPM : ctx.t, ctx.bpm, ctx.beat, ctx.beatPhase (0..1)
+- Audio live : ctx.bass, ctx.mid, ctx.treble, ctx.rms, ctx.flux (0..1)
+- Dimensions dynamiques (16:9=320x180, 9:16=180x320, 4:5=240x300, 1:1=240x240) : ctx.width, ctx.height
+- Scénario & Paroles (LRC / Whisper) : ctx.lyricLine, ctx.lyricWord, ctx.lyricProgress (0..1), ctx.lyricSection (ex: "MAIN", "DROP", "REFRAIN")
+
+Méthodes disponibles :
+- ctx.clear(color), ctx.tint(color, alpha), ctx.zoom(scale)
+- ctx.circle(x, y, r, color, fill), ctx.ring(x, y, r, lineWidth, color), ctx.line(x1, y1, x2, y2, w, color), ctx.rect(x, y, w, h, color)
+- ctx.grid(spacing, color, scrollSpeed), ctx.kaleidoscope(segments, speed), ctx.glitchSlices(amount), ctx.scanlines(alpha), ctx.invert(amount)
+- ctx.text(str, x, y, color, size)
+
+Contraintes : utilise toujours ctx.width et ctx.height pour que l'effet marche en 9:16 TikTok/Reels comme en 16:9 YouTube, et anime ctx.lyricWord / ctx.lyricSection sur ctx.bass et ctx.flux.`;
 
 export const DEFAULT_CPP_SHADER_CODE = CPP_PRESET_TEMPLATES[0].code;
 
@@ -264,6 +327,10 @@ export function createCppRenderContext(
     rms: number;
     flux: number;
     sceneIndex: number;
+    lyricLine?: string;
+    lyricWord?: string;
+    lyricProgress?: number;
+    lyricSection?: string;
   }
 ): CppRenderContext {
   const rgb = (r: number, g: number, b: number) =>
@@ -273,6 +340,10 @@ export function createCppRenderContext(
 
   return {
     ...telemetry,
+    lyricLine: telemetry.lyricLine ?? "",
+    lyricWord: telemetry.lyricWord ?? "",
+    lyricProgress: telemetry.lyricProgress ?? 0,
+    lyricSection: telemetry.lyricSection ?? "MAIN",
     width,
     height,
     rgb,

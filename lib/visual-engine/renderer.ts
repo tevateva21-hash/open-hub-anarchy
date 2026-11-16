@@ -18,6 +18,7 @@ import {
   evaluateSequenceAt,
   type EvaluatedSequenceState,
 } from "./presets";
+import { evaluateLyricsAt, VIDEO_ASPECT_FORMATS } from "./lyrics-scenario";
 
 export { ENGINE_VERSION, STUDY_SIZE };
 export const STUDY_FPS = 12;
@@ -1433,37 +1434,38 @@ function drawLyricsOverlay(
   timeSeconds: number,
   audio: SceneAudioState,
   lyrics: NonNullable<SceneFrameInput["lyrics"]>,
-  reducedMotion: boolean
+  reducedMotion: boolean,
+  canvasW: number = STUDY_SIZE.width,
+  canvasH: number = STUDY_SIZE.height
 ): void {
-  const raw = lyrics.text
-    .normalize("NFD")
-    .replace(/[\u0300-\u036f]/g, "")
-    .toUpperCase()
-    .trim();
-  if (!raw) return;
+  const evalState = evaluateLyricsAt(
+    lyrics.text,
+    timeSeconds,
+    lyrics.timedWords
+  );
+  if (!evalState.line) return;
 
-  const lines = raw
-    .split(/\r?\n/)
-    .map((l) => l.trim())
-    .filter(Boolean);
-  if (lines.length === 0) return;
-
-  const lineIndex = Math.floor(timeSeconds / 2.5) % lines.length;
-  const activeLine = lines[lineIndex].slice(0, 38);
-  const words = activeLine.split(/\s+/);
-  const activeWordIndex =
-    words.length > 1 ? Math.floor((timeSeconds * 2.2) % words.length) : 0;
-
-  const scale = lyrics.style === "center-impact" ? 2 : 1;
+  const maxChars = Math.max(14, Math.floor((canvasW - 16) / 6));
+  const scale =
+    lyrics.style === "center-impact" && canvasW >= 240 ? 2 : 1;
   const charAdvance = 6 * scale;
-  const totalWidth = Math.min(304, activeLine.length * charAdvance);
-  const startX = Math.max(8, Math.floor((320 - totalWidth) / 2));
+  const maxLineChars = Math.max(10, Math.floor((canvasW - 16) / charAdvance));
+  const activeLine = evalState.line.slice(0, Math.min(maxChars, maxLineChars));
+  const totalWidth = Math.min(canvasW - 12, activeLine.length * charAdvance);
+  const startX = Math.max(6, Math.floor((canvasW - totalWidth) / 2));
+
+  // Positionnement adapté aux Safe Zones TikTok/Reels (9:16) vs 16:9
+  const isVertical = canvasH > canvasW;
   const baseY =
     lyrics.style === "center-impact"
-      ? 82
+      ? Math.floor(canvasH * 0.48)
       : lyrics.style === "hud-terminal"
-      ? 18
-      : 152;
+      ? isVertical
+        ? 44
+        : 18
+      : isVertical
+      ? Math.floor(canvasH * 0.72)
+      : Math.max(20, canvasH - 28);
 
   tools.rect(startX - 4, baseY - 3, totalWidth + 8, 5 * scale + 6, p.shadow);
   tools.rect(
@@ -1492,7 +1494,7 @@ function drawLyricsOverlay(
         : 0;
     const isHighlighted =
       !lyrics.autoVocalSync ||
-      currentWord === activeWordIndex ||
+      currentWord === evalState.activeWordIndex ||
       audio.midEnvelope > 0.3;
     const color = isHighlighted ? p.light : p.glow;
 
@@ -1511,7 +1513,7 @@ function drawLyricsOverlay(
       }
     }
     cursorX += charAdvance;
-    if (cursorX > 310) break;
+    if (cursorX > canvasW - 6) break;
   }
 }
 
@@ -1574,7 +1576,9 @@ function applyOpenHubPostFx(
   ctx: CanvasRenderingContext2D,
   effects: RetroEffects,
   audio: SceneAudioState,
-  timeSeconds: number
+  timeSeconds: number,
+  width: number = STUDY_SIZE.width,
+  height: number = STUDY_SIZE.height
 ): void {
   const splitNorm = clamp01(effects.anaglyphSplit ?? 0);
   if (splitNorm > 0.02) {
@@ -1582,11 +1586,11 @@ function applyOpenHubPostFx(
       1,
       Math.round(splitNorm * (3 + audio.transientPulse * 4))
     );
-    const imgData = ctx.getImageData(0, 0, STUDY_SIZE.width, STUDY_SIZE.height);
+    const imgData = ctx.getImageData(0, 0, width, height);
     const src = new Uint8ClampedArray(imgData.data);
     const dst = imgData.data;
-    const w = STUDY_SIZE.width;
-    const h = STUDY_SIZE.height;
+    const w = width;
+    const h = height;
     for (let y = 0; y < h; y++) {
       for (let x = 0; x < w; x++) {
         const idx = (y * w + x) * 4;
@@ -1603,8 +1607,8 @@ function applyOpenHubPostFx(
   if (grainStrength > 0.05) {
     ctx.fillStyle = `rgba(0,0,0,${(0.08 + grainStrength * 0.14).toFixed(3)})`;
     const offset = Math.floor(timeSeconds * 12) % 2;
-    for (let y = 8 + offset; y < STUDY_SIZE.height - 6; y += 2) {
-      ctx.fillRect(0, y, STUDY_SIZE.width, 1);
+    for (let y = 8 + offset; y < height - 6; y += 2) {
+      ctx.fillRect(0, y, width, 1);
     }
   }
 }
@@ -1770,14 +1774,37 @@ export function renderSceneFrame(
       : 1 + bassPump,
   };
 
+let cachedStageOffscreen: HTMLCanvasElement | null = null;
+function getStageOffscreenContext(): {
+  canvas: HTMLCanvasElement;
+  ctx: CanvasRenderingContext2D;
+} | null {
+  if (typeof document === "undefined") return null;
+  if (!cachedStageOffscreen) {
+    cachedStageOffscreen = document.createElement("canvas");
+    cachedStageOffscreen.width = STUDY_SIZE.width;
+    cachedStageOffscreen.height = STUDY_SIZE.height;
+  }
+  const octx = cachedStageOffscreen.getContext("2d");
+  if (!octx) return null;
+  return { canvas: cachedStageOffscreen, ctx: octx };
+}
+
   const frameIndex = Math.round(input.timeSeconds * STUDY_FPS);
   const seed = (input.seed ?? 1) >>> 0;
+  const aspectSpec = VIDEO_ASPECT_FORMATS[input.aspectRatio ?? "16:9"];
+  const targetW = aspectSpec.width;
+  const targetH = aspectSpec.height;
+  const isCustomAspect =
+    targetW !== STUDY_SIZE.width || targetH !== STUDY_SIZE.height;
+  const offscreen = isCustomAspect ? getStageOffscreenContext() : null;
+  const sceneCtx = offscreen ? offscreen.ctx : ctx;
 
-  ctx.save();
-  ctx.resetTransform();
-  ctx.globalAlpha = 1;
-  ctx.globalCompositeOperation = "source-over";
-  ctx.imageSmoothingEnabled = false;
+  sceneCtx.save();
+  sceneCtx.resetTransform();
+  sceneCtx.globalAlpha = 1;
+  sceneCtx.globalCompositeOperation = "source-over";
+  sceneCtx.imageSmoothingEnabled = false;
 
   if (descriptor.style === "pixel-16") {
     const pendulumPanX =
@@ -1786,29 +1813,36 @@ export function renderSceneFrame(
     const camX = orthoCam?.x ?? 0;
     const camY = orthoCam?.y ?? 0;
     if (zoom !== 1 || camX !== 0 || camY !== 0 || pendulumPanX !== 0) {
-      ctx.fillStyle = palette.shadow;
-      ctx.fillRect(0, 0, STUDY_SIZE.width, STUDY_SIZE.height);
-      ctx.translate(160 - (camX + pendulumPanX), 90 - camY);
-      ctx.scale(zoom, zoom);
-      ctx.translate(-160, -90);
+      sceneCtx.fillStyle = palette.shadow;
+      sceneCtx.fillRect(0, 0, STUDY_SIZE.width, STUDY_SIZE.height);
+      sceneCtx.translate(160 - (camX + pendulumPanX), 90 - camY);
+      sceneCtx.scale(zoom, zoom);
+      sceneCtx.translate(-160, -90);
     }
   }
 
-  const tools = createRasterTools(ctx);
+  const sceneTools = createRasterTools(sceneCtx);
 
   let vertexCount = 0;
   let triangleCount = 0;
 
   switch (descriptor.id) {
     case "industrial-city":
-      drawIndustrialCityScene(tools, palette, frameIndex, audio, effects);
+      drawIndustrialCityScene(sceneTools, palette, frameIndex, audio, effects);
       break;
     case "digital-void":
-      drawDigitalVoidScene(tools, palette, frameIndex, audio, effects, seed);
+      drawDigitalVoidScene(
+        sceneTools,
+        palette,
+        frameIndex,
+        audio,
+        effects,
+        seed
+      );
       break;
     case "ps1-nightmare": {
       const counts = drawPs1NightmareScene(
-        tools,
+        sceneTools,
         palette,
         input.timeSeconds,
         audio,
@@ -1822,7 +1856,7 @@ export function renderSceneFrame(
     }
     case "rave-dungeon": {
       const counts = drawRaveDungeonScene(
-        tools,
+        sceneTools,
         palette,
         input.timeSeconds,
         audio,
@@ -1836,7 +1870,7 @@ export function renderSceneFrame(
     }
     case "techno-therapy": {
       const counts = drawTechnoTherapyScene(
-        tools,
+        sceneTools,
         palette,
         input.timeSeconds,
         audio,
@@ -1850,15 +1884,11 @@ export function renderSceneFrame(
     }
   }
 
-  ctx.resetTransform();
-
-  // Letterbox cinéma haut/bas préservés hors zoom orthographique
-  tools.rect(0, 0, 320, 8, palette.shadow);
-  tools.rect(0, 174, 320, 6, palette.shadow);
+  sceneCtx.resetTransform();
 
   if ((effects.psychedelic ?? 0) > 0.01) {
     applyPsychedelicPass(
-      tools,
+      sceneTools,
       palette,
       input.timeSeconds,
       audio,
@@ -1866,6 +1896,52 @@ export function renderSceneFrame(
       reducedMotion
     );
   }
+  sceneCtx.restore();
+
+  ctx.save();
+  ctx.resetTransform();
+  ctx.globalAlpha = 1;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.imageSmoothingEnabled = false;
+
+  if (offscreen) {
+    // Extension atmosphérique verticale/carrée (ciel + halo + reflets sol)
+    const halfH = Math.floor(targetH * 0.5);
+    const skyGrad = ctx.createLinearGradient(0, 0, 0, halfH);
+    skyGrad.addColorStop(0, palette.sky);
+    skyGrad.addColorStop(1, palette.haze);
+    ctx.fillStyle = skyGrad;
+    ctx.fillRect(0, 0, targetW, halfH);
+
+    const floorGrad = ctx.createLinearGradient(0, halfH, 0, targetH);
+    floorGrad.addColorStop(0, palette.reflection);
+    floorGrad.addColorStop(0.35, palette.structure);
+    floorGrad.addColorStop(1, palette.shadow);
+    ctx.fillStyle = floorGrad;
+    ctx.fillRect(0, halfH, targetW, targetH - halfH);
+
+    // Lignes d'horizon réactives au kick/basse dans les bandes haut/bas
+    const barW = Math.round(targetW * (0.45 + audio.bassEnvelope * 0.45));
+    const barX = Math.floor((targetW - barW) / 2);
+    ctx.fillStyle = palette.glow;
+    ctx.fillRect(barX, Math.floor(targetH * 0.14), barW, 1);
+    ctx.fillStyle = palette.light;
+    ctx.fillRect(barX, Math.floor(targetH * 0.86), barW, 1);
+
+    // Blit de la scène 320x180 centrée avec zoom adapté à la largeur cible
+    const scale = Math.max(targetW / STUDY_SIZE.width, 0.82);
+    const drawW = Math.round(STUDY_SIZE.width * scale);
+    const drawH = Math.round(STUDY_SIZE.height * scale);
+    const dx = Math.floor((targetW - drawW) / 2);
+    const dy = Math.floor((targetH - drawH) / 2);
+    ctx.drawImage(offscreen.canvas, dx, dy, drawW, drawH);
+  }
+
+  const tools = createRasterTools(ctx);
+
+  // Letterbox cinéma haut/bas adaptés à la résolution active
+  tools.rect(0, 0, targetW, 6, palette.shadow);
+  tools.rect(0, targetH - 6, targetW, 6, palette.shadow);
 
   if (input.lyrics?.enabled && input.lyrics.text.trim().length > 0) {
     drawLyricsOverlay(
@@ -1874,11 +1950,20 @@ export function renderSceneFrame(
       input.timeSeconds,
       audio,
       input.lyrics,
-      reducedMotion
+      reducedMotion,
+      targetW,
+      targetH
     );
   }
 
-  applyOpenHubPostFx(ctx, effects, audio, input.timeSeconds);
+  applyOpenHubPostFx(
+    ctx,
+    effects,
+    audio,
+    input.timeSeconds,
+    targetW,
+    targetH
+  );
 
   ctx.restore();
 

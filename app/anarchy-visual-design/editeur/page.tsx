@@ -6,6 +6,7 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
   CPP_PRESET_TEMPLATES,
+  CPP_SHADER_AI_PROMPT,
   CPP_SHADER_ENABLED_KEY,
   CPP_SHADER_STORAGE_KEY,
   DEFAULT_CPP_SHADER_CODE,
@@ -251,12 +252,28 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div className="font-mono text-[10px] text-neutral-500">
-                API : <code>ctx.bass</code>, <code>ctx.mid</code>,{" "}
-                <code>ctx.treble</code>, <code>ctx.t</code>,{" "}
-                <code>ctx.ring()</code>, <code>ctx.grid()</code>,{" "}
-                <code>ctx.glitchSlices()</code>, <code>ctx.kaleidoscope()</code>
+                API : <code>ctx.bass</code>, <code>ctx.lyricWord</code>,{" "}
+                <code>ctx.lyricSection</code>, <code>ctx.width</code>,{" "}
+                <code>ctx.height</code>, <code>ctx.glitchSlices()</code>
               </div>
               <div className="flex flex-wrap gap-2">
+                <Button
+                  type="button"
+                  variant="comic"
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard
+                      ?.writeText(CPP_SHADER_AI_PROMPT)
+                      .then(() =>
+                        setStatusMsg(
+                          "Prompt IA Shader C++ (Paroles + 9:16) copié !"
+                        )
+                      )
+                      .catch(() => {});
+                  }}
+                >
+                  📋 PROMPT IA C++ (PAROLES + 9:16)
+                </Button>
                 {cppEnabled && (
                   <Button
                     type="button"
