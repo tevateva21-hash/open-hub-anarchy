@@ -13,31 +13,37 @@ Sections disponibles : #INTRO, #COUPLET, #PRE_DROP, #DROP, #REFRAIN, #OUTRO.
 Garde 3 à 6 mots max par ligne pour un rendu TikTok / 9:16 lisible.`;
 
 const CPP_EXAMPLE_FULL = `// Exemple complet compatible 9:16 TikTok et 16:9 YouTube
+// @param float pulseGain = 0.22 [0.05, 0.80]
+// @param float ringRadius = 24.0 [10.0, 60.0]
+// @color primaryColor = "#00E5FF"
+// @toggle enableGlitch = true
+#include <cmath>
+
 void renderAnarchyFrame(AnarchyCtx& ctx) {
-  float pulse = 1.0f + ctx.bass * 0.22f;
+  float pulse = 1.0f + ctx.bass * pulseGain;
   ctx.zoom(pulse);
-  ctx.grid(20, ctx.rgba(0, 229, 255, 0.28f), 40.0f);
+  ctx.grid(20, primaryColor, 40.0f);
 
   float cx = ctx.width * 0.5f;
   float cy = ctx.height * 0.48f;
 
   // Réagit automatiquement aux sections #DROP / #REFRAIN du scénario LRC
   if (ctx.lyricSection == "DROP" || ctx.lyricSection == "REFRAIN") {
-    ctx.ring(cx, cy, 24.0f + ctx.bass * 52.0f, 2.5f, "#FF1B24");
-    ctx.ring(cx, cy, 16.0f + ctx.treble * 36.0f, 1.5f, "#00E5FF");
+    ctx.ring(cx, cy, ringRadius + ctx.bass * 52.0f, 2.5f, "#FF1B24");
+    ctx.ring(cx, cy, ringRadius * 0.65f + ctx.treble * 36.0f, 1.5f, primaryColor);
   }
 
   // Glitch sur les claps / transitoires
-  if (ctx.flux > 0.30f) {
+  if (enableGlitch && ctx.flux > 0.30f) {
     ctx.glitchSlices(ctx.flux * 0.65f);
   }
 
   // Mot Whisper / LRC courant en anaglyphe 3D
-  if (ctx.lyricWord.length > 0) {
+  if (!ctx.lyricWord.empty()) {
     float x = clamp(cx - ctx.lyricWord.length * 4.2f, 8.0f, ctx.width - 36.0f);
     float y = ctx.height * 0.72f;
     ctx.text(ctx.lyricWord, x - 1, y, "#FF1B24", 12);
-    ctx.text(ctx.lyricWord, x + 1, y, "#00E5FF", 12);
+    ctx.text(ctx.lyricWord, x + 1, y, primaryColor, 12);
     ctx.text(ctx.lyricWord, x, y, "#FFFFFF", 12);
   }
   ctx.scanlines(0.18f);
@@ -329,17 +335,54 @@ export default function VisualStudioDocsPage() {
       {/* 6. Runtime C++ Live */}
       <div id="cpp-runtime">
         <Card
-          moduleTitle="06 // SYSTÈME C++ LIVE (RENDERANARCHYFRAME)"
-          moduleMeta="ÉDITEUR EXTERNE · SANDBOX 60 FPS"
+          moduleTitle="06 // ARCHITECTURE C++ MODULAIRE (4 MODULES · 60 FPS)"
+          moduleMeta="MULTI-.CPP · @PARAM/@COLOR/@TOGGLE · SCÈNES & PADS VJ"
           activeIndicator
         >
           <div className="space-y-4">
             <p className="font-sans text-xs sm:text-sm text-neutral-700">
               Dans <Link href="/anarchy-visual-design/editeur" className="font-bold text-brand-red underline">/anarchy-visual-design/editeur</Link>,
-              écrivez une fonction <code>void renderAnarchyFrame(AnarchyCtx&amp; ctx)</code>. Dès que vous cliquez sur{" "}
-              <strong>🚀 APPLIQUER CE C++ AU SITE</strong>, votre code s&apos;exécute en direct sur{" "}
-              <code>/anarchy-visual-design</code> et est inclus dans les exports PNG/MP4.
+              le moteur C++ repose sur <strong>4 modules interconnectés</strong> qui s&apos;exécutent à 60 FPS sur{" "}
+              <code>/anarchy-visual-design</code> et dans les exports PNG/MP4 (avec la scénographie Open Hub PS1/PS2 préservée dans <code>sceno_openhub_ps2.cpp</code>) :
             </p>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-sans text-xs text-neutral-700">
+              <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
+                <div className="font-mono font-bold text-brand-black">1. Transpileur C++ → JS blindé</div>
+                <p>
+                  Accepte les directives <code>#include</code>, <code>using namespace std;</code>, suffixes{" "}
+                  <code>0.5f</code>, casts <code>(float)</code>/<code>static_cast</code>, tableaux{" "}
+                  <code>float arr[4] = &#123;...&#125;</code>, lambdas <code>[&amp;](...)</code>,{" "}
+                  <code>std::sin/cos/fmod</code> et <code>sinf/cosf/fmodf</code>, avec rapport d&apos;erreur
+                  à la ligne exacte sans faire planter la boucle 60 FPS.
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
+                <div className="font-mono font-bold text-brand-black">2. Documents .cpp Multi-Fichiers</div>
+                <p>
+                  Créez, renommez, dupliquez, importez ou exportez plusieurs scripts <code>.cpp</code>{" "}
+                  (<code>sceno_openhub_ps2.cpp</code>, <code>brutalist_grid.cpp</code>,{" "}
+                  <code>cyber_katana_drop.cpp</code>, <code>tiktok_karaoke_hud.cpp</code>), sauvegardés en local.
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
+                <div className="font-mono font-bold text-brand-black">3. Scènes, Routage Musical &amp; Pads VJ</div>
+                <p>
+                  Assignez un document C++ + un preset à une section LRC/Whisper (<code>INTRO</code>,{" "}
+                  <code>MAIN</code>, <code>DROP</code>, <code>REFRAIN</code>), un créneau temporel (<code>startTime → endTime</code>)
+                  ou un pad VJ manuel avec transitions (<code>Cut</code>, <code>Fondu</code>, <code>Glitch</code>).
+                </p>
+              </div>
+              <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
+                <div className="font-mono font-bold text-brand-black">4. Uniforms UI &amp; Presets par Document</div>
+                <p>
+                  Déclarez <code>{"// @param float speed = 4.0 [0.0, 20.0]"}</code>,{" "}
+                  <code>{'// @color primaryColor = "#00F0FF"'}</code> ou{" "}
+                  <code>{"// @toggle enableGlitch = true"}</code> : l&apos;Inspector génère sliders, color pickers
+                  et toggles injectés à 60 FPS sans recompiler, enregistrables en presets nommés.
+                </p>
+              </div>
+            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-[11px]">
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1.5">
@@ -351,6 +394,7 @@ export default function VisualStudioDocsPage() {
                   <li><code>ctx.sceneIndex</code> — Index de la scène active (0..4)</li>
                   <li><code>ctx.lyricLine, ctx.lyricWord</code> — Ligne et mot Whisper/LRC actif</li>
                   <li><code>ctx.lyricProgress, ctx.lyricSection</code> — Progression (0..1) &amp; section (#DROP...)</li>
+                  <li><code>ctx.params</code> &amp; variables <code>@param/@color/@toggle</code> — Uniforms live</li>
                 </ul>
               </div>
 
@@ -369,7 +413,7 @@ export default function VisualStudioDocsPage() {
 
             <div>
               <div className="flex items-center justify-between mb-1.5 font-mono text-xs">
-                <span className="font-bold text-brand-black">EXEMPLE C++ COMPLET (PAROLES + GLITCH + RESPONSIVE 9:16)</span>
+                <span className="font-bold text-brand-black">EXEMPLE C++ COMPLET (UNIFORMS + PAROLES + RESPONSIVE 9:16)</span>
                 <Button
                   type="button"
                   variant="clinical"

@@ -110,33 +110,44 @@ Le module **Paroles & Micro** permet de synchroniser du texte et des sections de
 
 ---
 
-## 8. Système d'Injection C++ Live (`/anarchy-visual-design/editeur`)
+## 8. Architecture C++ Modulaire Live (`/anarchy-visual-design/editeur`)
 
-Dans l'éditeur externe, écrivez une fonction C++ exécutée à 60 FPS directement après (ou à la place) du moteur de scène :
+Le moteur C++ temps réel (60 FPS) repose sur **4 modules interconnectés** :
+
+1. **Transpileur C++ → JS blindé** : supporte `#include <cmath>`, `using namespace std;`, `AnarchyCtx& ctx` / `const AnarchyCtx& ctx` / `AnarchyCtx ctx`, `0.5f`, casts `(float)` / `static_cast<...>`, tableaux `float radii[4] = {...};`, lambdas `[&](...) { ... }`, fonctions utilitaires, `std::sin/cos/min/max/abs/pow/fmod` et `sinf/cosf/fabsf/fmodf/powf`, avec signalement d'erreur à la ligne exacte sans crasher `requestAnimationFrame`.
+2. **Gestionnaire de Documents `.cpp`** : créez, renommez, dupliquez, importez et exportez plusieurs fichiers `.cpp` sauvegardés en local. La scénographie historique Open Hub PS1/PS2 est préservée dans `sceno_openhub_ps2.cpp` (avec 3 autres scripts d'exemple : `brutalist_grid.cpp`, `cyber_katana_drop.cpp`, `tiktok_karaoke_hud.cpp`).
+3. **Scènes, Routage Musical & Pads VJ** : routez chaque document C++ (+ preset) selon la section LRC/Whisper (`INTRO`, `MAIN`, `COUPLET`, `PRE_DROP`, `DROP`, `REFRAIN`, `OUTRO`), un créneau temporel (`startTime` → `endTime`), ou un déclenchement manuel par pad VJ, avec transitions fluides (`Cut`, `Fondu` via `ctx.tint`, ou `Glitch` via `ctx.glitchSlices`).
+4. **Uniforms UI (`@param` / `@color` / `@toggle`) & Presets** : annotez vos variables dans le code C++ pour générer automatiquement sliders, color pickers et toggles injectés en live à 60 FPS sans recompiler, et enregistrez des presets nommés par document (`"Néon Cyber"`, `"Bunker Brutaliste"`, `"PS2 Enter the Dragon"`...).
 
 ```cpp
+// @param float speed = 4.0 [0.0, 20.0]
+// @color primaryColor = "#00F0FF"
+// @toggle enableGlitch = true
+#include <cmath>
+
 void renderAnarchyFrame(AnarchyCtx& ctx) {
   float pulse = 1.0f + ctx.bass * 0.25f;
   ctx.zoom(pulse);
-  ctx.grid(20, ctx.rgba(0, 229, 255, 0.32f), 45.0f);
+  ctx.grid(20, primaryColor, speed * 10.0f);
 
   if (ctx.lyricSection == "DROP") {
     ctx.ring(ctx.width * 0.5f, ctx.height * 0.5f, 20.0f + ctx.bass * 55.0f, 2.5f, "#FF1B24");
   }
-  if (ctx.flux > 0.30f) {
+  if (enableGlitch && ctx.flux > 0.30f) {
     ctx.glitchSlices(ctx.flux * 0.7f);
   }
   ctx.scanlines(0.20f);
 }
 ```
 
-> **Astuce Mode C++ Pur** : appelez `ctx.clear("#08090C");` au début de `renderAnarchyFrame` pour effacer la scène de base et dessiner à 100% depuis votre code C++.
+> **Astuce Mode C++ Pur** : appelez `ctx.clear("#08090C");` (ou utilisez le toggle `pureCppMode`) au début de `renderAnarchyFrame` pour masquer la scène PS1/PS2 de base et dessiner à 100% depuis votre code C++.
 
 ### Variables disponibles sur `ctx`
 - **Temps & Rythme** : `ctx.t` (secondes), `ctx.bpm`, `ctx.beat` (index entier), `ctx.beatPhase` (`0.0` → `1.0`), `ctx.sceneIndex` (`0` → `4`).
 - **Audio Temps Réel (`0.0` → `1.0`)** : `ctx.bass`, `ctx.mid`, `ctx.treble`, `ctx.rms`, `ctx.flux` (transitoires / claps).
 - **Dimensions Dynamiques** : `ctx.width`, `ctx.height` (`320×180` en `16:9`, `180×320` en `9:16`, `240×300` en `4:5`, `240×240` en `1:1`). Utilisez toujours `ctx.width` et `ctx.height` pour rester compatible TikTok & YouTube !
-- **Scénario & Paroles** : `ctx.lyricLine` (ligne active), `ctx.lyricWord` (mot actif), `ctx.lyricProgress` (`0.0` → `1.0`), `ctx.lyricSection` (ex: `"MAIN"`, `"INTRO"`, `"DROP"`).
+- **Scénario & Paroles** : `ctx.lyricLine` (ligne active), `ctx.lyricWord` (mot actif), `ctx.lyricProgress` (`0.0` → `1.0`), `ctx.lyricSection` (ex: `"MAIN"`, `"INTRO"`, `"DROP"`, `"REFRAIN"`).
+- **Uniforms UI** : chaque variable déclarée via `// @param`, `// @color` ou `// @toggle` est directement accessible par son nom dans le code C++ et via `ctx.params`.
 
 ### Fonctions graphiques sur `ctx`
 - `ctx.clear(color)` / `ctx.background(r, g, b, alpha)` / `ctx.tint(color, alpha)`
@@ -146,9 +157,9 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
 - `ctx.grid(spacing, color, scrollSpeed)`
 - `ctx.kaleidoscope(segments, speed)` / `ctx.glitchSlices(amount)` / `ctx.scanlines(alpha)` / `ctx.invert(amount)` / `ctx.zoom(scale)`
 - `ctx.text(str, x, y, color, size)`
-- Fonctions math C++ standard disponibles : `sin`, `cos`, `tan`, `abs`, `min`, `max`, `pow`, `sqrt`, `floor`, `ceil`, `round`, `clamp`, `fmod`, `PI`.
+- Fonctions math C++ standard disponibles : `sin`, `cos`, `tan`, `abs`, `min`, `max`, `pow`, `sqrt`, `floor`, `ceil`, `round`, `clamp`, `fmod`, `sinf`, `cosf`, `fabsf`, `fmodf`, `powf`, `PI`.
 
-> Le code C++ est transpilé localement dans un bac à sable sécurisé (les identifiants DOM/réseau tels que `window`, `document`, `fetch`, `localStorage`, etc. sont bloqués) et sauvegardé dans `localStorage` pour s'appliquer en direct sur `/anarchy-visual-design`.
+> Le code C++ est transpilé localement dans un bac à sable sécurisé (les identifiants DOM/réseau tels que `window`, `document`, `fetch`, `localStorage`, etc. sont bloqués) et synchronisé entre `/anarchy-visual-design/editeur` et `/anarchy-visual-design`.
 
 ---
 

@@ -11,6 +11,7 @@ import {
   type ScenePackSlot,
 } from "@/lib/visual-engine/scene-packs";
 import { CPP_SHADER_ENABLED_KEY } from "@/lib/visual-engine/cpp-runtime";
+import { CPP_WORKSPACE_EVENT } from "@/lib/visual-engine/cpp-workspace";
 
 export const PACKS_STORAGE_KEY = "openhub_visual_scene_packs_v2";
 export const ACTIVE_PACK_ID_KEY = "openhub_active_pack_id_v2";
@@ -41,6 +42,15 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
   const [feedback, setFeedback] = useState<string>("");
 
   useEffect(() => {
+    const syncCppFlag = () => {
+      try {
+        setCppEnabled(
+          window.localStorage.getItem(CPP_SHADER_ENABLED_KEY) === "true"
+        );
+      } catch {
+        // ignore
+      }
+    };
     try {
       const raw = window.localStorage.getItem(PACKS_STORAGE_KEY);
       if (raw) {
@@ -53,12 +63,18 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
       if (savedActiveId) {
         setSelectedPackId(savedActiveId);
       }
-      setCppEnabled(
-        window.localStorage.getItem(CPP_SHADER_ENABLED_KEY) === "true"
-      );
+      syncCppFlag();
     } catch {
       // ignore
     }
+    window.addEventListener("storage", syncCppFlag);
+    window.addEventListener("focus", syncCppFlag);
+    window.addEventListener(CPP_WORKSPACE_EVENT, syncCppFlag);
+    return () => {
+      window.removeEventListener("storage", syncCppFlag);
+      window.removeEventListener("focus", syncCppFlag);
+      window.removeEventListener(CPP_WORKSPACE_EVENT, syncCppFlag);
+    };
   }, []);
 
   const currentPack =

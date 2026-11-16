@@ -113,9 +113,15 @@ const MILESTONES = [
   },
   {
     id: "M18",
-    commit: "ACTUEL",
+    commit: "7e57485",
     title: "Audio 70 Mio, Documentation Complète (/docs/visual-studio) & En-tête Épuré",
     details: "Passage de la limite audio locale à 70 Mio (8 min / 96 Mio PCM), création du guide complet Anarchy Visual Studio (/docs/visual-studio et docs/VISUAL_STUDIO_GUIDE.md) couvrant Prompts IA, C++ live, Whisper/LRC, 10 faders et formats sociaux, et suppression de l'en-tête donnant accès aux autres catégories (Samples, VSTs...).",
+  },
+  {
+    id: "M19",
+    commit: "ACTUEL",
+    title: "Architecture C++ Modulaire (Transpileur blindé, Multi-.cpp, Scènes/Pads VJ & Presets)",
+    details: "Refonte en 4 modules : transpileur C++→JS blindé (#include, tableaux, lambdas, casts, std::/sinf/fmodf, erreur ligne exacte sans crash 60fps), gestionnaire multi-documents .cpp (sceno_openhub_ps2.cpp préservant la scénographie + brutalist_grid, cyber_katana_drop, tiktok_karaoke_hud), routage de scènes (section LRC, créneau temps, pads VJ) avec transitions Cut/Fondu/Glitch, et Inspector auto-généré via // @param, // @color, // @toggle + presets par document.",
   },
 ];
 

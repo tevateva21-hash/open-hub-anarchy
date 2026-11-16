@@ -14,12 +14,22 @@ import {
   type ScenePackSlot,
 } from "@/lib/visual-engine/scene-packs";
 import {
-  CPP_SHADER_ENABLED_KEY,
-  CPP_SHADER_STORAGE_KEY,
   compileCppVisual,
   createCppRenderContext,
-  type CppRenderContext,
+  parseCppUniforms,
+  type CppCompileResult,
+  type CppUniformValue,
 } from "@/lib/visual-engine/cpp-runtime";
+import {
+  CPP_WORKSPACE_EVENT,
+  applyCppSceneTransition,
+  createDefaultCppWorkspace,
+  extractDocumentUniformValues,
+  loadCppWorkspace,
+  resolveActiveCppScene,
+  saveCppWorkspace,
+  type CppWorkspaceState,
+} from "@/lib/visual-engine/cpp-workspace";
 import { WaveformCanvas } from "@/components/visual-engine/WaveformCanvas";
 import {
   type AudioAnalysis,
@@ -186,6 +196,13 @@ export const VisualEngineStudio: React.FC = () => {
   const [showMatrixPanel, setShowMatrixPanel] = useState<boolean>(true);
   const [showFadersPanel, setShowFadersPanel] = useState<boolean>(true);
   const [showLyricsPanel, setShowLyricsPanel] = useState<boolean>(true);
+  const [showCppPanel, setShowCppPanel] = useState<boolean>(false);
+
+  const [cppWorkspace, setCppWorkspace] = useState<CppWorkspaceState>(() =>
+    createDefaultCppWorkspace()
+  );
+  const [cppActiveStatus, setCppActiveStatus] = useState<string>("");
+  const [cppRuntimeError, setCppRuntimeError] = useState<string>("");
 
   const stageCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -193,30 +210,32 @@ export const VisualEngineStudio: React.FC = () => {
   const prevFreqRef = useRef<Uint8Array>(new Uint8Array(128));
   const smoothedFeaturesRef = useRef<AudioFeatures>({ ...ZERO_FEATURES });
   const timeAccumRef = useRef<number>(0);
-  const cppFnRef = useRef<((ctx: CppRenderContext) => void) | null>(null);
+
+  const cppWorkspaceRef = useRef<CppWorkspaceState>(cppWorkspace);
+  cppWorkspaceRef.current = cppWorkspace;
+  const cppCompiledCacheRef = useRef<Map<string, CppCompileResult>>(new Map());
+  const cppLastSceneKeyRef = useRef<string>("");
+  const cppTransitionStartRef = useRef<number>(0);
+  const cppLastErrRef = useRef<string>("");
+  const cppLastStatusRef = useRef<string>("");
 
   useEffect(() => {
-    const loadCppShader = () => {
-      try {
-        const enabled =
-          window.localStorage.getItem(CPP_SHADER_ENABLED_KEY) === "true";
-        const code = window.localStorage.getItem(CPP_SHADER_STORAGE_KEY);
-        if (enabled && code) {
-          const compiled = compileCppVisual(code);
-          cppFnRef.current = compiled.ok ? compiled.fn : null;
-        } else {
-          cppFnRef.current = null;
-        }
-      } catch {
-        cppFnRef.current = null;
+    const syncWorkspace = () => {
+      const loaded = loadCppWorkspace();
+      setCppWorkspace(loaded);
+      cppWorkspaceRef.current = loaded;
+      if (loaded.enabled) {
+        setShowCppPanel(true);
       }
     };
-    loadCppShader();
-    window.addEventListener("storage", loadCppShader);
-    window.addEventListener("focus", loadCppShader);
+    syncWorkspace();
+    window.addEventListener("storage", syncWorkspace);
+    window.addEventListener("focus", syncWorkspace);
+    window.addEventListener(CPP_WORKSPACE_EVENT, syncWorkspace);
     return () => {
-      window.removeEventListener("storage", loadCppShader);
-      window.removeEventListener("focus", loadCppShader);
+      window.removeEventListener("storage", syncWorkspace);
+      window.removeEventListener("focus", syncWorkspace);
+      window.removeEventListener(CPP_WORKSPACE_EVENT, syncWorkspace);
     };
   }, []);
 
@@ -532,8 +551,20 @@ export const VisualEngineStudio: React.FC = () => {
       const ctx = canvas?.getContext("2d");
 
       if (ctx) {
+        const lyricEval = evaluateLyricsAt(
+          lyricsText,
+          timeSeconds,
+          timedWords
+        );
+        const ws = cppWorkspaceRef.current;
+        const resolvedCpp = ws.enabled
+          ? resolveActiveCppScene(ws, timeSeconds, lyricEval.section)
+          : null;
+
         const nextReport = renderSceneFrame(ctx, {
-          sceneId: activeSlot ? activeSlot.sceneId : effectivePreset.sceneId,
+          sceneId:
+            resolvedCpp?.scene?.baseSceneId ??
+            (activeSlot ? activeSlot.sceneId : effectivePreset.sceneId),
           paletteId:
             useCustomPaletteRef.current || !activeSlot
               ? effectivePreset.paletteId
@@ -576,38 +607,95 @@ export const VisualEngineStudio: React.FC = () => {
           aspectRatio,
         });
 
-        if (cppFnRef.current) {
-          try {
-            const beatFloat = Math.max(0, (timeSeconds - beatOffset) * (bpm / 60));
-            const lyricEval = evaluateLyricsAt(
-              lyricsText,
-              timeSeconds,
-              timedWords
-            );
-            const cppCtx = createCppRenderContext(
-              ctx,
-              aspectSpec.width,
-              aspectSpec.height,
-              {
-                t: timeSeconds,
-                bpm,
-                beat: Math.floor(beatFloat),
-                beatPhase: beatFloat - Math.floor(beatFloat),
-                bass: nextReport.audio.bassEnvelope,
-                mid: nextReport.audio.midEnvelope,
-                treble: nextReport.audio.trebleEnvelope,
-                rms: nextReport.audio.rmsEnvelope,
-                flux: nextReport.audio.transientPulse,
-                sceneIndex: livePackSlotIndexRef.current,
-                lyricLine: lyricEval.line,
-                lyricWord: lyricEval.activeWord,
-                lyricProgress: lyricEval.progress,
-                lyricSection: lyricEval.section,
+        if (resolvedCpp) {
+          const doc = resolvedCpp.document;
+          const cacheKey = `${doc.id}::${doc.code}`;
+          let compiled = cppCompiledCacheRef.current.get(cacheKey);
+          if (!compiled) {
+            compiled = compileCppVisual(doc.code);
+            cppCompiledCacheRef.current.set(cacheKey, compiled);
+          }
+
+          const sceneKey = `${resolvedCpp.scene?.id ?? "fallback"}::${doc.id}`;
+          if (
+            cppLastSceneKeyRef.current &&
+            cppLastSceneKeyRef.current !== sceneKey
+          ) {
+            cppTransitionStartRef.current = now;
+          }
+          cppLastSceneKeyRef.current = sceneKey;
+
+          const statusText = `${doc.name} (${resolvedCpp.matchedReason})`;
+          if (cppLastStatusRef.current !== statusText) {
+            cppLastStatusRef.current = statusText;
+            setCppActiveStatus(statusText);
+          }
+
+          if (compiled.ok && compiled.fn) {
+            try {
+              const beatFloat = Math.max(
+                0,
+                (timeSeconds - beatOffset) * (bpm / 60)
+              );
+              const cppCtx = createCppRenderContext(
+                ctx,
+                aspectSpec.width,
+                aspectSpec.height,
+                {
+                  t: timeSeconds,
+                  bpm,
+                  beat: Math.floor(beatFloat),
+                  beatPhase: beatFloat - Math.floor(beatFloat),
+                  bass: nextReport.audio.bassEnvelope,
+                  mid: nextReport.audio.midEnvelope,
+                  treble: nextReport.audio.trebleEnvelope,
+                  rms: nextReport.audio.rmsEnvelope,
+                  flux: nextReport.audio.transientPulse,
+                  sceneIndex: livePackSlotIndexRef.current,
+                  lyricLine: lyricEval.line,
+                  lyricWord: lyricEval.activeWord,
+                  lyricProgress: lyricEval.progress,
+                  lyricSection: lyricEval.section,
+                  params: resolvedCpp.uniforms,
+                }
+              );
+              compiled.fn(cppCtx, resolvedCpp.uniforms);
+
+              if (
+                resolvedCpp.scene &&
+                cppTransitionStartRef.current > 0
+              ) {
+                const dur = Math.max(
+                  0.05,
+                  resolvedCpp.scene.transitionDuration || 0.35
+                );
+                const elapsedSec = (now - cppTransitionStartRef.current) / 1000;
+                if (elapsedSec < dur) {
+                  applyCppSceneTransition(
+                    cppCtx,
+                    resolvedCpp.scene.transition,
+                    elapsedSec / dur
+                  );
+                }
               }
-            );
-            cppFnRef.current(cppCtx);
-          } catch {
-            // ignore runtime errors from custom C++
+
+              if (cppLastErrRef.current !== "") {
+                cppLastErrRef.current = "";
+                setCppRuntimeError("");
+              }
+            } catch (err) {
+              const msg =
+                err instanceof Error ? err.message : "Erreur runtime C++.";
+              if (cppLastErrRef.current !== msg) {
+                cppLastErrRef.current = msg;
+                setCppRuntimeError(msg);
+              }
+            }
+          } else if (!compiled.ok && compiled.error) {
+            if (cppLastErrRef.current !== compiled.error) {
+              cppLastErrRef.current = compiled.error;
+              setCppRuntimeError(compiled.error);
+            }
           }
         }
 
@@ -1125,6 +1213,7 @@ export const VisualEngineStudio: React.FC = () => {
           { label: "🎨 COULEURS & VARIATIONS", open: showMatrixPanel, toggle: () => setShowMatrixPanel((v) => !v) },
           { label: "🎚 CONSOLE 10 FADERS", open: showFadersPanel, toggle: () => setShowFadersPanel((v) => !v) },
           { label: "🎤 PAROLES & MICRO", open: showLyricsPanel, toggle: () => setShowLyricsPanel((v) => !v) },
+          { label: "💻 C++ SCÈNES & PADS", open: showCppPanel, toggle: () => setShowCppPanel((v) => !v) },
         ].map((win) => (
           <button
             key={win.label}
@@ -1584,6 +1673,211 @@ export const VisualEngineStudio: React.FC = () => {
           }));
         }}
       />
+
+      {showCppPanel && (() => {
+        const activeCppDoc =
+          cppWorkspace.documents.find(
+            (d) => d.id === cppWorkspace.activeDocumentId
+          ) ?? cppWorkspace.documents[0];
+        const activeUniformSpecs = parseCppUniforms(activeCppDoc.code);
+        const activeUniforms = extractDocumentUniformValues(activeCppDoc);
+
+        const commitWorkspace = (
+          updater: (curr: CppWorkspaceState) => CppWorkspaceState
+        ) => {
+          setCppWorkspace((curr) => {
+            const next = updater(curr);
+            cppWorkspaceRef.current = next;
+            saveCppWorkspace(next);
+            return next;
+          });
+        };
+
+        return (
+          <Card
+            moduleTitle="CPP_RUNTIME // SCÈNES MUSICALES, PADS VJ & UNIFORMS"
+            moduleMeta={
+              cppWorkspace.enabled
+                ? cppActiveStatus || `ACTIF · ${activeCppDoc.name}`
+                : "INACTIF (CLIQUE ACTIVER C++)"
+            }
+            activeIndicator={cppWorkspace.enabled}
+          >
+            <div className="space-y-3 font-mono text-xs">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Button
+                    type="button"
+                    variant={cppWorkspace.enabled ? "comic" : "primary"}
+                    size="sm"
+                    onClick={() =>
+                      commitWorkspace((curr) => ({
+                        ...curr,
+                        enabled: !curr.enabled,
+                      }))
+                    }
+                  >
+                    {cppWorkspace.enabled ? "🟢 C++ ACTIF" : "🚀 ACTIVER C++"}
+                  </Button>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      commitWorkspace((curr) => ({
+                        ...curr,
+                        manualSceneId: null,
+                      }))
+                    }
+                    className={`px-2.5 py-1 rounded border-2 font-bold ${
+                      cppWorkspace.manualSceneId === null
+                        ? "bg-brand-black text-white border-black"
+                        : "bg-brand-pearl text-brand-black border-neutral-300"
+                    }`}
+                  >
+                    🔁 AUTO LRC
+                  </button>
+                  {cppWorkspace.scenes.map((sc) => {
+                    const locked = cppWorkspace.manualSceneId === sc.id;
+                    return (
+                      <button
+                        key={`studio-pad-${sc.id}`}
+                        type="button"
+                        onClick={() =>
+                          commitWorkspace((curr) => ({
+                            ...curr,
+                            enabled: true,
+                            manualSceneId: locked ? null : sc.id,
+                          }))
+                        }
+                        className={`px-2.5 py-1 rounded border-2 font-bold transition-all ${
+                          locked
+                            ? "bg-brand-red text-white border-black shadow-comic-sm"
+                            : "bg-brand-white hover:bg-brand-pearl text-brand-black border-black"
+                        }`}
+                      >
+                        {locked ? "🔒 " : "▶ "}
+                        {sc.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <Link href="/anarchy-visual-design/editeur">
+                  <Button type="button" variant="clinical" size="sm">
+                    💻 OUVRIR L&apos;ÉDITEUR C++ ↗
+                  </Button>
+                </Link>
+              </div>
+
+              {cppRuntimeError && (
+                <div
+                  role="alert"
+                  className="p-2 rounded border-2 border-brand-red bg-red-50 text-brand-red font-bold"
+                >
+                  Erreur C++ — {cppRuntimeError}
+                </div>
+              )}
+
+              {activeUniformSpecs.length > 0 && (
+                <div className="pt-2 border-t border-neutral-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+                  {activeUniformSpecs.map((u) => {
+                    const val = activeUniforms[u.name] ?? u.defaultValue;
+                    const updateVal = (nextVal: CppUniformValue) =>
+                      commitWorkspace((curr) => ({
+                        ...curr,
+                        documents: curr.documents.map((d) =>
+                          d.id === activeCppDoc.id
+                            ? {
+                                ...d,
+                                presets: d.presets.map((p) =>
+                                  p.id === d.activePresetId
+                                    ? {
+                                        ...p,
+                                        values: {
+                                          ...p.values,
+                                          [u.name]: nextVal,
+                                        },
+                                      }
+                                    : p
+                                ),
+                              }
+                            : d
+                        ),
+                      }));
+
+                    if (u.kind === "color") {
+                      return (
+                        <div
+                          key={`st-u-${u.name}`}
+                          className="flex items-center justify-between p-2 rounded border border-neutral-300 bg-brand-pearl"
+                        >
+                          <span className="font-bold">{u.name}</span>
+                          <input
+                            type="color"
+                            value={
+                              /^#[0-9a-f]{6}$/i.test(String(val))
+                                ? String(val)
+                                : "#00E5FF"
+                            }
+                            onChange={(e) => updateVal(e.target.value)}
+                            className="w-7 h-6 border border-black rounded cursor-pointer"
+                          />
+                        </div>
+                      );
+                    }
+                    if (u.kind === "bool") {
+                      return (
+                        <label
+                          key={`st-u-${u.name}`}
+                          className="flex items-center justify-between p-2 rounded border border-neutral-300 bg-brand-pearl cursor-pointer font-bold"
+                        >
+                          <span>{u.name}</span>
+                          <input
+                            type="checkbox"
+                            checked={Boolean(val)}
+                            onChange={(e) => updateVal(e.target.checked)}
+                            className="w-4 h-4 accent-brand-red"
+                          />
+                        </label>
+                      );
+                    }
+                    const num = Number(val);
+                    return (
+                      <div
+                        key={`st-u-${u.name}`}
+                        className="p-2 rounded border border-neutral-300 bg-brand-pearl"
+                      >
+                        <div className="flex justify-between mb-1">
+                          <span className="font-bold">{u.name}</span>
+                          <span className="text-brand-red font-bold">
+                            {u.kind === "int"
+                              ? Math.round(num)
+                              : num.toFixed(2)}
+                          </span>
+                        </div>
+                        <input
+                          type="range"
+                          min={u.min ?? 0}
+                          max={u.max ?? 10}
+                          step={u.step ?? (u.kind === "int" ? 1 : 0.05)}
+                          value={num}
+                          onChange={(e) =>
+                            updateVal(
+                              u.kind === "int"
+                                ? Math.round(Number(e.target.value))
+                                : Number(e.target.value)
+                            )
+                          }
+                          className="w-full accent-brand-red"
+                        />
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </Card>
+        );
+      })()}
 
       {(showStagePanel || showMatrixPanel) && (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
