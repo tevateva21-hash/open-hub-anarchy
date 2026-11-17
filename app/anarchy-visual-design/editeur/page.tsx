@@ -4,13 +4,18 @@ import React, { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { CodeShaderEditor } from "@/components/visual-engine/CodeShaderEditor";
 import {
   CPP_PRESET_TEMPLATES,
   CPP_SHADER_AI_PROMPT,
-  compileCppVisual,
+  DEFAULT_JS_SHADER_CODE,
+  JS_SHADER_AI_PROMPT,
+  compileVisualScript,
   createCppRenderContext,
+  detectScriptLanguage,
   type CppCompileResult,
   type CppUniformValue,
+  type ScriptLanguage,
 } from "@/lib/visual-engine/cpp-runtime";
 import {
   applyCppSceneTransition,
@@ -82,6 +87,7 @@ export default function VisualSceneCppEditorPage() {
   const lastSceneKeyRef = useRef<string>("");
   const transitionStartRef = useRef<number>(0);
   const lastRuntimeErrRef = useRef<string>("");
+  const manualForceCppRef = useRef<Set<string>>(new Set());
 
   // Charger workspace multi-documents & packs au montage
   useEffect(() => {
@@ -114,13 +120,23 @@ export default function VisualSceneCppEditorPage() {
     workspace.documents.find((d) => d.id === workspace.activeDocumentId) ??
     workspace.documents[0];
 
+  const activeLang: ScriptLanguage =
+    activeDoc.language ??
+    (activeDoc.name.toLowerCase().endsWith(".js") ? "js" : "cpp");
+
   const compiledActive = useMemo(() => {
-    const res = compileCppVisual(activeDoc.code);
+    const res = compileVisualScript(activeDoc.code, activeLang);
     if (res.ok) {
-      compiledCacheRef.current.set(`${activeDoc.id}::${activeDoc.code}`, res);
+      if (compiledCacheRef.current.size > 40) {
+        compiledCacheRef.current.clear();
+      }
+      compiledCacheRef.current.set(
+        `${activeDoc.id}::${activeLang}::${activeDoc.code}`,
+        res
+      );
     }
     return res;
-  }, [activeDoc.id, activeDoc.code]);
+  }, [activeDoc.id, activeDoc.code, activeLang]);
 
   const activeUniformValues = useMemo(
     () => extractDocumentUniformValues(activeDoc),
@@ -130,7 +146,9 @@ export default function VisualSceneCppEditorPage() {
   const docCompileOkMap = useMemo(() => {
     const map: Record<string, boolean> = {};
     for (const d of workspace.documents) {
-      map[d.id] = compileCppVisual(d.code).ok;
+      const dLang: ScriptLanguage =
+        d.language ?? (d.name.toLowerCase().endsWith(".js") ? "js" : "cpp");
+      map[d.id] = compileVisualScript(d.code, dLang).ok;
     }
     return map;
   }, [workspace.documents]);
@@ -138,12 +156,17 @@ export default function VisualSceneCppEditorPage() {
   const currentPack =
     packs.find((p) => p.id === selectedPackId) ?? packs[0];
 
-  // Helper de compilation avec cache par document
+  // Helper de compilation avec cache borné (zéro fuite mémoire au hot-reload)
   const getCompiledForDoc = (doc: CppDocument): CppCompileResult => {
-    const key = `${doc.id}::${doc.code}`;
+    const lang: ScriptLanguage =
+      doc.language ?? (doc.name.toLowerCase().endsWith(".js") ? "js" : "cpp");
+    const key = `${doc.id}::${lang}::${doc.code}`;
     const cached = compiledCacheRef.current.get(key);
     if (cached) return cached;
-    const res = compileCppVisual(doc.code);
+    if (compiledCacheRef.current.size > 40) {
+      compiledCacheRef.current.clear();
+    }
+    const res = compileVisualScript(doc.code, lang);
     compiledCacheRef.current.set(key, res);
     return res;
   };
@@ -291,20 +314,29 @@ export default function VisualSceneCppEditorPage() {
     }));
   };
 
-  const handleCreateDoc = () => {
+  const handleCreateDoc = (lang: ScriptLanguage = "cpp") => {
     const id = `doc-${Date.now()}`;
     const idx = workspace.documents.length + 1;
+    const isJs = lang === "js";
+    const starterCode = isJs
+      ? DEFAULT_JS_SHADER_CODE
+      : `// @param float speed = 3.0 [0.0, 15.0]\n// @color glowColor = "#00E5FF"\n// @toggle addScanlines = true\nvoid renderAnarchyFrame(AnarchyCtx& ctx) {\n  ctx.clear("#0A0C12");\n  float cx = ctx.width * 0.5f;\n  float cy = ctx.height * 0.5f;\n  ctx.ring(cx, cy, 20.0f + ctx.bass * 50.0f, 2.5f, glowColor);\n  ctx.grid(24, "rgba(255, 27, 36, 0.25)", speed * 12.0f);\n  if (addScanlines) ctx.scanlines(0.2f);\n}`;
+    const uniforms = compileVisualScript(starterCode, lang).uniforms;
+    const defaultVals: Record<string, CppUniformValue> = {};
+    for (const u of uniforms) defaultVals[u.name] = u.defaultValue;
+
     const newDoc: CppDocument = {
       id,
-      name: `custom_fx_${idx}.cpp`,
+      name: isJs ? `lowpoly_fx_${idx}.js` : `custom_fx_${idx}.cpp`,
+      language: lang,
       updatedAt: new Date().toISOString(),
       activePresetId: "preset-default",
-      code: `// @param float speed = 3.0 [0.0, 15.0]\n// @color glowColor = "#00E5FF"\n// @toggle addScanlines = true\nvoid renderAnarchyFrame(AnarchyCtx& ctx) {\n  ctx.clear("#0A0C12");\n  float cx = ctx.width * 0.5f;\n  float cy = ctx.height * 0.5f;\n  ctx.ring(cx, cy, 20.0f + ctx.bass * 50.0f, 2.5f, glowColor);\n  ctx.grid(24, "rgba(255, 27, 36, 0.25)", speed * 12.0f);\n  if (addScanlines) ctx.scanlines(0.2f);\n}`,
+      code: starterCode,
       presets: [
         {
           id: "preset-default",
           name: "Défaut",
-          values: { speed: 3.0, glowColor: "#00E5FF", addScanlines: true },
+          values: defaultVals,
         },
       ],
     };
@@ -314,15 +346,48 @@ export default function VisualSceneCppEditorPage() {
       documents: [...curr.documents, newDoc],
     }));
     setFollowSceneRouting(false);
-    setStatusMsg(`Nouveau document "${newDoc.name}" créé.`);
+    setStatusMsg(`Nouveau document ${lang.toUpperCase()} "${newDoc.name}" créé.`);
+  };
+
+  const handleSetDocLanguage = (docId: string, nextLang: ScriptLanguage) => {
+    if (nextLang === "cpp") {
+      manualForceCppRef.current.add(docId);
+    } else {
+      manualForceCppRef.current.delete(docId);
+    }
+    setWorkspace((curr) => ({
+      ...curr,
+      documents: curr.documents.map((d) => {
+        if (d.id !== docId) return d;
+        const nextName =
+          nextLang === "js"
+            ? d.name.replace(/\.(?:cpp|hpp|h)$/i, ".js")
+            : d.name.replace(/\.(?:js|mjs)$/i, ".cpp");
+        return {
+          ...d,
+          language: nextLang,
+          name: nextName,
+          updatedAt: new Date().toISOString(),
+        };
+      }),
+    }));
+    setStatusMsg(
+      nextLang === "js"
+        ? "Mode JavaScript Natif (.js) activé : transpileur C++ contourné (V8 60 FPS)."
+        : "Mode C++ (Transpileur AnarchyCtx) activé."
+    );
   };
 
   const handleDuplicateDoc = (doc: CppDocument) => {
     const id = `doc-${Date.now()}`;
-    const copyName = doc.name.replace(/\.cpp$/i, "") + "_copy.cpp";
+    const docLang: ScriptLanguage =
+      doc.language ?? (doc.name.toLowerCase().endsWith(".js") ? "js" : "cpp");
+    const ext = docLang === "js" ? ".js" : ".cpp";
+    const copyName = doc.name.replace(/\.(?:cpp|hpp|js|mjs)$/i, "") + `_copy${ext}`;
     const cloned: CppDocument = {
       ...doc,
       id,
+      language: docLang,
       name: copyName,
       updatedAt: new Date().toISOString(),
       presets: doc.presets.map((p) => ({ ...p, values: { ...p.values } })),
@@ -338,7 +403,7 @@ export default function VisualSceneCppEditorPage() {
 
   const handleDeleteDoc = (docId: string) => {
     if (workspace.documents.length <= 1) {
-      setStatusMsg("Impossible de supprimer le dernier document C++.");
+      setStatusMsg("Impossible de supprimer le dernier document.");
       return;
     }
     const remaining = workspace.documents.filter((d) => d.id !== docId);
@@ -352,15 +417,20 @@ export default function VisualSceneCppEditorPage() {
         s.documentId === docId ? { ...s, documentId: fallbackId } : s
       ),
     }));
-    setStatusMsg("Document C++ supprimé.");
+    setStatusMsg("Document supprimé.");
   };
 
   const handleExportCppFile = (doc: CppDocument) => {
+    const docLang: ScriptLanguage =
+      doc.language ?? (doc.name.toLowerCase().endsWith(".js") ? "js" : "cpp");
+    const ext = docLang === "js" ? ".js" : ".cpp";
     const blob = new Blob([doc.code], { type: "text/plain;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
-    a.download = doc.name.endsWith(".cpp") ? doc.name : `${doc.name}.cpp`;
+    a.download = /\.(?:cpp|hpp|js|mjs)$/i.test(doc.name)
+      ? doc.name
+      : `${doc.name}${ext}`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
@@ -371,13 +441,17 @@ export default function VisualSceneCppEditorPage() {
   const handleImportCppFile = async (file: File) => {
     const code = await file.text();
     const id = `doc-${Date.now()}`;
-    const uniforms = compileCppVisual(code).uniforms;
+    const lang: ScriptLanguage = /\.(?:js|mjs)$/i.test(file.name)
+      ? "js"
+      : detectScriptLanguage(code);
+    const uniforms = compileVisualScript(code, lang).uniforms;
     const defaultVals: Record<string, CppUniformValue> = {};
     for (const u of uniforms) defaultVals[u.name] = u.defaultValue;
 
     const imported: CppDocument = {
       id,
       name: file.name,
+      language: lang,
       code,
       updatedAt: new Date().toISOString(),
       activePresetId: "preset-imported",
@@ -389,7 +463,9 @@ export default function VisualSceneCppEditorPage() {
       documents: [...curr.documents, imported],
     }));
     setFollowSceneRouting(false);
-    setStatusMsg(`Document "${file.name}" importé et ouvert.`);
+    setStatusMsg(
+      `Document "${file.name}" (${lang.toUpperCase()}) importé et ouvert.`
+    );
   };
 
   // --- Actions MODULE 4 : Uniforms & Presets ---
@@ -533,13 +609,13 @@ export default function VisualSceneCppEditorPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 border-b-2 border-black pb-4">
         <div>
           <span className="inline-block px-2 py-0.5 rounded bg-brand-black text-brand-white font-mono text-[10px] font-bold uppercase mb-2">
-            STUDIO MODULAIRE C++ // TRANSPILEUR · DOCUMENTS · SCÈNES · UNIFORMS
+            STUDIO MODULAIRE JS / C++ // V8 NATIF · TRANSPILEUR · SCÈNES · UNIFORMS
           </span>
           <h1 className="font-mono text-2xl sm:text-3xl font-bold text-brand-black">
-            Éditeur C++ Temps Réel &amp; Routage Musical
+            Éditeur Visuel JS Natif &amp; C++ Temps Réel
           </h1>
           <p className="font-sans text-sm text-neutral-600 mt-1">
-            Multi-scripts <code>.cpp</code>, routage automatique sur <code>ctx.lyricSection</code> / temps / pads VJ et paramètres UI <code>@param</code> / <code>@color</code> à 60 FPS.
+            Multi-scripts <code>.js</code> (V8 natif sans transpileur) et <code>.cpp</code>, routage sur <code>ctx.lyricSection</code> / temps / pads VJ et paramètres UI <code>@param</code> / <code>@color</code> à 60 FPS.
           </p>
         </div>
 
@@ -550,7 +626,7 @@ export default function VisualSceneCppEditorPage() {
             size="md"
             onClick={() => handleApplyCppToSite(!workspace.enabled)}
           >
-            {workspace.enabled ? "🟢 C++ ACTIF SUR STUDIO" : "🚀 ACTIVER SUR STUDIO"}
+            {workspace.enabled ? "🟢 RUNTIME ACTIF SUR STUDIO" : "🚀 ACTIVER SUR STUDIO"}
           </Button>
           <Link href="/docs/visual-studio">
             <Button variant="clinical" size="md">
@@ -571,11 +647,11 @@ export default function VisualSceneCppEditorPage() {
         </div>
       )}
 
-      {/* GRILLE PRINCIPALE 3 COLONNES : MODULE 2 (DOCS) | ÉDITEUR C++ | PREVIEW + MODULE 4 (INSPECTOR) */}
+      {/* GRILLE PRINCIPALE 3 COLONNES : MODULE 2 (DOCS) | ÉDITEUR JS/C++ | PREVIEW + MODULE 4 (INSPECTOR) */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
-        {/* COLONNE GAUCHE : MODULE 2 — GESTIONNAIRE DE DOCUMENTS C++ */}
+        {/* COLONNE GAUCHE : MODULE 2 — GESTIONNAIRE DE DOCUMENTS .JS & .CPP */}
         <Card
-          moduleTitle="01 // DOCUMENTS .CPP"
+          moduleTitle="01 // DOCUMENTS .JS / .CPP"
           moduleMeta={`${workspace.documents.length} FICHIERS`}
           className="lg:col-span-3"
         >
@@ -583,9 +659,17 @@ export default function VisualSceneCppEditorPage() {
             <div className="flex flex-wrap gap-1.5">
               <Button
                 type="button"
+                variant="comic"
+                size="sm"
+                onClick={() => handleCreateDoc("js")}
+              >
+                + NOUVEAU .JS
+              </Button>
+              <Button
+                type="button"
                 variant="primary"
                 size="sm"
-                onClick={handleCreateDoc}
+                onClick={() => handleCreateDoc("cpp")}
               >
                 + NOUVEAU .CPP
               </Button>
@@ -595,12 +679,12 @@ export default function VisualSceneCppEditorPage() {
                 size="sm"
                 onClick={() => fileImportRef.current?.click()}
               >
-                ⬆ IMPORTER .CPP
+                ⬆ IMPORTER
               </Button>
               <input
                 ref={fileImportRef}
                 type="file"
-                accept=".cpp,.hpp,.h,.txt"
+                accept=".cpp,.hpp,.h,.js,.mjs,.txt"
                 className="hidden"
                 onChange={(e) => {
                   const f = e.target.files?.[0];
@@ -614,6 +698,9 @@ export default function VisualSceneCppEditorPage() {
               {workspace.documents.map((doc) => {
                 const isSelected = doc.id === activeDoc.id;
                 const docOk = Boolean(docCompileOkMap[doc.id]);
+                const docLang: ScriptLanguage =
+                  doc.language ??
+                  (doc.name.toLowerCase().endsWith(".js") ? "js" : "cpp");
                 return (
                   <div
                     key={doc.id}
@@ -662,8 +749,18 @@ export default function VisualSceneCppEditorPage() {
                         }}
                         className="w-full text-left flex items-center justify-between gap-1 font-bold"
                       >
-                        <span className="truncate">
-                          {docOk ? "🟢" : "🔴"} {doc.name}
+                        <span className="truncate flex items-center gap-1">
+                          <span>{docOk ? "🟢" : "🔴"}</span>
+                          <span
+                            className={`px-1 py-0.2 rounded text-[9px] border ${
+                              docLang === "js"
+                                ? "bg-amber-300 text-black border-black"
+                                : "bg-sky-100 text-sky-900 border-sky-400"
+                            }`}
+                          >
+                            {docLang.toUpperCase()}
+                          </span>
+                          <span className="truncate">{doc.name}</span>
                         </span>
                         <span className="text-[10px] text-neutral-500 shrink-0">
                           {doc.presets.length}P
@@ -694,7 +791,7 @@ export default function VisualSceneCppEditorPage() {
                         onClick={() => handleExportCppFile(doc)}
                         className="px-1.5 py-0.5 rounded border border-neutral-300 hover:border-black bg-brand-white"
                       >
-                        ⬇ .cpp
+                        ⬇ .{docLang}
                       </button>
                       {workspace.documents.length > 1 && (
                         <button
@@ -713,43 +810,93 @@ export default function VisualSceneCppEditorPage() {
           </div>
         </Card>
 
-        {/* COLONNE CENTRE : ÉDITEUR C++ + MODULE 1 TRANSPILEUR */}
+        {/* COLONNE CENTRE : ÉDITEUR JS NATIF / C++ */}
         <Card
-          moduleTitle={`02 // CODE : ${activeDoc.name}`}
+          moduleTitle={`02 // CODE (${activeLang.toUpperCase()}) : ${activeDoc.name}`}
           moduleMeta={
             compiledActive.ok
-              ? `✅ COMPILÉ (${compiledActive.uniforms.length} UNIFORMS)`
+              ? `✅ ${activeLang === "js" ? "V8 NATIF" : "COMPILÉ"} (${compiledActive.uniforms.length} UNIFORMS)`
               : `⚠ LIGNE ${compiledActive.errorLine ?? "?"}`
           }
           activeIndicator={workspace.enabled}
           className="lg:col-span-5"
         >
           <div className="space-y-3">
+            {/* Barre d'outils : Sélecteur JS / C++, Templates & Prompts IA */}
             <div className="flex flex-wrap items-center justify-between gap-1.5">
+              <div className="flex items-center rounded border-2 border-black overflow-hidden font-mono text-[11px] font-bold">
+                <button
+                  type="button"
+                  onClick={() => handleSetDocLanguage(activeDoc.id, "js")}
+                  aria-pressed={activeLang === "js"}
+                  className={`px-2.5 py-1 transition-colors ${
+                    activeLang === "js"
+                      ? "bg-amber-400 text-black"
+                      : "bg-brand-white text-neutral-600 hover:bg-brand-pearl"
+                  }`}
+                >
+                  🟨 JS NATIF
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSetDocLanguage(activeDoc.id, "cpp")}
+                  aria-pressed={activeLang === "cpp"}
+                  className={`px-2.5 py-1 border-l-2 border-black transition-colors ${
+                    activeLang === "cpp"
+                      ? "bg-sky-600 text-white"
+                      : "bg-brand-white text-neutral-600 hover:bg-brand-pearl"
+                  }`}
+                >
+                  🟦 C++
+                </button>
+              </div>
+
               <select
-                aria-label="Charger un template C++ dans le document courant"
+                aria-label="Charger un template JS ou C++ dans le document courant"
                 value=""
                 onChange={(e) => {
                   const tpl = CPP_PRESET_TEMPLATES.find(
                     (t) => t.id === e.target.value
                   );
                   if (tpl) {
+                    manualForceCppRef.current.delete(activeDoc.id);
                     updateActiveDoc((doc) => ({
                       ...doc,
+                      language: tpl.language,
+                      name:
+                        tpl.language === "js"
+                          ? doc.name.replace(/\.(?:cpp|hpp|h)$/i, ".js")
+                          : doc.name.replace(/\.(?:js|mjs)$/i, ".cpp"),
                       code: tpl.code,
                       updatedAt: new Date().toISOString(),
                     }));
                     setFollowSceneRouting(false);
+                    setStatusMsg(
+                      `Template ${tpl.language.toUpperCase()} "${tpl.name}" chargé.`
+                    );
                   }
                 }}
-                className="px-2 py-1 rounded border border-black bg-brand-pearl font-mono text-[11px] font-bold"
+                className="px-2 py-1 rounded border border-black bg-brand-pearl font-mono text-[11px] font-bold max-w-[210px]"
               >
-                <option value="">⚡ Charger un template C++...</option>
-                {CPP_PRESET_TEMPLATES.map((tpl) => (
-                  <option key={tpl.id} value={tpl.id}>
-                    {tpl.name}
-                  </option>
-                ))}
+                <option value="">⚡ Charger un template...</option>
+                <optgroup label="JavaScript Natif (60 FPS)">
+                  {CPP_PRESET_TEMPLATES.filter((t) => t.language === "js").map(
+                    (tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name}
+                      </option>
+                    )
+                  )}
+                </optgroup>
+                <optgroup label="C++ (Transpileur)">
+                  {CPP_PRESET_TEMPLATES.filter((t) => t.language === "cpp").map(
+                    (tpl) => (
+                      <option key={tpl.id} value={tpl.id}>
+                        {tpl.name}
+                      </option>
+                    )
+                  )}
+                </optgroup>
               </select>
 
               <Button
@@ -757,32 +904,79 @@ export default function VisualSceneCppEditorPage() {
                 variant="comic"
                 size="sm"
                 onClick={() => {
+                  const promptText =
+                    activeLang === "js"
+                      ? JS_SHADER_AI_PROMPT
+                      : CPP_SHADER_AI_PROMPT;
                   navigator.clipboard
-                    ?.writeText(CPP_SHADER_AI_PROMPT)
+                    ?.writeText(promptText)
                     .then(() =>
-                      setStatusMsg("Prompt IA Shader C++ (@param + 9:16) copié !")
+                      setStatusMsg(
+                        `Prompt IA ${activeLang.toUpperCase()} (@param + 9:16) copié !`
+                      )
                     )
                     .catch(() => {});
                 }}
               >
-                📋 PROMPT IA C++
+                📋 PROMPT IA {activeLang.toUpperCase()}
               </Button>
             </div>
 
-            <textarea
+            <CodeShaderEditor
               id="cpp-code-editor"
               rows={17}
               value={activeDoc.code}
-              onChange={(e) => {
-                const nextCode = e.target.value;
-                updateActiveDoc((doc) => ({
-                  ...doc,
-                  code: nextCode,
-                  updatedAt: new Date().toISOString(),
-                }));
+              language={activeLang}
+              errorLine={compiledActive.errorLine}
+              onPasteCode={(pasted, nextFull) => {
+                const detected = detectScriptLanguage(pasted);
+                const fullDetected = detectScriptLanguage(nextFull);
+                if (
+                  (detected === "js" || fullDetected === "js") &&
+                  activeLang !== "js"
+                ) {
+                  manualForceCppRef.current.delete(activeDoc.id);
+                  updateActiveDoc((doc) => ({
+                    ...doc,
+                    language: "js",
+                    name: doc.name.replace(/\.(?:cpp|hpp|h)$/i, ".js"),
+                    code: nextFull,
+                    updatedAt: new Date().toISOString(),
+                  }));
+                  setStatusMsg(
+                    "Code JavaScript détecté au collage → Mode JS Natif activé (transpileur C++ contourné)."
+                  );
+                }
               }}
-              spellCheck={false}
-              className="w-full p-3 rounded-lg border-2 border-black bg-[#101216] text-[#00E5FF] font-mono text-xs leading-relaxed"
+              onChange={(nextCode) => {
+                let switchedToJs = false;
+                updateActiveDoc((doc) => {
+                  const docLang: ScriptLanguage =
+                    doc.language ??
+                    (doc.name.toLowerCase().endsWith(".js") ? "js" : "cpp");
+                  const shouldAutoJs =
+                    docLang === "cpp" &&
+                    !manualForceCppRef.current.has(doc.id) &&
+                    detectScriptLanguage(nextCode) === "js";
+                  if (shouldAutoJs) switchedToJs = true;
+                  const nextLang: ScriptLanguage = shouldAutoJs ? "js" : docLang;
+                  return {
+                    ...doc,
+                    language: nextLang,
+                    name:
+                      shouldAutoJs && /\.(?:cpp|hpp|h)$/i.test(doc.name)
+                        ? doc.name.replace(/\.(?:cpp|hpp|h)$/i, ".js")
+                        : doc.name,
+                    code: nextCode,
+                    updatedAt: new Date().toISOString(),
+                  };
+                });
+                if (switchedToJs) {
+                  setStatusMsg(
+                    "Syntaxe JS détectée → Bascule automatique en mode JS Natif."
+                  );
+                }
+              }}
             />
 
             {!compiledActive.ok && compiledActive.error && (
@@ -790,7 +984,7 @@ export default function VisualSceneCppEditorPage() {
                 role="alert"
                 className="p-2.5 rounded-lg border-2 border-brand-red bg-red-50 font-mono text-xs font-bold text-brand-red"
               >
-                Compilation C++ — {compiledActive.error}
+                Compilation {activeLang.toUpperCase()} — {compiledActive.error}
               </div>
             )}
 
@@ -799,15 +993,25 @@ export default function VisualSceneCppEditorPage() {
                 role="alert"
                 className="p-2.5 rounded-lg border-2 border-amber-600 bg-amber-50 font-mono text-xs font-bold text-amber-900"
               >
-                Runtime C++ — {runtimeError}
+                Runtime {activeLang.toUpperCase()} — {runtimeError}
               </div>
             )}
 
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="font-mono text-[10px] text-neutral-500">
-                Syntaxes supportées : <code>#include</code>, <code>std::*</code>,{" "}
-                <code>sinf/cosf</code>, tableaux <code>arr[N]</code>, lambdas{" "}
-                <code>[&amp;]()</code>, <code>{"// @param"}</code>, <code>{"// @color"}</code>
+                {activeLang === "js" ? (
+                  <>
+                    Fast-Path V8 : <code>function renderAnarchyFrame(ctx)</code>,{" "}
+                    <code>Math.*</code>, état persistant top-level,{" "}
+                    <code>{"// @param"}</code> &amp; <code>{"// @color"}</code>
+                  </>
+                ) : (
+                  <>
+                    C++ supporté : <code>#include</code>, <code>std::*</code>,{" "}
+                    <code>sinf/cosf</code>, tableaux <code>arr[N]</code>, lambdas{" "}
+                    <code>[&amp;]()</code>, <code>{"// @param"}</code>
+                  </>
+                )}
               </span>
               <Button
                 type="button"
@@ -1163,7 +1367,7 @@ export default function VisualSceneCppEditorPage() {
                   <div className="grid grid-cols-2 gap-2">
                     <div>
                       <span className="block text-[10px] text-neutral-500 mb-0.5">
-                        DOCUMENT .CPP
+                        DOCUMENT (.JS / .CPP)
                       </span>
                       <select
                         value={sc.documentId}
@@ -1178,11 +1382,16 @@ export default function VisualSceneCppEditorPage() {
                         }}
                         className="w-full px-2 py-1 rounded border border-black bg-brand-pearl font-bold text-[11px]"
                       >
-                        {workspace.documents.map((d) => (
-                          <option key={d.id} value={d.id}>
-                            {d.name}
-                          </option>
-                        ))}
+                        {workspace.documents.map((d) => {
+                          const dl =
+                            d.language ??
+                            (d.name.toLowerCase().endsWith(".js") ? "js" : "cpp");
+                          return (
+                            <option key={d.id} value={d.id}>
+                              [{dl.toUpperCase()}] {d.name}
+                            </option>
+                          );
+                        })}
                       </select>
                     </div>
 

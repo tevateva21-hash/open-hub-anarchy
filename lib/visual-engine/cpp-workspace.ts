@@ -2,9 +2,12 @@ import type { SceneId } from "@/lib/visual-engine/contracts";
 import {
   CPP_SHADER_ENABLED_KEY,
   CPP_SHADER_STORAGE_KEY,
+  DEFAULT_JS_SHADER_CODE,
+  detectScriptLanguage,
   parseCppUniforms,
   type CppRenderContext,
   type CppUniformValue,
+  type ScriptLanguage,
 } from "@/lib/visual-engine/cpp-runtime";
 
 export const CPP_WORKSPACE_STORAGE_KEY = "openhub_cpp_workspace_v1";
@@ -19,6 +22,7 @@ export interface CppDocumentPreset {
 export interface CppDocument {
   id: string;
   name: string;
+  language?: ScriptLanguage;
   code: string;
   presets: CppDocumentPreset[];
   activePresetId: string;
@@ -55,6 +59,7 @@ export const DEFAULT_CPP_DOCUMENTS: CppDocument[] = [
   {
     id: "doc-sceno-openhub",
     name: "sceno_openhub_ps2.cpp",
+    language: "cpp",
     updatedAt: "2026-11-16T00:00:00Z",
     activePresetId: "preset-anarchy-3d",
     code: `// Scénographie Open Hub PS1/PS2 préservée + surcouche C++ temps réel
@@ -116,6 +121,7 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
   {
     id: "doc-brutalist-grid",
     name: "brutalist_grid.cpp",
+    language: "cpp",
     updatedAt: "2026-11-16T00:00:00Z",
     activePresetId: "preset-bunker",
     code: `// Architecture brutaliste & onde oscilloscope réactive aux kicks
@@ -180,6 +186,7 @@ void renderAnarchyFrame(const AnarchyCtx& ctx) {
   {
     id: "doc-cyber-katana",
     name: "cyber_katana_drop.cpp",
+    language: "cpp",
     updatedAt: "2026-11-16T00:00:00Z",
     activePresetId: "preset-neon-cyber",
     code: `// Tunnel cyber & anneaux katana (démontre tableaux, lambdas & fmodf)
@@ -251,6 +258,7 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
   {
     id: "doc-tiktok-karaoke",
     name: "tiktok_karaoke_hud.cpp",
+    language: "cpp",
     updatedAt: "2026-11-16T00:00:00Z",
     activePresetId: "preset-tiktok-anaglyph",
     code: `// Overlay Paroles Whisper/LRC adaptatif 9:16 TikTok & 16:9 YouTube
@@ -311,6 +319,38 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
       },
     ],
   },
+  {
+    id: "doc-lowpoly-3d-js",
+    name: "lowpoly_3d_js.js",
+    language: "js",
+    updatedAt: "2026-11-16T00:00:00Z",
+    activePresetId: "preset-cyber-wireframe",
+    code: DEFAULT_JS_SHADER_CODE,
+    presets: [
+      {
+        id: "preset-cyber-wireframe",
+        name: "Cyber Wireframe",
+        values: {
+          rotSpeed: 1.4,
+          fov: 175.0,
+          edgeColor: "#00F0FF",
+          accentColor: "#FF1B24",
+          wireframeGlow: true,
+        },
+      },
+      {
+        id: "preset-blood-lowpoly",
+        name: "Blood Low-Poly",
+        values: {
+          rotSpeed: 3.2,
+          fov: 215.0,
+          edgeColor: "#FF3940",
+          accentColor: "#D4FF33",
+          wireframeGlow: true,
+        },
+      },
+    ],
+  },
 ];
 
 export const DEFAULT_CPP_SCENES: CppSceneRule[] = [
@@ -358,6 +398,17 @@ export const DEFAULT_CPP_SCENES: CppSceneRule[] = [
     transition: "fade",
     transitionDuration: 0.35,
   },
+  {
+    id: "scene-outro-js",
+    label: "OUTRO // 3D JS",
+    documentId: "doc-lowpoly-3d-js",
+    presetId: "preset-cyber-wireframe",
+    routingMode: "section",
+    sectionTag: "OUTRO",
+    baseSceneId: "digital-void",
+    transition: "fade",
+    transitionDuration: 0.4,
+  },
 ];
 
 export function createDefaultCppWorkspace(): CppWorkspaceState {
@@ -368,6 +419,7 @@ export function createDefaultCppWorkspace(): CppWorkspaceState {
     manualSceneId: null,
     documents: DEFAULT_CPP_DOCUMENTS.map((d) => ({
       ...d,
+      language: d.language ?? "cpp",
       presets: d.presets.map((p) => ({ ...p, values: { ...p.values } })),
     })),
     scenes: DEFAULT_CPP_SCENES.map((s) => ({ ...s })),
@@ -393,6 +445,16 @@ export function extractDocumentUniformValues(
   return out;
 }
 
+function normalizeDocLanguage(doc: CppDocument): CppDocument {
+  if (doc.language === "js" || doc.language === "cpp") {
+    return doc;
+  }
+  const inferred: ScriptLanguage = doc.name.toLowerCase().endsWith(".js")
+    ? "js"
+    : detectScriptLanguage(doc.code);
+  return { ...doc, language: inferred };
+}
+
 export function loadCppWorkspace(): CppWorkspaceState {
   if (typeof window === "undefined") {
     return createDefaultCppWorkspace();
@@ -407,6 +469,20 @@ export function loadCppWorkspace(): CppWorkspaceState {
         parsed.documents.length > 0 &&
         Array.isArray(parsed.scenes)
       ) {
+        const docs = parsed.documents.map(normalizeDocLanguage);
+        // Ajouter le document JS d'exemple si le workspace v1 a été créé avant le mode JS
+        if (!docs.some((d) => d.language === "js")) {
+          const defaultJs = DEFAULT_CPP_DOCUMENTS.find((d) => d.language === "js");
+          if (defaultJs) {
+            docs.push({
+              ...defaultJs,
+              presets: defaultJs.presets.map((p) => ({
+                ...p,
+                values: { ...p.values },
+              })),
+            });
+          }
+        }
         return {
           version: 1,
           enabled:
@@ -415,11 +491,11 @@ export function loadCppWorkspace(): CppWorkspaceState {
               : window.localStorage.getItem(CPP_SHADER_ENABLED_KEY) === "true",
           activeDocumentId:
             parsed.activeDocumentId &&
-            parsed.documents.some((d) => d.id === parsed.activeDocumentId)
+            docs.some((d) => d.id === parsed.activeDocumentId)
               ? parsed.activeDocumentId
-              : parsed.documents[0].id,
+              : docs[0].id,
           manualSceneId: parsed.manualSceneId ?? null,
-          documents: parsed.documents,
+          documents: docs,
           scenes: parsed.scenes,
         };
       }
@@ -432,8 +508,10 @@ export function loadCppWorkspace(): CppWorkspaceState {
     const base = createDefaultCppWorkspace();
     base.enabled = legacyEnabled;
     if (legacyCode && legacyCode.trim()) {
+      const detected = detectScriptLanguage(legacyCode);
       base.documents[0] = {
         ...base.documents[0],
+        language: detected,
         code: legacyCode,
         updatedAt: new Date().toISOString(),
       };

@@ -119,9 +119,15 @@ const MILESTONES = [
   },
   {
     id: "M19",
-    commit: "ACTUEL",
+    commit: "9463345",
     title: "Architecture C++ Modulaire (Transpileur blindé, Multi-.cpp, Scènes/Pads VJ & Presets)",
     details: "Refonte en 4 modules : transpileur C++→JS blindé (#include, tableaux, lambdas, casts, std::/sinf/fmodf, erreur ligne exacte sans crash 60fps), gestionnaire multi-documents .cpp (sceno_openhub_ps2.cpp préservant la scénographie + brutalist_grid, cyber_katana_drop, tiktok_karaoke_hud), routage de scènes (section LRC, créneau temps, pads VJ) avec transitions Cut/Fondu/Glitch, et Inspector auto-généré via // @param, // @color, // @toggle + presets par document.",
+  },
+  {
+    id: "M20",
+    commit: "ACTUEL",
+    title: "Mode JavaScript Natif (.js) Fast-Path V8, Détection Auto & Éditeur Colorisé",
+    details: "Ajout du mode JavaScript natif (.js) contournant le transpileur C++ pour une exécution directe V8 60 FPS avec état persistant entre frames, sélecteur JS / C++, détection automatique au collage, coloration syntaxique dédiée JS/C++, compatibilité complète @param/@color/@toggle + routage mixte .js/.cpp, et template 3D low-poly réactif au son.",
   },
 ];
 

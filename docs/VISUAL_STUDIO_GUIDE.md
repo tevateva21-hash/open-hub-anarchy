@@ -110,14 +110,14 @@ Le module **Paroles & Micro** permet de synchroniser du texte et des sections de
 
 ---
 
-## 8. Architecture C++ Modulaire Live (`/anarchy-visual-design/editeur`)
+## 8. Architecture Modulaire JS Natif (`.js`) & C++ (`.cpp`) (`/anarchy-visual-design/editeur`)
 
-Le moteur C++ temps réel (60 FPS) repose sur **4 modules interconnectés** :
+Le moteur temps réel (60 FPS) coexiste en **JavaScript Natif (`.js`)** et **C++ (`.cpp`)** autour de **4 briques interconnectées** :
 
-1. **Transpileur C++ → JS blindé** : supporte `#include <cmath>`, `using namespace std;`, `AnarchyCtx& ctx` / `const AnarchyCtx& ctx` / `AnarchyCtx ctx`, `0.5f`, casts `(float)` / `static_cast<...>`, tableaux `float radii[4] = {...};`, lambdas `[&](...) { ... }`, fonctions utilitaires, `std::sin/cos/min/max/abs/pow/fmod` et `sinf/cosf/fabsf/fmodf/powf`, avec signalement d'erreur à la ligne exacte sans crasher `requestAnimationFrame`.
-2. **Gestionnaire de Documents `.cpp`** : créez, renommez, dupliquez, importez et exportez plusieurs fichiers `.cpp` sauvegardés en local. La scénographie historique Open Hub PS1/PS2 est préservée dans `sceno_openhub_ps2.cpp` (avec 3 autres scripts d'exemple : `brutalist_grid.cpp`, `cyber_katana_drop.cpp`, `tiktok_karaoke_hud.cpp`).
-3. **Scènes, Routage Musical & Pads VJ** : routez chaque document C++ (+ preset) selon la section LRC/Whisper (`INTRO`, `MAIN`, `COUPLET`, `PRE_DROP`, `DROP`, `REFRAIN`, `OUTRO`), un créneau temporel (`startTime` → `endTime`), ou un déclenchement manuel par pad VJ, avec transitions fluides (`Cut`, `Fondu` via `ctx.tint`, ou `Glitch` via `ctx.glitchSlices`).
-4. **Uniforms UI (`@param` / `@color` / `@toggle`) & Presets** : annotez vos variables dans le code C++ pour générer automatiquement sliders, color pickers et toggles injectés en live à 60 FPS sans recompiler, et enregistrez des presets nommés par document (`"Néon Cyber"`, `"Bunker Brutaliste"`, `"PS2 Enter the Dragon"`...).
+1. **Mode JavaScript Natif (`language: 'js'`) — Fast-Path V8** : contourne intégralement le transpileur C++ dès que `JS NATIF` est sélectionné (ou détecté automatiquement lors du collage d'un script `function renderAnarchyFrame(ctx)` / `const` / `let` / `=>`). Compile une seule fois par édition, expose `Math.*`, conserve les variables d'état déclarées hors `renderAnarchyFrame(ctx)` entre les frames, et inclut un starter 3D low-poly (`lowpoly_3d_js.js`).
+2. **Transpileur C++ → JS blindé** : supporte `#include <cmath>`, `using namespace std;`, `AnarchyCtx& ctx` / `const AnarchyCtx& ctx` / `AnarchyCtx ctx`, `0.5f`, casts `(float)` / `static_cast<...>`, tableaux `float radii[4] = {...};`, lambdas `[&](...) { ... }`, fonctions utilitaires, `std::sin/cos/min/max/abs/pow/fmod` et `sinf/cosf/fabsf/fmodf/powf`, avec signalement d'erreur à la ligne exacte sans crasher `requestAnimationFrame`.
+3. **Gestionnaire de Documents `.js` & `.cpp` + Scènes Mixtes** : créez, renommez, dupliquez, importez et exportez plusieurs fichiers `.js` et `.cpp` (`sceno_openhub_ps2.cpp`, `brutalist_grid.cpp`, `cyber_katana_drop.cpp`, `tiktok_karaoke_hud.cpp`, `lowpoly_3d_js.js`) et routez-les librement par section LRC/Whisper, créneau temporel ou pad VJ avec transitions (`Cut`, `Fondu`, `Glitch`).
+4. **Uniforms UI (`@param` / `@color` / `@toggle`) & Presets** : annotez vos variables dans le code JS ou C++ pour générer automatiquement sliders, color pickers et toggles injectés en live à 60 FPS via `ctx.params` et variables locales sans recompiler, et enregistrez des presets nommés par document.
 
 ```cpp
 // @param float speed = 4.0 [0.0, 20.0]

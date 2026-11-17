@@ -14,11 +14,12 @@ import {
   type ScenePackSlot,
 } from "@/lib/visual-engine/scene-packs";
 import {
-  compileCppVisual,
+  compileVisualScript,
   createCppRenderContext,
   parseCppUniforms,
   type CppCompileResult,
   type CppUniformValue,
+  type ScriptLanguage,
 } from "@/lib/visual-engine/cpp-runtime";
 import {
   CPP_WORKSPACE_EVENT,
@@ -609,10 +610,15 @@ export const VisualEngineStudio: React.FC = () => {
 
         if (resolvedCpp) {
           const doc = resolvedCpp.document;
-          const cacheKey = `${doc.id}::${doc.code}`;
+          const docLang: ScriptLanguage =
+            doc.language ?? (doc.name.toLowerCase().endsWith(".js") ? "js" : "cpp");
+          const cacheKey = `${doc.id}::${docLang}::${doc.code}`;
           let compiled = cppCompiledCacheRef.current.get(cacheKey);
           if (!compiled) {
-            compiled = compileCppVisual(doc.code);
+            if (cppCompiledCacheRef.current.size > 40) {
+              cppCompiledCacheRef.current.clear();
+            }
+            compiled = compileVisualScript(doc.code, docLang);
             cppCompiledCacheRef.current.set(cacheKey, compiled);
           }
 
@@ -1695,11 +1701,11 @@ export const VisualEngineStudio: React.FC = () => {
 
         return (
           <Card
-            moduleTitle="CPP_RUNTIME // SCÈNES MUSICALES, PADS VJ & UNIFORMS"
+            moduleTitle="JS_CPP_RUNTIME // SCÈNES MUSICALES, PADS VJ & UNIFORMS"
             moduleMeta={
               cppWorkspace.enabled
                 ? cppActiveStatus || `ACTIF · ${activeCppDoc.name}`
-                : "INACTIF (CLIQUE ACTIVER C++)"
+                : "INACTIF (CLIQUE ACTIVER)"
             }
             activeIndicator={cppWorkspace.enabled}
           >
@@ -1717,7 +1723,7 @@ export const VisualEngineStudio: React.FC = () => {
                       }))
                     }
                   >
-                    {cppWorkspace.enabled ? "🟢 C++ ACTIF" : "🚀 ACTIVER C++"}
+                    {cppWorkspace.enabled ? "🟢 RUNTIME ACTIF" : "🚀 ACTIVER JS/C++"}
                   </Button>
                   <button
                     type="button"
@@ -1763,7 +1769,7 @@ export const VisualEngineStudio: React.FC = () => {
 
                 <Link href="/anarchy-visual-design/editeur">
                   <Button type="button" variant="clinical" size="sm">
-                    💻 OUVRIR L&apos;ÉDITEUR C++ ↗
+                    💻 ÉDITEUR JS / C++ ↗
                   </Button>
                 </Link>
               </div>
@@ -1773,7 +1779,7 @@ export const VisualEngineStudio: React.FC = () => {
                   role="alert"
                   className="p-2 rounded border-2 border-brand-red bg-red-50 text-brand-red font-bold"
                 >
-                  Erreur C++ — {cppRuntimeError}
+                  Erreur Script — {cppRuntimeError}
                 </div>
               )}
 

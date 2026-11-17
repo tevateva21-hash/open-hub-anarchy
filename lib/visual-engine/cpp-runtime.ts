@@ -1,6 +1,8 @@
 export const CPP_SHADER_STORAGE_KEY = "openhub_cpp_shader_v1";
 export const CPP_SHADER_ENABLED_KEY = "openhub_cpp_shader_enabled_v1";
 
+export type ScriptLanguage = "cpp" | "js";
+
 export type CppUniformValue = number | string | boolean;
 
 export type CppUniformKind = "float" | "int" | "color" | "bool";
@@ -17,6 +19,7 @@ export interface CppUniformSpec {
 
 export interface CppCompileResult {
   ok: boolean;
+  language?: ScriptLanguage;
   fn: ((ctx: CppRenderContext, uniforms?: Record<string, CppUniformValue>) => void) | null;
   uniforms: CppUniformSpec[];
   error?: string;
@@ -82,13 +85,126 @@ export interface CppRenderContext {
 export interface CppPresetTemplate {
   id: string;
   name: string;
+  language: ScriptLanguage;
   code: string;
 }
 
 export const CPP_PRESET_TEMPLATES: CppPresetTemplate[] = [
   {
+    id: "js-lowpoly-3d",
+    name: "JS 3D // Cube & Octaèdre Low-Poly",
+    language: "js",
+    code: `// @param float rotSpeed = 1.4 [0.0, 6.0]
+// @param float fov = 175.0 [80.0, 340.0]
+// @color edgeColor = "#00F0FF"
+// @color accentColor = "#FF1B24"
+// @toggle wireframeGlow = true
+
+// État persistant entre les frames (60 FPS natif V8)
+let spinY = 0;
+let spinX = 0.35;
+
+const CUBE_VERTS = [
+  [-1, -1, -1], [1, -1, -1], [1, 1, -1], [-1, 1, -1],
+  [-1, -1,  1], [1, -1,  1], [1, 1,  1], [-1, 1,  1],
+];
+const CUBE_EDGES = [
+  [0,1],[1,2],[2,3],[3,0],
+  [4,5],[5,6],[6,7],[7,4],
+  [0,4],[1,5],[2,6],[3,7],
+];
+
+const project3D = (v, rx, ry, scale, cx, cy, camFov) => {
+  const cosY = Math.cos(ry), sinY = Math.sin(ry);
+  const cosX = Math.cos(rx), sinX = Math.sin(rx);
+  const x1 = v[0] * cosY - v[2] * sinY;
+  const z1 = v[0] * sinY + v[2] * cosY;
+  const y2 = v[1] * cosX - z1 * sinX;
+  const z2 = v[1] * sinX + z1 * cosX + 3.6;
+  const p = camFov / Math.max(0.6, z2);
+  return { x: cx + x1 * p * scale, y: cy + y2 * p * scale, z: z2 };
+};
+
+function renderAnarchyFrame(ctx) {
+  ctx.clear("#07080D");
+  const cx = ctx.width * 0.5;
+  const cy = ctx.height * 0.5;
+  const baseScale = Math.min(ctx.width, ctx.height) / 180;
+
+  // Rotation continue réactive aux basses et médiums
+  spinY += 0.016 * rotSpeed * (0.6 + ctx.bass * 1.8);
+  spinX += 0.009 * rotSpeed * (0.5 + ctx.mid);
+
+  ctx.grid(22, ctx.rgba(0, 240, 255, 0.16), 28 * rotSpeed);
+
+  const pulse = 0.72 + ctx.bass * 0.45;
+  const projected = CUBE_VERTS.map((v) =>
+    project3D(v, spinX, spinY, pulse * baseScale, cx, cy, fov)
+  );
+
+  for (let i = 0; i < CUBE_EDGES.length; i++) {
+    const [a, b] = CUBE_EDGES[i];
+    const p1 = projected[a], p2 = projected[b];
+    const col = i % 3 === 0 ? accentColor : edgeColor;
+    ctx.line(p1.x, p1.y, p2.x, p2.y, wireframeGlow ? 2.2 : 1.3, col);
+  }
+
+  for (const pt of projected) {
+    ctx.circle(pt.x, pt.y, 2.0 + ctx.treble * 3.5, "#FFFFFF", true);
+  }
+
+  if (ctx.beatPhase < 0.14 && ctx.bass > 0.45) {
+    ctx.ring(cx, cy, (18 + ctx.bass * 48) * baseScale, 2, accentColor);
+  }
+  if (ctx.flux > 0.34) ctx.glitchSlices(ctx.flux * 0.65);
+  if (ctx.lyricWord) {
+    ctx.text(ctx.lyricWord, 12, ctx.height - 18, "#FFFFFF", 11);
+  }
+  ctx.scanlines(0.2);
+}`,
+  },
+  {
+    id: "js-reactive-tunnel",
+    name: "JS // Tunnel Orbites & Paroles LRC",
+    language: "js",
+    code: `// @param int segments = 12 [4, 24]
+// @param float orbitSpeed = 2.0 [0.2, 8.0]
+// @color primaryColor = "#00E5FF"
+// @color dropColor = "#FF1B24"
+let phaseAcc = 0;
+
+function renderAnarchyFrame(ctx) {
+  ctx.clear("#090B10");
+  const cx = ctx.width * 0.5;
+  const cy = ctx.height * 0.5;
+  const maxR = Math.min(ctx.width, ctx.height) * 0.45;
+  const isDrop = ctx.lyricSection === "DROP" || ctx.lyricSection === "REFRAIN";
+
+  phaseAcc += 0.02 * orbitSpeed * (0.7 + ctx.rms * 1.5);
+
+  for (let i = 0; i < segments; i++) {
+    const angle = phaseAcc + (i * Math.PI * 2) / segments;
+    const dist = maxR * (0.35 + 0.65 * Math.abs(Math.sin(ctx.t * 1.6 + i * 0.4))) * (0.8 + ctx.bass * 0.45);
+    const x = cx + Math.cos(angle) * dist;
+    const y = cy + Math.sin(angle) * dist;
+    const col = isDrop && i % 2 === 0 ? dropColor : primaryColor;
+    ctx.line(cx, cy, x, y, 1.5, col);
+    ctx.circle(x, y, 2.5 + ctx.treble * 4.5, "#FFFFFF", true);
+  }
+
+  ctx.ring(cx, cy, 14 + ctx.bass * maxR * 0.85, 2, isDrop ? dropColor : primaryColor);
+  if (ctx.lyricWord) {
+    const estW = ctx.lyricWord.length * 7;
+    const tx = Math.max(8, Math.min(ctx.width - estW - 8, cx - estW * 0.5));
+    ctx.text(ctx.lyricWord, tx, ctx.height * 0.78, "#FFFFFF", 12);
+  }
+  ctx.scanlines(0.18);
+}`,
+  },
+  {
     id: "cpp-katana-grid",
     name: "PS2 // Katana Laser Grid",
+    language: "cpp",
     code: `// @param float speed = 45.0 [0.0, 120.0]
 // @param float ringScale = 1.0 [0.4, 2.5]
 // @color laserColor = "#00E5FF"
@@ -115,6 +231,7 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
   {
     id: "cpp-anaglyph-radar",
     name: "Anaglyph // Bass Shockwave",
+    language: "cpp",
     code: `// @param int rings = 5 [1, 12]
 // @param float waveSpeed = 1.4 [0.2, 5.0]
 // @color leftColor = "#FF1B24"
@@ -135,6 +252,7 @@ void renderAnarchyFrame(const AnarchyCtx& ctx) {
   {
     id: "cpp-pure-cpp-scene",
     name: "Pure C++ // Enter the Matrix",
+    language: "cpp",
     code: `// @param int spokes = 12 [4, 24]
 // @param float orbitSpeed = 1.8 [0.2, 6.0]
 // @color bgColor = "#090B10"
@@ -159,6 +277,7 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
   {
     id: "cpp-psy-mirror",
     name: "Psy // Kaleidoscope Overdrive",
+    language: "cpp",
     code: `// @param int segments = 6 [2, 10]
 // @param float invertThresh = 0.45 [0.1, 0.95]
 void renderAnarchyFrame(AnarchyCtx& ctx) {
@@ -172,6 +291,7 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
   {
     id: "cpp-tiktok-karaoke",
     name: "TikTok / Reels // Paroles Karaoké & Glitch",
+    language: "cpp",
     code: `// @param float textScale = 13.0 [8.0, 22.0]
 // @color highlightColor = "#00E5FF"
 void renderAnarchyFrame(AnarchyCtx& ctx) {
@@ -196,6 +316,7 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
   {
     id: "cpp-scenario-storyboard",
     name: "Scénario // Sections & Barre Progression",
+    language: "cpp",
     code: `// @color barColor = "#FF1B24"
 // @color sectionColor = "#00E5FF"
 void renderAnarchyFrame(AnarchyCtx& ctx) {
@@ -237,7 +358,40 @@ Méthodes disponibles :
 Tu peux utiliser : #include <cmath>, std::sin/cos/min/max/abs/pow/fmod, sinf/cosf/fabsf/fmodf/powf, tableaux type arr[N] = {...}, lambdas [&](){...} et fonctions utilitaires.
 Contraintes : utilise toujours ctx.width et ctx.height pour que l'effet marche en 9:16 TikTok/Reels comme en 16:9 YouTube.`;
 
-export const DEFAULT_CPP_SHADER_CODE = CPP_PRESET_TEMPLATES[0].code;
+export const JS_SHADER_AI_PROMPT = `Tu es un artiste creative coding JavaScript (Canvas 2D / 3D projection) pour Open Hub / Anarchy Visual Studio.
+Génère un script JavaScript natif exécuté directement à 60 FPS sans transpileur :
+// @param float speed = 4.0 [0.0, 20.0]
+// @color primaryColor = "#00F0FF"
+// @toggle enableGlitch = true
+
+let stateAngle = 0; // Persistant entre les frames !
+
+function renderAnarchyFrame(ctx) {
+  ...
+}
+
+Variables disponibles sur ctx :
+- Temps & BPM : ctx.t, ctx.bpm, ctx.beat, ctx.beatPhase (0..1)
+- Audio live : ctx.bass, ctx.mid, ctx.treble, ctx.rms, ctx.flux (0..1)
+- Dimensions dynamiques (16:9=320x180, 9:16=180x320, 4:5=240x300, 1:1=240x240) : ctx.width, ctx.height
+- Scénario & Paroles (LRC / Whisper) : ctx.lyricLine, ctx.lyricWord, ctx.lyricProgress (0..1), ctx.lyricSection
+- Paramètres exposés UI : chaque variable déclarée via // @param, // @color ou // @toggle est disponible directement et dans ctx.params.
+
+Méthodes disponibles sur ctx :
+- ctx.clear(color), ctx.tint(color, alpha), ctx.zoom(scale), ctx.rgba(r, g, b, a)
+- ctx.circle(x, y, r, color, fill), ctx.ring(x, y, r, lineWidth, color), ctx.line(x1,y1,x2,y2,w,color), ctx.rect(x, y, w, h, color)
+- ctx.grid(spacing, color, scrollSpeed), ctx.kaleidoscope(segments, speed), ctx.glitchSlices(amount), ctx.scanlines(alpha), ctx.invert(amount)
+- ctx.text(str, x, y, color, size)
+
+Contraintes : utilise Math.* et toujours ctx.width / ctx.height pour rester compatible 9:16 TikTok/Reels et 16:9 YouTube.`;
+
+export const DEFAULT_JS_SHADER_CODE =
+  CPP_PRESET_TEMPLATES.find((t) => t.language === "js")?.code ??
+  CPP_PRESET_TEMPLATES[0].code;
+
+export const DEFAULT_CPP_SHADER_CODE =
+  CPP_PRESET_TEMPLATES.find((t) => t.language === "cpp")?.code ??
+  CPP_PRESET_TEMPLATES[0].code;
 
 function clamp(v: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, v));
@@ -337,14 +491,18 @@ export function parseCppUniforms(source: string): CppUniformSpec[] {
       continue;
     }
 
-    // @param <type> <name> = <val> [min, max]
+    // @param [type] <name> = <val> [min, max]
     const paramMatch = lineText.match(
-      /^\/\/\s*@param\s+(float|double|int|bool)\s+([a-zA-Z_]\w*)\s*=\s*([^\[\s]+)(?:\s*\[\s*([^,\]]+)\s*,\s*([^\]]+)\s*\])?/i
+      /^\/\/\s*@param\s+(?:(float|double|int|bool)\s+)?([a-zA-Z_]\w*)\s*=\s*([^\[\s]+)(?:\s*\[\s*([^,\]]+)\s*,\s*([^\]]+)\s*\])?/i
     );
     if (paramMatch) {
-      const rawType = paramMatch[1].toLowerCase();
+      const rawDefaultClean = paramMatch[3].replace(/[fF]$/, "");
+      const rawType = (
+        paramMatch[1] ??
+        (rawDefaultClean === "true" || rawDefaultClean === "false" ? "bool" : "float")
+      ).toLowerCase();
       const name = paramMatch[2];
-      const rawDefault = paramMatch[3].replace(/[fF]$/, "");
+      const rawDefault = rawDefaultClean;
       if (seen.has(name)) continue;
       seen.add(name);
 
@@ -361,8 +519,6 @@ export function parseCppUniforms(source: string): CppUniformSpec[] {
         const defNum = Number.isFinite(parsedDefault) ? parsedDefault : 0;
         const parsedMin = paramMatch[4]
           ? Number(paramMatch[4].replace(/[fF]$/, ""))
-          : isInt
-          ? 0
           : 0;
         const parsedMax = paramMatch[5]
           ? Number(paramMatch[5].replace(/[fF]$/, ""))
@@ -423,8 +579,8 @@ function stripCommentsAndProtectStrings(src: string): {
       continue;
     }
 
-    // Chaîne "..." ou '...'
-    if (ch === '"' || ch === "'") {
+    // Chaîne "...", '...' ou template literal `...`
+    if (ch === '"' || ch === "'" || ch === "`") {
       const quote = ch;
       let lit = ch;
       i++;
@@ -441,6 +597,9 @@ function stripCommentsAndProtectStrings(src: string): {
           i++;
           break;
         }
+        if (quote === "`" && c === "\n") {
+          out += "\n";
+        }
         i++;
       }
       const token = `__CPP_STR_${strings.length}__`;
@@ -454,6 +613,38 @@ function stripCommentsAndProtectStrings(src: string): {
   }
 
   return { skeleton: out, strings };
+}
+
+/**
+ * Détecte automatiquement si le code saisi/collé est du JavaScript natif
+ * (commence par `function renderAnarchyFrame(ctx)` ou utilise `const` / `let` / `=>`
+ * sans signature C++ `void renderAnarchyFrame(AnarchyCtx...`).
+ */
+export function detectScriptLanguage(source: string): ScriptLanguage {
+  const { skeleton } = stripCommentsAndProtectStrings(source.replace(/\r\n/g, "\n"));
+  const trimmed = skeleton.trim();
+  if (!trimmed) return "cpp";
+
+  const hasCppSignature =
+    /\bvoid\s+renderAnarchyFrame\s*\(\s*(?:const\s+)?AnarchyCtx\b/.test(trimmed) ||
+    /^\s*#\s*(?:include|define|pragma)\b/m.test(trimmed) ||
+    /\busing\s+namespace\b/.test(trimmed) ||
+    /\bstd::/.test(trimmed);
+
+  if (hasCppSignature) return "cpp";
+
+  if (/^\s*(?:function\s+renderAnarchyFrame\s*\(|(?:const|let|var)\s+renderAnarchyFrame\s*=)/.test(trimmed)) {
+    return "js";
+  }
+
+  const hasJsConstructs =
+    /\bfunction\s+[a-zA-Z_]\w*\s*\(/.test(trimmed) ||
+    /=>/.test(trimmed) ||
+    /\b(?:const|let|var)\s+[a-zA-Z_\[{]/.test(trimmed) ||
+    /\bMath\.(?:sin|cos|abs|floor|pow|min|max|PI)\b/.test(trimmed);
+
+  if (hasJsConstructs) return "js";
+  return "cpp";
 }
 
 function stripParamTypes(rawParams: string): string {
@@ -742,6 +933,7 @@ export function compileCppVisual(source: string): CppCompileResult {
 
     return {
       ok: true,
+      language: "cpp",
       uniforms,
       transpiledCode: js,
       fn: (ctx: CppRenderContext, uniformOverrides?: Record<string, CppUniformValue>) => {
@@ -770,6 +962,7 @@ export function compileCppVisual(source: string): CppCompileResult {
     const rawMsg = err instanceof Error ? err.message : "Erreur de syntaxe C++.";
     return {
       ok: false,
+      language: "cpp",
       fn: null,
       uniforms,
       errorLine,
@@ -777,6 +970,157 @@ export function compileCppVisual(source: string): CppCompileResult {
       transpiledCode: js,
     };
   }
+}
+
+/**
+ * Fast-path JavaScript Natif : court-circuite intégralement le transpileur C++ -> JS.
+ * Compile le module une seule fois par édition (préservant l'état top-level entre les frames)
+ * et synchronise les uniforms @param / @color / @toggle via ctx.params et variables locales.
+ */
+export function compileJsVisual(source: string): CppCompileResult {
+  const normalized = source.replace(/\r\n/g, "\n");
+  const clean = normalized.trim();
+  const uniforms = parseCppUniforms(normalized);
+
+  if (!clean) {
+    return {
+      ok: false,
+      language: "js",
+      fn: null,
+      uniforms,
+      error: "Code JavaScript vide.",
+      errorLine: 1,
+    };
+  }
+
+  const userLineCount = normalized.split("\n").length;
+  const { skeleton } = stripCommentsAndProtectStrings(normalized);
+
+  for (const word of FORBIDDEN_IDENTIFIERS) {
+    const rx = new RegExp(`\\b${word}\\b`);
+    if (rx.test(skeleton)) {
+      const idx = skeleton.split("\n").findIndex((l) => rx.test(l));
+      return {
+        ok: false,
+        language: "js",
+        fn: null,
+        uniforms,
+        error: `Symbole non autorisé dans le script JS : ${word}`,
+        errorLine: idx >= 0 ? idx + 1 : 1,
+      };
+    }
+  }
+
+  const initialUniforms: Record<string, CppUniformValue> = {};
+  for (const u of uniforms) {
+    initialUniforms[u.name] = u.defaultValue;
+  }
+
+  const uniformBindings = uniforms
+    .map((u) => `let ${u.name} = _u[${JSON.stringify(u.name)}];`)
+    .join(" ");
+  const uniformSync = uniforms
+    .map((u) => `${u.name} = _p[${JSON.stringify(u.name)}];`)
+    .join(" ");
+
+  // Prologue sur UNE SEULE LIGNE pour que la ligne 2 de `factoryBody` = ligne 1 JS utilisateur
+  const prologue =
+    `"use strict"; const { sin, cos, tan, asin, acos, atan, atan2, sqrt, pow, abs, floor, ceil, round, min, max, exp, log, PI } = _m; const TWO_PI = PI * 2; const clamp = _m.clamp, fmod = _m.fmod, lerp = _m.lerp, mix = _m.lerp, fract = _m.fract, step = _m.step, smoothstep = _m.smoothstep; ${uniformBindings} return (() => {`;
+  const epilogue =
+    `\nif (typeof renderAnarchyFrame !== "function") { return null; } return function __anarchyFrameWrapper(ctx, _p) { ${uniformSync} return renderAnarchyFrame(ctx, _p); }; })();`;
+
+  const factoryBody = `${prologue}\n${normalized}${epilogue}`;
+
+  let entryFn:
+    | ((ctx: CppRenderContext, _p: Record<string, CppUniformValue>) => void)
+    | null = null;
+
+  try {
+    const factory = new Function("_u", "_m", factoryBody) as (
+      _u: Record<string, CppUniformValue>,
+      _m: typeof CPP_MATH_HELPERS
+    ) => ((ctx: CppRenderContext, _p: Record<string, CppUniformValue>) => void) | null;
+
+    try {
+      entryFn = factory(initialUniforms, CPP_MATH_HELPERS);
+    } catch (initErr) {
+      const line = extractRuntimeErrorLine(initErr, 1, userLineCount);
+      const rawMsg =
+        initErr instanceof Error ? initErr.message : "Erreur d'initialisation JS.";
+      return {
+        ok: false,
+        language: "js",
+        fn: null,
+        uniforms,
+        errorLine: line,
+        error: line ? `Ligne ${line} : ${rawMsg}` : rawMsg,
+      };
+    }
+  } catch (syntaxErr) {
+    const errorLine = detectCompileErrorLine(skeleton, 1, userLineCount);
+    const rawMsg =
+      syntaxErr instanceof Error ? syntaxErr.message : "Erreur de syntaxe JavaScript.";
+    return {
+      ok: false,
+      language: "js",
+      fn: null,
+      uniforms,
+      errorLine,
+      error: errorLine ? `Ligne ${errorLine} : ${rawMsg}` : rawMsg,
+    };
+  }
+
+  if (!entryFn) {
+    return {
+      ok: false,
+      language: "js",
+      fn: null,
+      uniforms,
+      errorLine: 1,
+      error:
+        "Fonction renderAnarchyFrame(ctx) introuvable. Définis `function renderAnarchyFrame(ctx) { ... }`.",
+    };
+  }
+
+  const compiledEntry = entryFn;
+  return {
+    ok: true,
+    language: "js",
+    uniforms,
+    fn: (ctx: CppRenderContext, uniformOverrides?: Record<string, CppUniformValue>) => {
+      const mergedUniforms: Record<string, CppUniformValue> = {};
+      for (const u of uniforms) {
+        mergedUniforms[u.name] =
+          uniformOverrides && uniformOverrides[u.name] !== undefined
+            ? uniformOverrides[u.name]
+            : u.defaultValue;
+      }
+      ctx.params = mergedUniforms;
+      try {
+        compiledEntry(ctx, mergedUniforms);
+      } catch (runtimeErr) {
+        const line = extractRuntimeErrorLine(runtimeErr, 1, userLineCount);
+        const msg =
+          runtimeErr instanceof Error ? runtimeErr.message : "Erreur runtime JavaScript.";
+        const wrapped = new Error(line ? `Ligne ${line} : ${msg}` : msg);
+        (wrapped as Error & { errorLine?: number }).errorLine = line;
+        throw wrapped;
+      }
+    },
+  };
+}
+
+/**
+ * Compile un document visuel selon son langage (`js` -> Fast-Path V8 natif, `cpp` -> transpileur C++).
+ */
+export function compileVisualScript(
+  source: string,
+  language: ScriptLanguage = "cpp"
+): CppCompileResult {
+  if (language === "js") {
+    return compileJsVisual(source);
+  }
+  return compileCppVisual(source);
 }
 
 const CPP_MATH_HELPERS = {

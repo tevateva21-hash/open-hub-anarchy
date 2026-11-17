@@ -4,7 +4,10 @@ import React, { useState } from "react";
 import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { CPP_SHADER_AI_PROMPT } from "@/lib/visual-engine/cpp-runtime";
+import {
+  CPP_SHADER_AI_PROMPT,
+  JS_SHADER_AI_PROMPT,
+} from "@/lib/visual-engine/cpp-runtime";
 import { AI_SCENE_PACK_PROMPT } from "@/lib/visual-engine/scene-packs";
 
 const LRC_SCENARIO_PROMPT = `Transforme ces paroles en scénario LRC horodaté pour Anarchy Visual Studio (140 BPM, extrait 0.0s → 30.0s) :
@@ -332,44 +335,42 @@ export default function VisualStudioDocsPage() {
         </Card>
       </div>
 
-      {/* 6. Runtime C++ Live */}
+      {/* 6. Runtime JS & C++ Live */}
       <div id="cpp-runtime">
         <Card
-          moduleTitle="06 // ARCHITECTURE C++ MODULAIRE (4 MODULES · 60 FPS)"
-          moduleMeta="MULTI-.CPP · @PARAM/@COLOR/@TOGGLE · SCÈNES & PADS VJ"
+          moduleTitle="06 // RUNTIME MODULAIRE JS NATIF (.JS) & C++ (.CPP)"
+          moduleMeta="FAST-PATH V8 60 FPS · MULTI-FICHIERS · @PARAM · PADS VJ"
           activeIndicator
         >
           <div className="space-y-4">
             <p className="font-sans text-xs sm:text-sm text-neutral-700">
               Dans <Link href="/anarchy-visual-design/editeur" className="font-bold text-brand-red underline">/anarchy-visual-design/editeur</Link>,
-              le moteur C++ repose sur <strong>4 modules interconnectés</strong> qui s&apos;exécutent à 60 FPS sur{" "}
-              <code>/anarchy-visual-design</code> et dans les exports PNG/MP4 (avec la scénographie Open Hub PS1/PS2 préservée dans <code>sceno_openhub_ps2.cpp</code>) :
+              vous pouvez coder soit en <strong>JavaScript Natif (<code>.js</code>)</strong> — qui court-circuite le transpileur C++ pour une exécution V8 directe à 60 FPS avec état persistant hors boucle — soit en <strong>C++ (<code>.cpp</code>)</strong>, et mixer librement vos scènes (<code>sceno_openhub_ps2.cpp</code>, <code>lowpoly_3d_js.js</code>...).
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-sans text-xs text-neutral-700">
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">1. Transpileur C++ → JS blindé</div>
+                <div className="font-mono font-bold text-brand-black">1. Mode JS Natif (Fast-Path V8) &amp; Détection Auto</div>
                 <p>
-                  Accepte les directives <code>#include</code>, <code>using namespace std;</code>, suffixes{" "}
-                  <code>0.5f</code>, casts <code>(float)</code>/<code>static_cast</code>, tableaux{" "}
-                  <code>float arr[4] = &#123;...&#125;</code>, lambdas <code>[&amp;](...)</code>,{" "}
-                  <code>std::sin/cos/fmod</code> et <code>sinf/cosf/fmodf</code>, avec rapport d&apos;erreur
-                  à la ligne exacte sans faire planter la boucle 60 FPS.
+                  Dès qu&apos;un script commence par <code>function renderAnarchyFrame(ctx)</code> (ou utilise{" "}
+                  <code>const</code>/<code>let</code>/<code>=&gt;</code> sans signature <code>AnarchyCtx</code>),
+                  l&apos;éditeur bascule en <strong>JS Natif</strong> avec coloration syntaxique adaptée, exposition de{" "}
+                  <code>Math.*</code> et conservation de vos variables d&apos;état entre les frames.
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">2. Documents .cpp Multi-Fichiers</div>
+                <div className="font-mono font-bold text-brand-black">2. Transpileur C++ &amp; Documents Multi-Fichiers</div>
                 <p>
-                  Créez, renommez, dupliquez, importez ou exportez plusieurs scripts <code>.cpp</code>{" "}
-                  (<code>sceno_openhub_ps2.cpp</code>, <code>brutalist_grid.cpp</code>,{" "}
-                  <code>cyber_katana_drop.cpp</code>, <code>tiktok_karaoke_hud.cpp</code>), sauvegardés en local.
+                  En mode C++, le transpileur accepte <code>#include</code>, <code>std::*</code>, tableaux{" "}
+                  <code>arr[N]</code> et lambdas <code>[&amp;]()</code>. Créez, renommez, dupliquez, importez ou
+                  exportez vos scripts <code>.js</code> et <code>.cpp</code>.
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">3. Scènes, Routage Musical &amp; Pads VJ</div>
+                <div className="font-mono font-bold text-brand-black">3. Scènes Mixtes (.js / .cpp) &amp; Pads VJ</div>
                 <p>
-                  Assignez un document C++ + un preset à une section LRC/Whisper (<code>INTRO</code>,{" "}
-                  <code>MAIN</code>, <code>DROP</code>, <code>REFRAIN</code>), un créneau temporel (<code>startTime → endTime</code>)
+                  Assignez n&apos;importe quel document <code>.js</code> ou <code>.cpp</code> + un preset à une section LRC/Whisper (<code>INTRO</code>,{" "}
+                  <code>MAIN</code>, <code>DROP</code>, <code>REFRAIN</code>, <code>OUTRO</code>), un créneau temporel
                   ou un pad VJ manuel avec transitions (<code>Cut</code>, <code>Fondu</code>, <code>Glitch</code>).
                 </p>
               </div>
@@ -378,8 +379,8 @@ export default function VisualStudioDocsPage() {
                 <p>
                   Déclarez <code>{"// @param float speed = 4.0 [0.0, 20.0]"}</code>,{" "}
                   <code>{'// @color primaryColor = "#00F0FF"'}</code> ou{" "}
-                  <code>{"// @toggle enableGlitch = true"}</code> : l&apos;Inspector génère sliders, color pickers
-                  et toggles injectés à 60 FPS sans recompiler, enregistrables en presets nommés.
+                  <code>{"// @toggle enableGlitch = true"}</code> : identique en <strong>JS</strong> et en <strong>C++</strong>, l&apos;Inspector génère sliders, color pickers
+                  et toggles injectés à 60 FPS via <code>ctx.params</code> et variables locales sans recompiler.
                 </p>
               </div>
             </div>
@@ -482,6 +483,26 @@ export default function VisualStudioDocsPage() {
               </div>
               <pre className="p-3 rounded-lg border border-black bg-[#101216] font-mono text-[11px] text-[#00E5FF] whitespace-pre-wrap">
                 {CPP_SHADER_AI_PROMPT}
+              </pre>
+            </div>
+
+            {/* Prompt 2bis : JS Natif */}
+            <div className="space-y-1.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="font-mono text-xs font-bold text-amber-700 uppercase">
+                  2b. Prompt IA — Générer un Script JavaScript Natif 60 FPS (3D Low-Poly / Creative Coding)
+                </h3>
+                <Button
+                  type="button"
+                  variant="comic"
+                  size="sm"
+                  onClick={() => void copyText("p2js", JS_SHADER_AI_PROMPT)}
+                >
+                  {copiedId === "p2js" ? "✅ PROMPT JS COPIÉ !" : "📋 COPIER PROMPT JS"}
+                </Button>
+              </div>
+              <pre className="p-3 rounded-lg border border-black bg-[#0D1016] font-mono text-[11px] text-amber-300 whitespace-pre-wrap">
+                {JS_SHADER_AI_PROMPT}
               </pre>
             </div>
 

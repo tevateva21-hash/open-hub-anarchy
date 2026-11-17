@@ -169,12 +169,12 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
           <div className="flex flex-wrap items-center gap-2">
             {cppEnabled && (
               <span className="px-2 py-1 rounded bg-emerald-100 border border-black font-mono text-[10px] font-bold text-emerald-900">
-                💻 CODE C++ ACTIF
+                💻 CODE JS / C++ ACTIF
               </span>
             )}
             <Link href="/anarchy-visual-design/editeur">
               <Button type="button" variant="comic" size="sm">
-                💻 ÉDITEUR C++ &amp; SCÈNES ↗
+                💻 ÉDITEUR JS / C++ &amp; SCÈNES ↗
               </Button>
             </Link>
           </div>
