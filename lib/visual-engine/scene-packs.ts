@@ -1130,6 +1130,381 @@ export function generateRandomScenePack(
   };
 }
 
+export type ForgivingJsonParseResult =
+  | {
+      ok: true;
+      data: unknown;
+      cleanedJson: string;
+      wasRepaired: boolean;
+      repairs: string[];
+    }
+  | {
+      ok: false;
+      error: string;
+      line: number | null;
+      column: number | null;
+      lineSnippet: string | null;
+      cleanedJson: string;
+    };
+
+function extractJsonBlock(input: string): { text: string; extracted: boolean } {
+  const trimmed = input.trim();
+  const fenced = trimmed.match(/```(?:json|jsonc|js|ts|cpp)?\s*([\s\S]*?)```/i);
+  if (fenced?.[1]) {
+    return { text: fenced[1].trim(), extracted: true };
+  }
+
+  const firstObj = trimmed.indexOf("{");
+  const firstArr = trimmed.indexOf("[");
+  let start = -1;
+  if (firstObj >= 0 && firstArr >= 0) start = Math.min(firstObj, firstArr);
+  else start = Math.max(firstObj, firstArr);
+
+  if (start < 0) return { text: trimmed, extracted: false };
+
+  const openChar = trimmed[start];
+  const closeChar = openChar === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  let end = -1;
+
+  for (let i = start; i < trimmed.length; i++) {
+    const ch = trimmed[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+      continue;
+    }
+    if (ch === openChar) depth++;
+    else if (ch === closeChar) {
+      depth--;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+
+  const sliced = end >= start ? trimmed.slice(start, end + 1) : trimmed.slice(start);
+  return {
+    text: sliced,
+    extracted: start > 0 || (end >= 0 && end < trimmed.length - 1),
+  };
+}
+
+function stripJsonCommentsPreservingLines(input: string): {
+  text: string;
+  stripped: boolean;
+} {
+  let out = "";
+  let inString = false;
+  let escaped = false;
+  let stripped = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    const next = input[i + 1];
+
+    if (inString) {
+      out += ch;
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+      out += ch;
+      continue;
+    }
+
+    if (ch === "/" && next === "/") {
+      stripped = true;
+      i += 2;
+      while (i < input.length && input[i] !== "\n") {
+        i++;
+      }
+      if (i < input.length && input[i] === "\n") {
+        out += "\n";
+      }
+      continue;
+    }
+
+    if (ch === "/" && next === "*") {
+      stripped = true;
+      i += 2;
+      while (i < input.length && !(input[i] === "*" && input[i + 1] === "/")) {
+        if (input[i] === "\n") out += "\n";
+        i++;
+      }
+      i++; // skip '/'
+      continue;
+    }
+
+    out += ch;
+  }
+
+  return { text: out, stripped };
+}
+
+function mapOutsideStrings(
+  input: string,
+  transform: (segment: string) => string
+): string {
+  let out = "";
+  let segment = "";
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < input.length; i++) {
+    const ch = input[i];
+    if (inString) {
+      out += ch;
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      if (segment) {
+        out += transform(segment);
+        segment = "";
+      }
+      inString = true;
+      out += ch;
+      continue;
+    }
+    segment += ch;
+  }
+
+  if (segment) {
+    out += transform(segment);
+  }
+  return out;
+}
+
+function cleanCppNumbersAndTrailingCommas(input: string): {
+  text: string;
+  cleanedNumbers: boolean;
+  removedTrailingCommas: boolean;
+} {
+  let cleanedNumbers = false;
+  let removedTrailingCommas = false;
+
+  // 1. Nombres C++/GLSL (suffixes f/F, décimales sans zéro initial .5 / -.5)
+  const afterNumbers = mapOutsideStrings(input, (seg) => {
+    let s = seg;
+    const before = s;
+    // : .5 -> : 0.5  et  : -.5 -> : -0.5  et  [.5 -> [0.5
+    s = s.replace(/(^|[:\[,\s])(-?)\.(\d+)/g, "$1$20.$3");
+    // 12.f -> 12.0
+    s = s.replace(/(-?\d+)\.[fF](?=\s*[,}\]\n\r]|$)/g, "$1.0");
+    // 12.0f / 0.5f -> 12.0 / 0.5
+    s = s.replace(/(-?\d+\.\d+)[fF](?=\s*[,}\]\n\r]|$)/g, "$1");
+    // 12f -> 12
+    s = s.replace(/(-?\d+)[fF](?=\s*[,}\]\n\r]|$)/g, "$1");
+    if (s !== before) cleanedNumbers = true;
+    return s;
+  });
+
+  // 2. Virgules traînantes avant } ou ] (même sur plusieurs niveaux)
+  let afterCommas = afterNumbers;
+  for (let pass = 0; pass < 3; pass++) {
+    const next = mapOutsideStrings(afterCommas, (seg) =>
+      seg.replace(/,(\s*[}\]])/g, "$1")
+    );
+    if (next !== afterCommas) {
+      removedTrailingCommas = true;
+      afterCommas = next;
+    } else {
+      break;
+    }
+  }
+
+  return {
+    text: afterCommas,
+    cleanedNumbers,
+    removedTrailingCommas,
+  };
+}
+
+function extractLineColumnFromSyntaxError(
+  err: unknown,
+  source: string
+): { line: number | null; column: number | null; lineSnippet: string | null } {
+  const msg = err instanceof Error ? err.message : String(err ?? "");
+  const lines = source.split("\n");
+
+  const lineColMatch = msg.match(/line\s+(\d+)\s+column\s+(\d+)/i);
+  if (lineColMatch) {
+    const line = Math.max(1, Number(lineColMatch[1]));
+    const column = Math.max(1, Number(lineColMatch[2]));
+    return {
+      line,
+      column,
+      lineSnippet: lines[line - 1]?.trimEnd() ?? null,
+    };
+  }
+
+  const posMatch = msg.match(/position\s+(\d+)/i);
+  if (posMatch) {
+    const pos = Math.max(0, Math.min(source.length, Number(posMatch[1])));
+    const before = source.slice(0, pos);
+    const beforeLines = before.split("\n");
+    const line = beforeLines.length;
+    const column = beforeLines[beforeLines.length - 1].length + 1;
+    return {
+      line,
+      column,
+      lineSnippet: lines[line - 1]?.trimEnd() ?? null,
+    };
+  }
+
+  return { line: null, column: null, lineSnippet: null };
+}
+
+/**
+ * Parseur JSON tolérant ("forgiving") pour les Cartouches / Packs 3D générés par IA :
+ * 1. Extrait le bloc JSON même entouré de prose ou balises Markdown (```json ... ```)
+ * 2. Supprime les commentaires JS/C++ (`// ...` et `/* ... *\/`) hors chaînes
+ * 3. Nettoie les nombres C++/GLSL (`12.0f` -> `12.0`, `.5` -> `0.5`, `-.5` -> `-0.5`)
+ * 4. Supprime les virgules traînantes avant `}` ou `]`
+ * 5. Retourne la ligne exacte en français si une erreur persiste
+ */
+export function parseForgivingPackJSON(raw: string): ForgivingJsonParseResult {
+  if (!raw || !raw.trim()) {
+    return {
+      ok: false,
+      error: "Le JSON est vide.",
+      line: 1,
+      column: 1,
+      lineSnippet: null,
+      cleanedJson: "",
+    };
+  }
+
+  const repairs: string[] = [];
+  const extracted = extractJsonBlock(raw);
+  if (extracted.extracted) {
+    repairs.push("Bloc JSON extrait du texte / Markdown");
+  }
+
+  const uncommented = stripJsonCommentsPreservingLines(extracted.text);
+  if (uncommented.stripped) {
+    repairs.push("Commentaires // et /* */ supprimés");
+  }
+
+  const cleaned = cleanCppNumbersAndTrailingCommas(uncommented.text);
+  if (cleaned.cleanedNumbers) {
+    repairs.push("Nombres C++/GLSL normalisés (suffixes 'f' et '.5' -> '0.5')");
+  }
+  if (cleaned.removedTrailingCommas) {
+    repairs.push("Virgules traînantes supprimées");
+  }
+
+  try {
+    const data = JSON.parse(cleaned.text);
+    return {
+      ok: true,
+      data,
+      cleanedJson: cleaned.text,
+      wasRepaired: repairs.length > 0,
+      repairs,
+    };
+  } catch (err) {
+    const loc = extractLineColumnFromSyntaxError(err, cleaned.text);
+    const rawMsg = err instanceof Error ? err.message : "Syntaxe JSON invalide";
+    const linePrefix = loc.line
+      ? `Erreur de syntaxe JSON à la ligne ${loc.line}${
+          loc.column ? ` (col. ${loc.column})` : ""
+        }`
+      : "Erreur de syntaxe JSON";
+    return {
+      ok: false,
+      error: `${linePrefix} : ${rawMsg}`,
+      line: loc.line,
+      column: loc.column,
+      lineSnippet: loc.lineSnippet,
+      cleanedJson: cleaned.text,
+    };
+  }
+}
+
+/**
+ * Tente une auto-réparation syntaxique complète d'un JSON généré par IA
+ * (guillemets simples, clés non quotées, virgules manquantes, accolades non fermées, etc.).
+ */
+export function autoRepairPackJsonSyntax(raw: string): string {
+  const firstPass = parseForgivingPackJSON(raw);
+  if (firstPass.ok) {
+    return JSON.stringify(firstPass.data, null, 2);
+  }
+
+  let candidate = firstPass.cleanedJson || raw.trim();
+
+  // 1. Convertir les chaînes entre guillemets simples 'abc' -> "abc"
+  candidate = candidate.replace(/'([^'\\]*(?:\\.[^'\\]*)*)'/g, (_, inner) => {
+    const escaped = String(inner).replace(/"/g, '\\"');
+    return `"${escaped}"`;
+  });
+
+  // 2. Quoter les clés d'objet JS non quotées : { packId: "..." } -> { "packId": "..." }
+  candidate = mapOutsideStrings(candidate, (seg) =>
+    seg.replace(/([{,\s])([a-zA-Z_$][a-zA-Z0-9_$]*)\s*:/g, '$1"$2":')
+  );
+
+  // 3. Ajouter les virgules manquantes entre propriétés/éléments sur des lignes adjacentes
+  candidate = candidate.replace(
+    /("(?:\\.|[^"\\])*"|-?\d+(?:\.\d+)?|true|false|null|\}|\])\s*\n(\s*)("(?:\\.|[^"\\])*"\s*:|\{|\[)/g,
+    "$1,\n$2$3"
+  );
+
+  // 4. Nettoyer à nouveau nombres C++ et virgules traînantes
+  candidate = cleanCppNumbersAndTrailingCommas(candidate).text;
+
+  // 5. Fermer les crochets/accolades manquants si la réponse IA a été tronquée
+  const stack: string[] = [];
+  let inString = false;
+  let escaped = false;
+  for (let i = 0; i < candidate.length; i++) {
+    const ch = candidate[i];
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === "{") {
+      stack.push("}");
+    } else if (ch === "[") {
+      stack.push("]");
+    } else if ((ch === "}" || ch === "]") && stack.length > 0) {
+      if (stack[stack.length - 1] === ch) {
+        stack.pop();
+      }
+    }
+  }
+  if (stack.length > 0) {
+    candidate = candidate.replace(/,\s*$/, "");
+    candidate += "\n" + stack.reverse().join("\n");
+  }
+
+  const secondPass = parseForgivingPackJSON(candidate);
+  if (secondPass.ok) {
+    return JSON.stringify(secondPass.data, null, 2);
+  }
+  return candidate;
+}
+
 /**
  * Valide en temps réel un JSON de Pack 3D (`Anarchy3DPack`) ou de scène 3D et retourne
  * le pack nettoyé avec la liste éventuelle des champs corrigés par fallback.
@@ -1139,33 +1514,39 @@ export function validateAnarchy3DPackJson(
   authorFallback = "Anarchy Studio",
   customName?: string
 ):
-  | { ok: true; pack: Anarchy3DPack; warnings: string[] }
-  | { ok: false; error: string } {
-  let trimmed = rawText.trim();
-  if (!trimmed) {
-    return { ok: false, error: "Le JSON est vide." };
-  }
-
-  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
-  if (fenced?.[1]) {
-    trimmed = fenced[1].trim();
-  }
-
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(trimmed);
-  } catch (err) {
+  | {
+      ok: true;
+      pack: Anarchy3DPack;
+      warnings: string[];
+      repairs: string[];
+    }
+  | {
+      ok: false;
+      error: string;
+      line: number | null;
+      column: number | null;
+      lineSnippet: string | null;
+    } {
+  const forgiving = parseForgivingPackJSON(rawText);
+  if (!forgiving.ok) {
     return {
       ok: false,
-      error:
-        err instanceof Error
-          ? `Erreur de syntaxe JSON : ${err.message}`
-          : "Format JSON invalide.",
+      error: forgiving.error,
+      line: forgiving.line,
+      column: forgiving.column,
+      lineSnippet: forgiving.lineSnippet,
     };
   }
 
+  const parsed = forgiving.data;
   if (!parsed || typeof parsed !== "object") {
-    return { ok: false, error: "La racine du JSON doit être un objet ou un tableau." };
+    return {
+      ok: false,
+      error: "La racine du JSON doit être un objet ou un tableau.",
+      line: 1,
+      column: 1,
+      lineSnippet: null,
+    };
   }
 
   const warnings: string[] = [];
@@ -1183,6 +1564,9 @@ export function validateAnarchy3DPackJson(
       ok: false,
       error:
         'Le JSON doit contenir un tableau "scenes" non vide (ou une scène 3D).',
+      line: 1,
+      column: 1,
+      lineSnippet: null,
     };
   }
 
@@ -1271,6 +1655,7 @@ export function validateAnarchy3DPackJson(
   return {
     ok: true,
     warnings,
+    repairs: forgiving.repairs,
     pack: {
       packId: rawPackId,
       name: finalName,

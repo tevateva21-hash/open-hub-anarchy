@@ -18,7 +18,6 @@ import {
   type AudioAnalysis,
   type AudioFeatures,
   type LyricsDisplayStyle,
-  type PaletteId,
   type PresetParameterPath,
   type RetroPresetConfig,
   type StudioProject,
@@ -45,6 +44,7 @@ import {
   generatePresetVariations,
 } from "@/lib/visual-engine/presets";
 import {
+  SCENE_CATALOG,
   STUDY_FPS,
   STUDY_PALETTES,
   getSceneDescriptor,
@@ -113,6 +113,7 @@ export const VisualEngineStudio: React.FC = () => {
   // BPM, Beat Sync & Kick Blackout
   const [bpm, setBpm] = useState<number>(128);
   const [beatOffset, setBeatOffset] = useState<number>(0);
+  const [sceneAnchorSeconds, setSceneAnchorSeconds] = useState<number>(0);
   const [autoSceneSwitchBeats, setAutoSceneSwitchBeats] = useState<number>(16);
   const kickBlackoutMode = "duck-on-kick" as const;
   const activePackRef = useRef<ScenePack>(DEFAULT_SCENE_PACKS[0]);
@@ -485,12 +486,14 @@ export const VisualEngineStudio: React.FC = () => {
       let activeSlot: ScenePackSlot | undefined;
       if (pack.scenes.length > 0) {
         if (autoSceneSwitchBeats > 0) {
-          const beatFloat = Math.max(
-            0,
-            (timeSeconds - beatOffset) * (bpm / 60)
+          const beatDur = 60 / Math.max(40, bpm);
+          const elapsedFromAnchor = timeSeconds - sceneAnchorSeconds;
+          const rawSlotIdx = Math.floor(
+            elapsedFromAnchor / (beatDur * autoSceneSwitchBeats)
           );
           const slotIdx =
-            Math.floor(beatFloat / autoSceneSwitchBeats) % pack.scenes.length;
+            ((rawSlotIdx % pack.scenes.length) + pack.scenes.length) %
+            pack.scenes.length;
           activeSlot = pack.scenes[slotIdx];
           if (livePackSlotIndexRef.current !== slotIdx) {
             livePackSlotIndexRef.current = slotIdx;
@@ -585,6 +588,7 @@ export const VisualEngineStudio: React.FC = () => {
     lyricsStyle,
     lyricsText,
     project,
+    sceneAnchorSeconds,
     sourceMode,
     stopActiveRecording,
     timedWords,
@@ -1351,8 +1355,65 @@ export const VisualEngineStudio: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Calage fin BPM & Mesures (défaut verrouillé à 0.00s) */}
-                    <div className="pt-2.5 border-t border-neutral-300 grid grid-cols-1 sm:grid-cols-3 gap-3 items-center font-mono text-[11px]">
+                    {/* Calage fin BPM & Mesures (avec contrôle BPM manuel ÷2 / ×2 et ancrage exact du 1er temps) */}
+                    <div className="pt-2.5 border-t border-neutral-300 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-center font-mono text-[11px]">
+                      <div>
+                        <div className="flex justify-between mb-1">
+                          <span>TEMPO (BPM)</span>
+                          <strong className="text-brand-red">{bpm} BPM</strong>
+                        </div>
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setBpm((b) => Math.max(40, Math.round(b / 2)))
+                            }
+                            className="px-1.5 py-1 rounded border border-black bg-brand-white text-[10px] font-bold hover:bg-brand-pearl"
+                            title="Diviser le BPM par 2 (half-time)"
+                          >
+                            ÷2
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setBpm((b) => Math.max(40, b - 1))}
+                            className="px-2 py-1 rounded border border-black bg-brand-white text-[10px] font-bold hover:bg-brand-pearl"
+                          >
+                            -
+                          </button>
+                          <input
+                            type="number"
+                            aria-label="BPM manuel"
+                            min={40}
+                            max={240}
+                            value={bpm}
+                            onChange={(e) => {
+                              const v = Number(e.target.value);
+                              if (Number.isFinite(v)) {
+                                setBpm(Math.max(40, Math.min(240, Math.round(v))));
+                              }
+                            }}
+                            className="w-16 px-1.5 py-1 rounded border border-black bg-brand-white text-center font-bold"
+                          />
+                          <button
+                            type="button"
+                            onClick={() => setBpm((b) => Math.min(240, b + 1))}
+                            className="px-2 py-1 rounded border border-black bg-brand-white text-[10px] font-bold hover:bg-brand-pearl"
+                          >
+                            +
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() =>
+                              setBpm((b) => Math.min(240, Math.round(b * 2)))
+                            }
+                            className="px-1.5 py-1 rounded border border-black bg-brand-white text-[10px] font-bold hover:bg-brand-pearl"
+                            title="Multiplier le BPM par 2 (double-time)"
+                          >
+                            ×2
+                          </button>
+                        </div>
+                      </div>
+
                       <div>
                         <div className="flex justify-between mb-1">
                           <span>SWITCH SCÈNES (MESURES)</span>
@@ -1387,7 +1448,10 @@ export const VisualEngineStudio: React.FC = () => {
                             <strong>{beatOffset.toFixed(2)}s</strong>
                             <button
                               type="button"
-                              onClick={() => setBeatOffset(0)}
+                              onClick={() => {
+                                setBeatOffset(0);
+                                setSceneAnchorSeconds(0);
+                              }}
                               className="px-1.5 py-0.5 rounded border border-black bg-brand-white text-[9px] font-bold hover:bg-brand-red hover:text-white"
                             >
                               ↺ 0.00s
@@ -1400,7 +1464,11 @@ export const VisualEngineStudio: React.FC = () => {
                           max={2}
                           step={0.01}
                           value={beatOffset}
-                          onChange={(e) => setBeatOffset(Number(e.target.value))}
+                          onChange={(e) => {
+                            const nextOffset = Number(e.target.value);
+                            setBeatOffset(nextOffset);
+                            setSceneAnchorSeconds(nextOffset);
+                          }}
                           className="w-full accent-brand-red"
                         />
                       </div>
@@ -1412,14 +1480,15 @@ export const VisualEngineStudio: React.FC = () => {
                           onClick={() => {
                             const t =
                               localAudioRef.current?.currentTime ?? localTime;
-                            const beatDur = 60 / Math.max(60, bpm);
+                            const beatDur = 60 / Math.max(40, bpm);
                             const phase = Number((t % beatDur).toFixed(2));
                             setBeatOffset(phase);
+                            setSceneAnchorSeconds(t);
                             if (autoSceneSwitchBeats === 0) {
                               setAutoSceneSwitchBeats(16);
                             }
                             setPresetMessage(
-                              `1er temps calé sur ${t.toFixed(2)}s (phase ${phase}s @ ${bpm} BPM).`
+                              `1er temps & Scène #1 calés exactement à ${t.toFixed(2)}s (phase ${phase}s @ ${bpm} BPM).`
                             );
                           }}
                         >
@@ -1705,211 +1774,72 @@ export const VisualEngineStudio: React.FC = () => {
           {showMatrixPanel && (
             <div className={showStagePanel ? "xl:col-span-5 space-y-4" : "xl:col-span-12 space-y-4"}>
           <Card
-            moduleTitle="COLOR_&_VARIATIONS // COULEURS_&_VARIATIONS"
-            moduleMeta="7 PALETTES · COLOR MORPH · 4 VARIATIONS"
-            activeIndicator={useCustomPalette || activeVariationIdx !== null}
+            moduleTitle="VARIATIONS_RAPIDES // VARIATIONS_3D"
+            moduleMeta="4 VARIATIONS AUDIO-RÉACTIVES"
+            activeIndicator={activeVariationIdx !== null}
           >
-            <div className="space-y-4">
-              {/* Changement de couleur : Palette Principale & Palette Cible Color Morph */}
-              {(() => {
-                const displayedPaletteId = useCustomPalette
-                  ? preset.paletteId
-                  : renderReport?.paletteId ?? preset.paletteId;
-                const activePal =
-                  STUDY_PALETTES.find((p) => p.id === displayedPaletteId) ??
-                  STUDY_PALETTES[0];
-                const morphRatio = Math.max(
-                  0,
-                  Math.min(1, preset.effects.colorTransition ?? 0)
-                );
-                const targetPal =
-                  STUDY_PALETTES.find(
-                    (p) =>
-                      p.id ===
-                      (preset.effects.targetPaletteId ?? "techno-therapy")
-                  ) ?? STUDY_PALETTES[0];
-
-                return (
-                  <div className="space-y-3">
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                      <div>
-                        <div className="flex items-center justify-between mb-1">
-                          <label
-                            htmlFor="ve-palette-select"
-                            className="font-mono text-[10px] font-bold uppercase text-brand-charcoal"
-                          >
-                            Palette principale
-                          </label>
-                          <div className="flex items-center gap-1.5">
-                            {useCustomPalette && (
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  useCustomPaletteRef.current = false;
-                                  setUseCustomPalette(false);
-                                }}
-                                className="font-mono text-[9px] font-bold px-1.5 py-0.5 rounded border border-black bg-brand-pearl hover:bg-brand-white text-brand-black"
-                                title="Revenir aux couleurs automatiques du pack"
-                              >
-                                ↺ Pack
-                              </button>
-                            )}
-                            <button
-                              type="button"
-                              onClick={() => toggleLock("paletteId")}
-                              className="font-mono text-[9px] font-bold text-brand-red underline"
-                              title="Verrouiller la palette lors des variations"
-                            >
-                              {preset.locks["paletteId"] ? "🔒" : "🔓"}
-                            </button>
-                          </div>
-                        </div>
-                        <select
-                          id="ve-palette-select"
-                          value={displayedPaletteId}
-                          onChange={(e) => {
-                            const nextPal = e.target.value as PaletteId;
-                            useCustomPaletteRef.current = true;
-                            setUseCustomPalette(true);
-                            updatePreset((curr) => ({
-                              ...curr,
-                              paletteId: nextPal,
-                            }));
-                          }}
-                          className="w-full px-2.5 py-1.5 rounded-lg border-2 border-black bg-brand-white font-mono text-xs text-brand-black font-bold"
-                        >
-                          {STUDY_PALETTES.map((pal) => (
-                            <option key={pal.id} value={pal.id}>
-                              {pal.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-
-                      <div>
-                        <label
-                          htmlFor="ve-target-palette-select"
-                          className="block font-mono text-[10px] font-bold uppercase text-brand-charcoal mb-1"
-                        >
-                          Cible Color Morph{" "}
-                          {morphRatio > 0.01 && (
-                            <span className="text-brand-red">
-                              ({Math.round(morphRatio * 100)}%)
-                            </span>
-                          )}
-                        </label>
-                        <select
-                          id="ve-target-palette-select"
-                          value={
-                            preset.effects.targetPaletteId ?? "techno-therapy"
-                          }
-                          onChange={(e) => {
-                            const nextTarget = e.target.value as PaletteId;
-                            useCustomPaletteRef.current = true;
-                            setUseCustomPalette(true);
-                            updatePreset((curr) => ({
-                              ...curr,
-                              paletteId: displayedPaletteId,
-                              effects: {
-                                ...curr.effects,
-                                targetPaletteId: nextTarget,
-                                colorTransition:
-                                  (curr.effects.colorTransition ?? 0) <= 0.02
-                                    ? 0.5
-                                    : curr.effects.colorTransition,
-                              },
-                            }));
-                          }}
-                          className="w-full px-2.5 py-1.5 rounded-lg border-2 border-neutral-400 bg-brand-white font-mono text-xs text-brand-charcoal font-bold"
-                        >
-                          {STUDY_PALETTES.map((pal) => (
-                            <option key={`target-${pal.id}`} value={pal.id}>
-                              → {pal.name}
-                            </option>
-                          ))}
-                        </select>
-                      </div>
-                    </div>
-
-                    {/* Aperçu nuancier de la palette active (+ morph cible) */}
-                    <div className="space-y-1">
-                      <div className="flex h-3.5 rounded overflow-hidden border border-black">
-                        {[
-                          activePal.shadow,
-                          activePal.structure,
-                          activePal.distant,
-                          activePal.face,
-                          activePal.haze,
-                          activePal.reflection,
-                          activePal.glow,
-                          activePal.light,
-                        ].map((hex, i) => (
-                          <span
-                            key={`base-${hex}-${i}`}
-                            className="flex-1"
-                            style={{ backgroundColor: hex }}
-                          />
-                        ))}
-                      </div>
-                      {morphRatio > 0.01 && (
-                        <div className="flex h-2 rounded overflow-hidden border border-neutral-400">
-                          {[
-                            targetPal.shadow,
-                            targetPal.structure,
-                            targetPal.distant,
-                            targetPal.face,
-                            targetPal.haze,
-                            targetPal.reflection,
-                            targetPal.glow,
-                            targetPal.light,
-                          ].map((hex, i) => (
-                            <span
-                              key={`target-${hex}-${i}`}
-                              className="flex-1"
-                              style={{ backgroundColor: hex }}
-                            />
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                );
-              })()}
-
+            <div className="space-y-3">
               {/* Variations rapides pour expérimenter */}
-              <div className="space-y-2 pt-3 border-t border-neutral-200">
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <span className="font-mono text-[10px] font-bold uppercase text-brand-red">
-                    Variations rapides (Cliquer pour charger)
-                  </span>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-mono text-[10px] font-bold uppercase text-brand-red">
+                  Variations rapides (Cliquer pour charger)
+                </span>
+                <div className="flex items-center gap-1.5">
+                  {useCustomPalette && (
+                    <button
+                      type="button"
+                      onClick={() => {
+                        useCustomPaletteRef.current = false;
+                        setUseCustomPalette(false);
+                        setActiveVariationIdx(null);
+                      }}
+                      className="font-mono text-[10px] font-bold px-2 py-1 rounded border border-black bg-brand-pearl hover:bg-brand-white text-brand-black"
+                      title="Revenir aux couleurs du Pack 3D actif"
+                    >
+                      ↺ Couleurs Pack
+                    </button>
+                  )}
                   <Button
                     id="btn-ve-variations"
                     variant="clinical"
                     size="sm"
                     onClick={handleGenerateVariations}
                   >
-                    🎲 4 Variations
+                    🎲 Nouvelles Variations
                   </Button>
                 </div>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                  {variations.map((v, idx) => {
-                    const isSelected = activeVariationIdx === idx;
-                    return (
-                      <button
-                        key={`${v.seed}-${idx}`}
-                        type="button"
-                        onClick={() => handleApplyVariation(v, idx)}
-                        className={`px-2.5 py-1.5 rounded-lg border-2 font-mono text-[11px] font-bold text-left transition-all ${
-                          isSelected
-                            ? "border-black bg-brand-red text-white shadow-comic-sm"
-                            : "border-black bg-brand-pearl hover:bg-brand-white text-brand-black shadow-comic-sm"
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
+                {variations.map((v, idx) => {
+                  const isSelected = activeVariationIdx === idx;
+                  const sceneName =
+                    SCENE_CATALOG.find((s) => s.id === v.sceneId)?.name ??
+                    v.sceneId;
+                  const paletteName =
+                    STUDY_PALETTES.find((p) => p.id === v.paletteId)?.name ??
+                    v.paletteId;
+                  return (
+                    <button
+                      key={`${v.seed}-${idx}`}
+                      type="button"
+                      onClick={() => handleApplyVariation(v, idx)}
+                      className={`px-2.5 py-2 rounded-lg border-2 font-mono text-[11px] font-bold text-left transition-all ${
+                        isSelected
+                          ? "border-black bg-brand-red text-white shadow-comic-sm"
+                          : "border-black bg-brand-pearl hover:bg-brand-white text-brand-black shadow-comic-sm"
+                      }`}
+                    >
+                      <div className="truncate">{sceneName}</div>
+                      <div
+                        className={`text-[9px] truncate ${
+                          isSelected ? "text-white/90" : "text-neutral-600"
                         }`}
                       >
-                        #{idx + 1} · {v.sceneId.split("-")[0]} ({v.paletteId.split("-")[0]})
-                      </button>
-                    );
-                  })}
-                </div>
+                        {paletteName}
+                      </div>
+                    </button>
+                  );
+                })}
               </div>
             </div>
           </Card>

@@ -26,6 +26,7 @@ import {
   ANARCHY_TERRAIN_TYPES,
   ANARCHY_TREBLE_TARGETS,
   DEFAULT_SCENE_PACKS,
+  autoRepairPackJsonSyntax,
   createDefaultAnarchy3DScene,
   exportScenePackAsJson,
   generateRandomScenePack,
@@ -684,6 +685,49 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                     </Button>
                   </div>
                 </div>
+
+                {liveDraftValidation.ok &&
+                  liveDraftValidation.repairs.length > 0 && (
+                    <div className="p-2 rounded border border-cyan-600 bg-cyan-50 text-cyan-950 text-[10px] flex flex-wrap items-center justify-between gap-2">
+                      <span>
+                        ✨ Nettoyé automatiquement :{" "}
+                        {liveDraftValidation.repairs.join(" · ")}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPackJsonDraft(autoRepairPackJsonSyntax(packJsonDraft))
+                        }
+                        className="px-2 py-0.5 rounded border border-cyan-700 bg-white font-bold hover:bg-cyan-100"
+                      >
+                        Formater proprement
+                      </button>
+                    </div>
+                  )}
+
+                {!liveDraftValidation.ok && (
+                  <div className="p-2.5 rounded-lg border-2 border-brand-red bg-red-50 text-brand-red text-[11px] space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-bold">
+                        ✕ {liveDraftValidation.error}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() =>
+                          setPackJsonDraft(autoRepairPackJsonSyntax(packJsonDraft))
+                        }
+                        className="px-2.5 py-1 rounded border-2 border-black bg-brand-white text-brand-black hover:bg-brand-pearl font-bold text-[10px]"
+                      >
+                        🔧 Auto-réparer la syntaxe
+                      </button>
+                    </div>
+                    {liveDraftValidation.lineSnippet && (
+                      <pre className="p-1.5 rounded bg-neutral-900 text-amber-300 text-[10px] overflow-x-auto">
+                        Ligne {liveDraftValidation.line} : {liveDraftValidation.lineSnippet}
+                      </pre>
+                    )}
+                  </div>
+                )}
 
                 {liveDraftValidation.ok &&
                   liveDraftValidation.warnings.length > 0 && (
@@ -1365,14 +1409,52 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                 <textarea
                   rows={9}
                   value={importJsonText}
-                  onChange={(e) => setImportJsonText(e.target.value)}
-                  placeholder='Colle ici un JSON Anarchy3DPack ({ "packId": "...", "name": "...", "scenes": [...] })...'
+                  onChange={(e) => {
+                    setImportJsonText(e.target.value);
+                    if (importError) setImportError("");
+                  }}
+                  placeholder='Colle ici un JSON Anarchy3DPack (même entouré de texte, ```json, commentaires // ou nombres 12.0f)...'
                   className="w-full p-2.5 rounded border border-black bg-brand-white text-[10px]"
                 />
-                {importError && (
-                  <p className="text-[11px] text-brand-red font-bold">
-                    ✕ {importError}
-                  </p>
+                {liveImportValidation &&
+                  liveImportValidation.ok &&
+                  liveImportValidation.repairs.length > 0 && (
+                    <div className="p-2 rounded border border-cyan-600 bg-cyan-50 text-cyan-950 text-[10px]">
+                      ✨ Nettoyage auto : {liveImportValidation.repairs.join(" · ")}
+                    </div>
+                  )}
+                {((liveImportValidation && !liveImportValidation.ok) ||
+                  importError) && (
+                  <div className="p-2.5 rounded-lg border-2 border-brand-red bg-red-50 text-brand-red text-[10px] space-y-1.5">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-bold">
+                        ✕{" "}
+                        {liveImportValidation && !liveImportValidation.ok
+                          ? liveImportValidation.error
+                          : importError}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setImportJsonText(
+                            autoRepairPackJsonSyntax(importJsonText)
+                          );
+                          setImportError("");
+                        }}
+                        className="px-2.5 py-1 rounded border-2 border-black bg-brand-white text-brand-black hover:bg-brand-pearl font-bold text-[10px]"
+                      >
+                        🔧 Auto-réparer la syntaxe
+                      </button>
+                    </div>
+                    {liveImportValidation &&
+                      !liveImportValidation.ok &&
+                      liveImportValidation.lineSnippet && (
+                        <pre className="p-1.5 rounded bg-neutral-900 text-amber-300 text-[10px] overflow-x-auto">
+                          Ligne {liveImportValidation.line} :{" "}
+                          {liveImportValidation.lineSnippet}
+                        </pre>
+                      )}
+                  </div>
                 )}
                 <Button
                   type="button"
