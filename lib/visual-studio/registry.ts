@@ -192,6 +192,67 @@ export const POST_FX_REGISTRY = [
   },
 ] as const;
 
+export const CLONER_MODE_REGISTRY = [
+  {
+    value: "linear",
+    label: "linear (Alignement Linéaire)",
+    desc: "Duplique les instances le long d'un vecteur [dx, dy, dz] régulier.",
+  },
+  {
+    value: "radial",
+    label: "radial (Couronne / Anneau Radial)",
+    desc: "Répartit les instances en cercle (rayon défini par offset[0]) autour du centre.",
+  },
+  {
+    value: "grid",
+    label: "grid (Matrice 2D / 3D)",
+    desc: "Dispose les instances en grille carrée/cubique régulière.",
+  },
+  {
+    value: "spiral",
+    label: "spiral (Spirale / Hélice 3D)",
+    desc: "Combine rotation radiale, élévation et profondeur Z pour former tunnels et hélices.",
+  },
+] as const;
+
+export const AI_STYLE_PRESETS = [
+  {
+    id: "hotline-miami",
+    label: "Hotline Miami",
+    paletteHint: "Magenta #FF0088, Cyan #00F0FF, Jaune #FFD600, Nuit #120428",
+    terrainHint: "neon_highway, palm_trees, horizonSun strié, voiture low-poly",
+    fxHint: "crtScanlines: 0.4, chromaticAberration: 0.35, bloomIntensity: 1.0",
+  },
+  {
+    id: "ps1-dark-fantasy",
+    label: "PS1 Dark Fantasy",
+    paletteHint: "Rouge sang #B91C1C, Pierre sombre #1C1917, Braise #F59E0B",
+    terrainHint: "lowpoly_mountains ou dojo_pillars, floating_monolith, arches gothiques",
+    fxHint: "ps1VertexJitter: 0.65, crtScanlines: 0.3, bloomIntensity: 0.6",
+  },
+  {
+    id: "brutalist-techno",
+    label: "Brutalist Techno",
+    paletteHint: "Blanc #F8FAFC, Acier #334155, Rouge Alerte #FF1B24, Noir #09090B",
+    terrainHint: "dojo_pillars, mirror_floor, cloneurs linéaires et matrices de monolithes",
+    fxHint: "chromaticAberration: 0.25, crtScanlines: 0.2, bloomIntensity: 0.85",
+  },
+  {
+    id: "cyberpunk-tokyo",
+    label: "Cyberpunk Tokyo",
+    paletteHint: "Cyan #00F6FF, Rose Néon #FF0055, Indigo #0F172A, Or #FBBF24",
+    terrainHint: "infinite_grid, cyber_towers, cyber_katana, spirales d'anneaux",
+    fxHint: "chromaticAberration: 0.45, crtScanlines: 0.35, bloomIntensity: 1.15",
+  },
+  {
+    id: "acid-rave",
+    label: "Acid Rave",
+    paletteHint: "Vert Acide #A3E635, Violet #A855F7, Magenta #EC4899, Noir #05020A",
+    terrainHint: "tunnel, neon_arches, spirales et cloneurs radiaux kaléidoscopiques",
+    fxHint: "kaleidoscopeSegments: 6, chromaticAberration: 0.5, bloomIntensity: 1.3",
+  },
+] as const;
+
 export type AnarchyTerrainType = (typeof TERRAIN_REGISTRY)[number]["value"];
 export type AnarchySidePropType = (typeof SIDE_PROPS_REGISTRY)[number]["value"];
 export type AnarchySubjectMeshType = (typeof SUBJECT_MESH_REGISTRY)[number]["value"];
@@ -202,116 +263,299 @@ export type AnarchyBassTarget = (typeof BASS_TARGET_REGISTRY)[number]["value"];
 export type AnarchyMidTarget = (typeof MID_TARGET_REGISTRY)[number]["value"];
 export type AnarchyTrebleTarget = (typeof TREBLE_TARGET_REGISTRY)[number]["value"];
 export type AnarchyFluxTarget = (typeof FLUX_TARGET_REGISTRY)[number]["value"];
+export type AnarchyClonerMode = (typeof CLONER_MODE_REGISTRY)[number]["value"];
+
+export interface JsonSnippet3D {
+  id: string;
+  label: string;
+  target: "backdrop" | "subject";
+  description: string;
+  payload: unknown;
+}
+
+export const JSON_SNIPPETS_3D: readonly JsonSnippet3D[] = [
+  {
+    id: "horizon-sun",
+    label: "Soleil Synthwave Strié",
+    target: "backdrop",
+    description: "Calque ciel dégradé + soleil synthwave strié + champ d'étoiles",
+    payload: {
+      kind: "backdrop",
+      backdrop: {
+        skyGradient: ["#0B021C", "#38073B"],
+        horizonSun: {
+          enabled: true,
+          colorTop: "#FFD600",
+          colorBottom: "#FF0055",
+          stripes: 6,
+          size: 1.15,
+        },
+        starfield: {
+          enabled: true,
+          density: 0.75,
+          color: "#00F0FF",
+        },
+      },
+    },
+  },
+  {
+    id: "neon-ring-spiral",
+    label: "Spirale d'Anneaux Néon",
+    target: "subject",
+    description: "16 anneaux néon en spirale animés par le BPM et les basses",
+    payload: {
+      meshType: "procedural_group",
+      primaryColor: "#00F0FF",
+      accentColor: "#FF0055",
+      wireframeOverlay: true,
+      scale: 1.0,
+      position: [0, 0, -1.5],
+      cloner: {
+        mode: "spiral",
+        count: 16,
+        offset: [0.45, 0.12, -0.55],
+        stepRotation: [0, 0, 18],
+        stepScale: [0.97, 0.97, 0.97],
+      },
+      animations: [
+        { target: "rot.z", expr: "t * 0.8 + i * 0.25 + beat * 0.6" },
+        { target: "scale", expr: "1 + sin(t * 3 + i * 0.35) * 0.12 + bass * 0.25" },
+      ],
+      parts: [
+        {
+          primitive: "ring",
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [1.1, 1.1, 0.25],
+          color: "#00F0FF",
+          emissive: true,
+          wireframe: true,
+        },
+      ],
+    },
+  },
+  {
+    id: "brutalist-arch",
+    label: "Arche Brutaliste",
+    target: "subject",
+    description: "Portique brutaliste répété en profondeur avec pulsation sur kick",
+    payload: {
+      meshType: "procedural_group",
+      primaryColor: "#1E293B",
+      accentColor: "#FF1B24",
+      wireframeOverlay: true,
+      scale: 1.0,
+      position: [0, -0.35, -1.0],
+      cloner: {
+        mode: "linear",
+        count: 6,
+        offset: [0, 0, -1.4],
+        stepRotation: [0, 0, 0],
+        stepScale: [1, 1, 1],
+      },
+      animations: [
+        { target: "pos.y", expr: "-0.35 + bass * 0.2" },
+        { target: "emissiveIntensity", expr: "0.7 + flux * 1.2" },
+      ],
+      parts: [
+        {
+          primitive: "box",
+          position: [-1.35, 0.9, 0],
+          rotation: [0, 0, 0],
+          scale: [0.35, 2.2, 0.35],
+          color: "#1E293B",
+          emissive: false,
+          wireframe: true,
+        },
+        {
+          primitive: "box",
+          position: [1.35, 0.9, 0],
+          rotation: [0, 0, 0],
+          scale: [0.35, 2.2, 0.35],
+          color: "#1E293B",
+          emissive: false,
+          wireframe: true,
+        },
+        {
+          primitive: "wedge",
+          position: [0, 2.1, 0],
+          rotation: [0, 0, 0],
+          scale: [3.2, 0.4, 0.45],
+          color: "#FF1B24",
+          emissive: true,
+          wireframe: true,
+        },
+      ],
+    },
+  },
+  {
+    id: "lowpoly-car",
+    label: "Véhicule Low-Poly",
+    target: "subject",
+    description: "Bolide synthwave low-poly avec suspension réactive aux basses",
+    payload: {
+      meshType: "procedural_group",
+      primaryColor: "#1A1A2E",
+      accentColor: "#FF0055",
+      wireframeOverlay: true,
+      scale: 1.0,
+      position: [0, -0.45, 0],
+      animations: [
+        { target: "pos.y", expr: "-0.45 + sin(t * 5) * 0.04 + bass * 0.14" },
+        { target: "rot.z", expr: "sin(t * 2.1) * 0.06 * mid" },
+      ],
+      parts: [
+        {
+          primitive: "box",
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [1.35, 0.35, 2.4],
+          color: "#1E1B4B",
+          emissive: false,
+          wireframe: true,
+        },
+        {
+          primitive: "wedge",
+          position: [0, 0.28, -0.15],
+          rotation: [0, 0, 0],
+          scale: [1.05, 0.28, 1.2],
+          color: "#FF0055",
+          emissive: true,
+          wireframe: true,
+        },
+        {
+          primitive: "torus",
+          position: [-0.72, -0.16, 0.72],
+          rotation: [0, 1.57, 0],
+          scale: [0.28, 0.28, 0.22],
+          color: "#00F0FF",
+          emissive: true,
+          wireframe: true,
+        },
+        {
+          primitive: "torus",
+          position: [0.72, -0.16, 0.72],
+          rotation: [0, 1.57, 0],
+          scale: [0.28, 0.28, 0.22],
+          color: "#00F0FF",
+          emissive: true,
+          wireframe: true,
+        },
+        {
+          primitive: "torus",
+          position: [-0.72, -0.16, -0.72],
+          rotation: [0, 1.57, 0],
+          scale: [0.28, 0.28, 0.22],
+          color: "#00F0FF",
+          emissive: true,
+          wireframe: true,
+        },
+        {
+          primitive: "torus",
+          position: [0.72, -0.16, -0.72],
+          rotation: [0, 1.57, 0],
+          scale: [0.28, 0.28, 0.22],
+          color: "#00F0FF",
+          emissive: true,
+          wireframe: true,
+        },
+      ],
+    },
+  },
+  {
+    id: "monolith-grid",
+    label: "Matrice de Monolithes",
+    target: "subject",
+    description: "Grille 3x3 de cristaux/monolithes ondulant selon une fonction sin(t + i)",
+    payload: {
+      meshType: "procedural_group",
+      primaryColor: "#111827",
+      accentColor: "#A855F7",
+      wireframeOverlay: true,
+      scale: 0.75,
+      position: [-1.4, -0.2, -1.8],
+      cloner: {
+        mode: "grid",
+        count: 9,
+        offset: [1.4, 0, -1.4],
+        stepRotation: [0, 15, 0],
+        stepScale: [1, 1, 1],
+      },
+      animations: [
+        { target: "pos.y", expr: "sin(t * 2.5 + i * 0.7) * 0.45 + bass * 0.5" },
+        { target: "rot.y", expr: "t * 0.9 + i * 0.4" },
+      ],
+      parts: [
+        {
+          primitive: "pyramid",
+          position: [0, 0.45, 0],
+          rotation: [0, 0, 0],
+          scale: [0.45, 1.1, 0.45],
+          color: "#A855F7",
+          emissive: true,
+          wireframe: true,
+        },
+      ],
+    },
+  },
+];
 
 /**
- * Génère automatiquement le Prompt IA complet à partir du registre extensible.
+ * Génère le Prompt IA complet v3 (cloners, animations mathématiques, style & BPM actif).
  */
-export function generateAiPackPromptFromRegistry(): string {
+export function generateAiPackPromptV3(
+  styleId?: string,
+  activeBpm = 128
+): string {
   const terrains = TERRAIN_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
   const props = SIDE_PROPS_REGISTRY.map((p) => `"${p.value}"`).join(" | ");
   const meshes = SUBJECT_MESH_REGISTRY.map((m) => `"${m.value}"`).join(" | ");
   const primitives = PROCEDURAL_PRIMITIVE_REGISTRY.map((p) => `"${p.value}"`).join(" | ");
   const cameras = CAMERA_MODE_REGISTRY.map((c) => `"${c.value}"`).join(" | ");
+  const cloners = CLONER_MODE_REGISTRY.map((c) => `"${c.value}"`).join(" | ");
   const bass = BASS_TARGET_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
   const mid = MID_TARGET_REGISTRY.map((m) => `"${m.value}"`).join(" | ");
   const treble = TREBLE_TARGET_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
   const flux = FLUX_TARGET_REGISTRY.map((f) => `"${f.value}"`).join(" | ");
 
-  return `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v2 Multi-Calques).
-Génère une "Cartouche / Pack 3D v2" au format JSON strict (Anarchy3DPack) contenant un nombre libre de scènes 3D profondes (ex: 5 scènes).
+  const stylePreset =
+    AI_STYLE_PRESETS.find((s) => s.id === styleId) ?? AI_STYLE_PRESETS[0];
 
-IMPORTANT — RÈGLES STRICTES :
-1. Réponds UNIQUEMENT avec un bloc JSON valide (aucun code JS/C++, aucune fonction).
-2. Utilise exclusivement les valeurs autorisées issues du Registre :
+  return `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v3 Data-Driven).
+Génère une "Cartouche / Pack 3D v3" au format JSON strict (Anarchy3DPack) contenant 4 à 5 scènes 3D évolutives synchronisées à ${Math.round(activeBpm)} BPM.
+
+DIRECTION ARTISTIQUE DEMANDÉE (${stylePreset.label}) :
+- Palette conseillée : ${stylePreset.paletteHint}
+- Décors & Sujets : ${stylePreset.terrainHint}
+- Post-FX suggérés : ${stylePreset.fxHint}
+
+IMPORTANT — RÈGLES STRICTES v3 :
+1. Réponds UNIQUEMENT avec un bloc JSON valide (aucun code JS/C++, aucune fonction, aucun \`eval\`).
+2. Valeurs autorisées issues du Registre :
    - terrain.type : ${terrains}
    - sideProps.type : ${props}
    - subject.meshType : ${meshes}
    - procedural_group parts[].primitive : ${primitives}
+   - cloner.mode : ${cloners} (count entre 2 et 64, total < 256 primitives/scène pour 60 FPS)
    - camera.mode : ${cameras}
    - audioMapping.bassTarget : ${bass}
    - audioMapping.midTarget : ${mid}
    - audioMapping.trebleTarget : ${treble}
    - audioMapping.fluxTarget : ${flux}
-3. Tu peux composer plusieurs calques dans "layers[]" (backdrop, terrain, sideProps, subjects) et plusieurs sujets simultanés dans "subjects[]" (y compris "procedural_group" avec "parts[]" pour construire voitures, vaisseaux, temples, masques...).
-4. Tu peux doser "postFx" par scène : ps1VertexJitter (0..1), crtScanlines (0..1), chromaticAberration (0..1), kaleidoscopeSegments (0|2|4|6|8), bloomIntensity (0..2).
-5. Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".
-
-Schéma JSON v2 attendu :
-{
-  "packId": "synthwave-outrun-v2",
-  "name": "Synthwave // Outrun Highway v2",
-  "author": "Anarchy Studio",
-  "scenes": [
-    {
-      "id": "scene-1",
-      "name": "01. Sunset Outrun",
-      "version": 2,
-      "layers": [
-        {
-          "kind": "backdrop",
-          "backdrop": {
-            "skyGradient": ["#0B021C", "#38073B"],
-            "horizonSun": {
-              "enabled": true,
-              "colorTop": "#FFD600",
-              "colorBottom": "#FF0055",
-              "stripes": 6,
-              "size": 1.0
-            },
-            "starfield": { "enabled": true, "density": 0.7, "color": "#00F0FF" }
-          }
-        },
-        {
-          "kind": "terrain",
-          "terrain": {
-            "type": "neon_highway",
-            "speed": 14.0,
-            "primaryColor": "#00F0FF",
-            "secondaryColor": "#FF0055"
-          }
-        },
-        {
-          "kind": "sideProps",
-          "sideProps": {
-            "type": "palm_trees",
-            "density": 0.75,
-            "primaryColor": "#FF00AA",
-            "secondaryColor": "#00F0FF"
-          }
-        },
-        {
-          "kind": "subjects",
-          "subjects": [
-            {
-              "meshType": "procedural_group",
-              "primaryColor": "#1A1A2E",
-              "accentColor": "#FF0055",
-              "wireframeOverlay": true,
-              "scale": 1.0,
-              "position": [0, -0.45, 0],
-              "parts": [
-                { "primitive": "box", "position": [0, 0, 0], "rotation": [0, 0, 0], "scale": [1.4, 0.35, 2.4], "color": "#1E1B4B", "emissive": false, "wireframe": true },
-                { "primitive": "wedge", "position": [0, 0.28, -0.15], "rotation": [0, 0, 0], "scale": [1.1, 0.3, 1.2], "color": "#FF0055", "emissive": true, "wireframe": true }
-              ]
-            }
-          ]
-        }
-      ],
-      "camera": { "mode": "chase_low", "fov": 78, "shakeIntensity": 0.4 },
-      "audioMapping": {
-        "bassTarget": "camera_zoom_and_jump",
-        "midTarget": "terrain_wave_height",
-        "trebleTarget": "particles_burst",
-        "fluxTarget": "glitch_and_emissive"
-      },
-      "postFx": {
-        "ps1VertexJitter": 0.2,
-        "crtScanlines": 0.35,
-        "chromaticAberration": 0.3,
-        "kaleidoscopeSegments": 0,
-        "bloomIntensity": 0.85
-      }
-    }
-  ]
-}`;
+3. Cloneurs Procéduraux ("cloner") sur n'importe quel sujet de "subjects[]" ou élément de "parts[]" :
+   - { "mode": "linear"|"radial"|"grid"|"spiral", "count": 12, "offset": [dx, dy, dz], "stepRotation": [rxDeg, ryDeg, rzDeg], "stepScale": [sx, sy, sz] }
+4. Expressions Mathématiques Temps Réel ("animations[]") :
+   - Cibles : "pos.x", "pos.y", "pos.z", "rot.x", "rot.y", "rot.z", "scale", "scale.x", "scale.y", "scale.z", "emissiveIntensity", "fov"
+   - Variables : t (secondes), beat (0..1 phase BPM), i (index du clone), bass, mid, treble, flux (0..1)
+   - Fonctions : sin, cos, tan, abs, min, max, clamp, smoothstep, constantes pi, tau, opérateurs + - * / % ^
+   - Exemple : { "target": "pos.y", "expr": "sin(t * 2 + i * 0.4) * bass * 1.2" }
+5. Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".`;
 }
+
+/**
+ * Génère automatiquement le Prompt IA complet à partir du registre extensible.
+ */
+export function generateAiPackPromptFromRegistry(): string {
+  return generateAiPackPromptV3();
+}
+

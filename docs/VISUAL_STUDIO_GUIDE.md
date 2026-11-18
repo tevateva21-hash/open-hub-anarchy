@@ -104,3 +104,19 @@ Dans le panneau **`PACK DE SCÈNES // ENCHAÎNEMENT BPM`** :
 1. **`{ } ÉDITER / VOIR LE JSON`** : éditez le JSON complet du pack avec validation du schéma en temps réel, ou utilisez l'Inspecteur Visuel 3D (`environment`, `subject`, `camera`, `audioMapping`) et le bouton **`+ Ajouter une scène`**.
 2. **`⇄ IMPORTER / EXPORTER UN PACK (.JSON / COPIER LE CODE)`** : copiez le JSON en 1 clic, téléchargez un fichier `.json`, ou importez un Pack 3D JSON généré par IA.
 3. **`📖 DOC / GÉNÉRER AVEC UNE IA`** : consultez toutes les valeurs autorisées et cliquez sur **`📋 Copier le Prompt IA`** pour générer un Pack 3D JSON 100% valide dans ChatGPT, Claude ou Gemini.
+
+## 6. Moteur v3 : Cloneurs Procéduraux, Expressions Mathématiques & JSON Studio Composer
+
+- **Cloneurs Procéduraux (`cloner`)** sur tout sujet de `subjects[]` ou élément de `parts[]` :
+  - `mode` : `linear | radial | grid | spiral`
+  - `count` : `2..64` (plafonné à 256 primitives/instances par scène pour garantir 60 FPS)
+  - `offset` : `[dx, dy, dz]` · `stepRotation` : `[rx, ry, rz]` en degrés · `stepScale` : `[sx, sy, sz]`
+- **Expressions Mathématiques Temps Réel (`animations[]`, 100 % sandboxé sans `eval`)** :
+  - Cibles : `pos.x`, `pos.y`, `pos.z`, `rot.x`, `rot.y`, `rot.z`, `scale`, `scale.x`, `scale.y`, `scale.z`, `emissiveIntensity`, `fov`
+  - Variables : `t` (secondes), `beat` (phase BPM `0..1`), `i` (index du clone), `bass`, `mid`, `treble`, `flux` (`0..1`)
+  - Fonctions : `sin`, `cos`, `tan`, `abs`, `min`, `max`, `clamp`, `smoothstep`, constantes `pi`, `tau`, opérateurs `+ - * / % ^`
+- **JSON Studio Composer** dans `{ } ÉDITER / VOIR LE JSON` :
+  - **Snippets 3D** insérables en 1 clic (*Soleil Synthwave Strié*, *Spirale d'Anneaux Néon*, *Arche Brutaliste*, *Véhicule Low-Poly*, *Matrice de Monolithes*).
+  - **Générateur de Prompt IA v3** avec sélecteur de style (*Hotline Miami*, *PS1 Dark Fantasy*, *Brutalist Techno*, *Cyberpunk Tokyo*, *Acid Rave*) injectant automatiquement le **BPM actif**.
+  - Boutons **`✨ Prettify`** et **`★ Favori`** (sauvegarde `localStorage`).
+

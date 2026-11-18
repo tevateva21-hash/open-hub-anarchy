@@ -13,6 +13,7 @@ import type {
   AnarchyMidTarget,
   AnarchyTrebleTarget,
   AnarchyFluxTarget,
+  AnarchyClonerMode,
 } from "@/lib/visual-studio/registry";
 
 export type {
@@ -25,6 +26,7 @@ export type {
   AnarchyMidTarget,
   AnarchyTrebleTarget,
   AnarchyFluxTarget,
+  AnarchyClonerMode,
 };
 
 export const PRESET_SCHEMA_VERSION = 1 as const;
@@ -281,6 +283,35 @@ export interface SceneDescriptor {
   audioMappings: readonly { band: string; target: string }[];
 }
 
+export interface Anarchy3DCloner {
+  mode: AnarchyClonerMode;
+  count: number;
+  offset: [number, number, number];
+  /** Incrément de rotation en degrés [rx, ry, rz] par instance */
+  stepRotation?: [number, number, number];
+  /** Facteur d'échelle progressif [sx, sy, sz] par instance */
+  stepScale?: [number, number, number];
+}
+
+export type Anarchy3DAnimationTarget =
+  | "pos.x"
+  | "pos.y"
+  | "pos.z"
+  | "rot.x"
+  | "rot.y"
+  | "rot.z"
+  | "scale"
+  | "scale.x"
+  | "scale.y"
+  | "scale.z"
+  | "emissiveIntensity"
+  | "fov";
+
+export interface Anarchy3DAnimation {
+  target: Anarchy3DAnimationTarget;
+  expr: string;
+}
+
 export interface AnarchyProceduralPart {
   primitive: AnarchyProceduralPrimitive;
   position: [number, number, number];
@@ -289,6 +320,8 @@ export interface AnarchyProceduralPart {
   color: string;
   emissive?: boolean;
   wireframe?: boolean;
+  cloner?: Anarchy3DCloner;
+  animations?: Anarchy3DAnimation[];
 }
 
 export interface Anarchy3DEnvironment {
@@ -313,6 +346,10 @@ export interface Anarchy3DSubject {
   rotation?: [number, number, number];
   /** Liste des primitives géométriques lorsque meshType === "procedural_group" */
   parts?: AnarchyProceduralPart[];
+  /** Cloneur procédural v3 appliqué au sujet */
+  cloner?: Anarchy3DCloner;
+  /** Expressions mathématiques temps réel v3 */
+  animations?: Anarchy3DAnimation[];
 }
 
 export interface Anarchy3DBackdropLayer {
@@ -375,7 +412,7 @@ export interface Anarchy3DAudioMapping {
 export interface Anarchy3DScene {
   id: string;
   name: string;
-  version?: 1 | 2;
+  version?: 1 | 2 | 3;
   environment: Anarchy3DEnvironment;
   subject: Anarchy3DSubject;
   /** Calques composables v2 (backdrop, terrain, sideProps, subjects) */
@@ -384,6 +421,8 @@ export interface Anarchy3DScene {
   subjects?: Anarchy3DSubject[];
   /** Pipeline Post-Processing par scène */
   postFx?: Anarchy3DPostFx;
+  /** Animations mathématiques globales de scène v3 (ex: fov, emissiveIntensity) */
+  animations?: Anarchy3DAnimation[];
   camera: Anarchy3DCamera;
   audioMapping: Anarchy3DAudioMapping;
   /** Identifiants optionnels de liaison avec le catalogue interne du moteur 3D */

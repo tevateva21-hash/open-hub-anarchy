@@ -394,6 +394,17 @@ export default function VisualStudioDocsPage() {
                     <strong>postFx</strong> :{" "}
                     <code>{POST_FX_REGISTRY.map((x) => `${x.key} (${x.range})`).join(" · ")}</code>
                   </li>
+                  <li>
+                    <strong>cloner.mode (v3)</strong> :{" "}
+                    <code>linear | radial | grid | spiral</code> (<code>count</code> 2..64,{" "}
+                    <code>offset</code>, <code>stepRotation</code>°, <code>stepScale</code>, plafond 256 primitives/scène)
+                  </li>
+                  <li>
+                    <strong>animations[] (v3, zéro eval)</strong> : cibles{" "}
+                    <code>pos.x/y/z, rot.x/y/z, scale, scale.x/y/z, emissiveIntensity, fov</code> · variables{" "}
+                    <code>t, beat, i, bass, mid, treble, flux</code> · fonctions{" "}
+                    <code>sin, cos, tan, abs, min, max, clamp, smoothstep, pi, tau</code>
+                  </li>
                 </ul>
               </div>
 

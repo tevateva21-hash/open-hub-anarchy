@@ -1,7 +1,10 @@
 import type {
+  Anarchy3DAnimation,
+  Anarchy3DAnimationTarget,
   Anarchy3DAudioMapping,
   Anarchy3DBackdropLayer,
   Anarchy3DCamera,
+  Anarchy3DCloner,
   Anarchy3DEnvironment,
   Anarchy3DLayer,
   Anarchy3DPack,
@@ -12,6 +15,7 @@ import type {
   Anarchy3DTerrainLayer,
   AnarchyBassTarget,
   AnarchyCameraMode,
+  AnarchyClonerMode,
   AnarchyFluxTarget,
   AnarchyMidTarget,
   AnarchyProceduralPart,
@@ -24,10 +28,14 @@ import type {
   SceneId,
 } from "@/lib/visual-engine/contracts";
 import { PALETTE_IDS, SCENE_IDS } from "@/lib/visual-engine/presets";
+import { validateMathExpression } from "@/lib/visual-studio/math-expr";
 import {
+  AI_STYLE_PRESETS,
   BASS_TARGET_REGISTRY,
   CAMERA_MODE_REGISTRY,
+  CLONER_MODE_REGISTRY,
   FLUX_TARGET_REGISTRY,
+  JSON_SNIPPETS_3D,
   MID_TARGET_REGISTRY,
   PROCEDURAL_PRIMITIVE_REGISTRY,
   SIDE_PROPS_REGISTRY,
@@ -35,6 +43,7 @@ import {
   TERRAIN_REGISTRY,
   TREBLE_TARGET_REGISTRY,
   generateAiPackPromptFromRegistry,
+  generateAiPackPromptV3,
 } from "@/lib/visual-studio/registry";
 
 export type {
@@ -50,16 +59,24 @@ export type {
   Anarchy3DSidePropsLayer,
   Anarchy3DPostFx,
   AnarchyProceduralPart,
+  Anarchy3DCloner,
+  Anarchy3DAnimation,
+  Anarchy3DAnimationTarget,
 };
+
+export { AI_STYLE_PRESETS, JSON_SNIPPETS_3D, generateAiPackPromptV3 };
 
 export type ScenePackSlot = Anarchy3DScene;
 export type ScenePack = Anarchy3DPack;
+
+export const MAX_PRIMITIVES_PER_SCENE = 256;
 
 export const ANARCHY_TERRAIN_TYPES = TERRAIN_REGISTRY;
 export const ANARCHY_SIDE_PROP_TYPES = SIDE_PROPS_REGISTRY;
 export const ANARCHY_SUBJECT_MESH_TYPES = SUBJECT_MESH_REGISTRY;
 export const ANARCHY_PROCEDURAL_PRIMITIVES = PROCEDURAL_PRIMITIVE_REGISTRY;
 export const ANARCHY_CAMERA_MODES = CAMERA_MODE_REGISTRY;
+export const ANARCHY_CLONER_MODES = CLONER_MODE_REGISTRY;
 export const ANARCHY_BASS_TARGETS = BASS_TARGET_REGISTRY;
 export const ANARCHY_MID_TARGETS = MID_TARGET_REGISTRY;
 export const ANARCHY_TREBLE_TARGETS = TREBLE_TARGET_REGISTRY;
@@ -88,6 +105,23 @@ const PRIMITIVE_SET = new Set<AnarchyProceduralPrimitive>(
 const CAMERA_MODE_SET = new Set<AnarchyCameraMode>(
   CAMERA_MODE_REGISTRY.map((c) => c.value)
 );
+const CLONER_MODE_SET = new Set<AnarchyClonerMode>(
+  CLONER_MODE_REGISTRY.map((c) => c.value)
+);
+const ANIMATION_TARGET_SET = new Set<Anarchy3DAnimationTarget>([
+  "pos.x",
+  "pos.y",
+  "pos.z",
+  "rot.x",
+  "rot.y",
+  "rot.z",
+  "scale",
+  "scale.x",
+  "scale.y",
+  "scale.z",
+  "emissiveIntensity",
+  "fov",
+]);
 const BASS_TARGET_SET = new Set<AnarchyBassTarget>(
   BASS_TARGET_REGISTRY.map((b) => b.value)
 );
@@ -185,12 +219,13 @@ export function createDefaultAnarchy3DScene(
   overrides?: {
     id?: string;
     name?: string;
-    version?: 1 | 2;
+    version?: 1 | 2 | 3;
     environment?: Partial<Anarchy3DEnvironment>;
     subject?: Partial<Anarchy3DSubject>;
     subjects?: Anarchy3DSubject[];
     layers?: Anarchy3DLayer[];
     postFx?: Partial<Anarchy3DPostFx>;
+    animations?: Anarchy3DAnimation[];
     backdrop?: Partial<Anarchy3DBackdropLayer>;
     sideProps?: Partial<Anarchy3DSidePropsLayer>;
     camera?: Partial<Anarchy3DCamera>;
@@ -259,6 +294,7 @@ export function createDefaultAnarchy3DScene(
     subjects,
     layers,
     postFx,
+    ...(overrides?.animations ? { animations: overrides.animations } : {}),
     camera,
     audioMapping,
     sceneId,
@@ -1097,8 +1133,8 @@ export const DEFAULT_SCENE_PACKS: Anarchy3DPack[] = [
       }),
       createDefaultAnarchy3DScene(4, {
         id: "scene-5",
-        name: "05. Kaleido Warp",
-        version: 2,
+        name: "05. Kaleido Warp v3",
+        version: 3,
         sceneId: "techno-therapy",
         paletteId: "anarchy-anaglyph",
         seed: 805,
@@ -1136,15 +1172,30 @@ export const DEFAULT_SCENE_PACKS: Anarchy3DPack[] = [
               color: "#FF00AA",
               emissive: true,
               wireframe: true,
+              animations: [
+                { target: "rot.y", expr: "t * 1.4 + beat * 0.8" },
+                { target: "scale", expr: "0.9 + bass * 0.35" },
+              ],
             },
             {
               primitive: "ring",
-              position: [0, 0.2, 0],
-              rotation: [1.1, 0.2, 0.4],
-              scale: [1.5, 1.5, 1.5],
+              position: [0, 0.2, -0.8],
+              rotation: [0, 0, 0],
+              scale: [1.35, 1.35, 0.3],
               color: "#00F0FF",
               emissive: true,
-              wireframe: false,
+              wireframe: true,
+              cloner: {
+                mode: "spiral",
+                count: 10,
+                offset: [0.28, 0.06, -0.55],
+                stepRotation: [0, 0, 22],
+                stepScale: [0.96, 0.96, 0.96],
+              },
+              animations: [
+                { target: "rot.z", expr: "t * 0.9 + i * 0.3" },
+                { target: "scale", expr: "1 + sin(t * 3 + i * 0.4) * 0.1 + bass * 0.2" },
+              ],
             },
             {
               primitive: "pyramid",
@@ -1238,6 +1289,44 @@ function sanitizeVec3(
   ];
 }
 
+function sanitizeCloner(raw: unknown): Anarchy3DCloner | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const c = raw as Record<string, unknown>;
+  const mode: AnarchyClonerMode = CLONER_MODE_SET.has(c.mode as AnarchyClonerMode)
+    ? (c.mode as AnarchyClonerMode)
+    : "linear";
+  const count = Math.round(clampNum(c.count, 1, 64, 1));
+  const offset = sanitizeVec3(c.offset, [0, 0, 0], -30, 30);
+  const stepRotation = Array.isArray(c.stepRotation)
+    ? sanitizeVec3(c.stepRotation, [0, 0, 0], -360, 360)
+    : undefined;
+  const stepScale = Array.isArray(c.stepScale)
+    ? sanitizeVec3(c.stepScale, [1, 1, 1], 0.25, 2.5)
+    : undefined;
+  return {
+    mode,
+    count,
+    offset,
+    ...(stepRotation ? { stepRotation } : {}),
+    ...(stepScale ? { stepScale } : {}),
+  };
+}
+
+function sanitizeAnimations(raw: unknown): Anarchy3DAnimation[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const valid: Anarchy3DAnimation[] = [];
+  for (const item of raw.slice(0, 24)) {
+    if (!item || typeof item !== "object") continue;
+    const obj = item as Record<string, unknown>;
+    const target = obj.target as Anarchy3DAnimationTarget;
+    const expr = typeof obj.expr === "string" ? obj.expr.trim() : "";
+    if (!ANIMATION_TARGET_SET.has(target) || !expr) continue;
+    if (!validateMathExpression(expr).ok) continue;
+    valid.push({ target, expr });
+  }
+  return valid.length > 0 ? valid : undefined;
+}
+
 function sanitizeProceduralParts(
   rawParts: unknown,
   fallbackColor: string
@@ -1253,6 +1342,8 @@ function sanitizeProceduralParts(
       )
         ? (part.primitive as AnarchyProceduralPrimitive)
         : "box";
+      const cloner = sanitizeCloner(part.cloner);
+      const animations = sanitizeAnimations(part.animations);
       return {
         primitive,
         position: sanitizeVec3(part.position, [0, 0, 0], -20, 20),
@@ -1261,6 +1352,8 @@ function sanitizeProceduralParts(
         color: sanitizeHexColor(part.color, fallbackColor),
         emissive: typeof part.emissive === "boolean" ? part.emissive : false,
         wireframe: typeof part.wireframe === "boolean" ? part.wireframe : true,
+        ...(cloner ? { cloner } : {}),
+        ...(animations ? { animations } : {}),
       };
     });
 }
@@ -1285,6 +1378,8 @@ function sanitizeAnarchy3DSubject(
     fallback.accentColor
   );
   const parts = sanitizeProceduralParts(rawSub.parts, accentColor);
+  const cloner = sanitizeCloner(rawSub.cloner);
+  const animations = sanitizeAnimations(rawSub.animations);
 
   return {
     meshType,
@@ -1309,6 +1404,8 @@ function sanitizeAnarchy3DSubject(
         }
       : {}),
     ...(meshType === "procedural_group" || parts.length > 0 ? { parts } : {}),
+    ...(cloner ? { cloner } : {}),
+    ...(animations ? { animations } : {}),
   };
 }
 
@@ -1641,18 +1738,33 @@ export function sanitizeAnarchy3DScene(
       ? item.label.trim()
       : `0${idx + 1}. Scène 3D`;
 
+  const sceneAnimations = sanitizeAnimations(item.animations);
+  const hasV3Features =
+    Boolean(sceneAnimations?.length) ||
+    subjects.some(
+      (s) =>
+        Boolean(s.cloner) ||
+        Boolean(s.animations?.length) ||
+        Boolean(s.parts?.some((p) => Boolean(p.cloner) || Boolean(p.animations?.length)))
+    );
+
   return {
     id:
       typeof item.id === "string" && item.id.trim()
         ? item.id.trim()
         : `scene-${idx + 1}`,
     name: rawName,
-    version: rawLayers || item.postFx || item.subjects ? 2 : 1,
+    version: hasV3Features
+      ? 3
+      : rawLayers || item.postFx || item.subjects
+      ? 2
+      : 1,
     environment,
     subject: primarySubject,
     subjects,
     layers,
     postFx,
+    ...(sceneAnimations ? { animations: sceneAnimations } : {}),
     camera,
     audioMapping,
     sceneId: sanitizeSceneId(item.sceneId, inferredSceneId),
@@ -2320,8 +2432,82 @@ export function validateAnarchy3DPackJson(
           `Scène #${idx + 1} : fluxTarget "${String(aud.fluxTarget)}" inconnu → repli sur "glitch_and_emissive".`
         );
       }
+
+      // Validation v3 : animations & cloneurs
+      const checkAnimations = (anims: unknown, scope: string) => {
+        if (!Array.isArray(anims)) return;
+        anims.forEach((a, aIdx) => {
+          if (!a || typeof a !== "object") return;
+          const aObj = a as Record<string, unknown>;
+          const target = aObj.target as Anarchy3DAnimationTarget;
+          if (!ANIMATION_TARGET_SET.has(target)) {
+            warnings.push(
+              `Scène #${idx + 1} (${scope}.animations[${aIdx}]) : cible "${String(aObj.target)}" inconnue.`
+            );
+          }
+          const expr = typeof aObj.expr === "string" ? aObj.expr : "";
+          const check = validateMathExpression(expr);
+          if (!check.ok) {
+            warnings.push(
+              `Scène #${idx + 1} (${scope}.animations[${aIdx}].expr) : ${check.error}`
+            );
+          }
+        });
+      };
+
+      const checkCloner = (cloner: unknown, scope: string) => {
+        if (!cloner || typeof cloner !== "object") return;
+        const cObj = cloner as Record<string, unknown>;
+        if (cObj.mode && !CLONER_MODE_SET.has(cObj.mode as AnarchyClonerMode)) {
+          warnings.push(
+            `Scène #${idx + 1} (${scope}.cloner.mode) : mode "${String(cObj.mode)}" inconnu → repli sur "linear".`
+          );
+        }
+      };
+
+      checkAnimations(scObj.animations, "scene");
+      const rawSubjList = Array.isArray(scObj.subjects)
+        ? scObj.subjects
+        : scObj.subject
+        ? [scObj.subject]
+        : [];
+      rawSubjList.forEach((s, sIdx) => {
+        if (!s || typeof s !== "object") return;
+        const sRec = s as Record<string, unknown>;
+        checkCloner(sRec.cloner, `subjects[${sIdx}]`);
+        checkAnimations(sRec.animations, `subjects[${sIdx}]`);
+        if (Array.isArray(sRec.parts)) {
+          sRec.parts.forEach((p, pIdx) => {
+            if (!p || typeof p !== "object") return;
+            const pRec = p as Record<string, unknown>;
+            checkCloner(pRec.cloner, `subjects[${sIdx}].parts[${pIdx}]`);
+            checkAnimations(pRec.animations, `subjects[${sIdx}].parts[${pIdx}]`);
+          });
+        }
+      });
     }
-    return sanitizeAnarchy3DScene(rawSc, idx);
+    const sanitized = sanitizeAnarchy3DScene(rawSc, idx);
+    // Vérifier le plafond de 256 primitives/instances par scène
+    const subjArr = sanitized.subjects ?? [sanitized.subject];
+    let totalInstances = 0;
+    for (const s of subjArr) {
+      const sCount = s.cloner ? s.cloner.count : 1;
+      if (s.meshType === "procedural_group" && s.parts?.length) {
+        let pTotal = 0;
+        for (const p of s.parts) {
+          pTotal += p.cloner ? p.cloner.count : 1;
+        }
+        totalInstances += sCount * pTotal;
+      } else {
+        totalInstances += sCount;
+      }
+    }
+    if (totalInstances > MAX_PRIMITIVES_PER_SCENE) {
+      warnings.push(
+        `Scène #${idx + 1} : ${totalInstances} instances clonées détectées → plafonné à ${MAX_PRIMITIVES_PER_SCENE} pour garantir 60 FPS.`
+      );
+    }
+    return sanitized;
   });
 
   const rawPackId =
@@ -2373,7 +2559,7 @@ export function parseScenePackFromText(
 }
 
 /**
- * Exporte un Pack 3D au format JSON strict `Anarchy3DPack` ("Cartouche / Pack 3D v2").
+ * Exporte un Pack 3D au format JSON strict `Anarchy3DPack` ("Cartouche / Pack 3D v3").
  */
 export function exportScenePackAsJson(pack: Anarchy3DPack): string {
   const cleanExport = {
@@ -2403,10 +2589,13 @@ export function exportScenePackAsJson(pack: Anarchy3DPack): string {
         scale: sc.subject.scale,
         ...(sc.subject.position ? { position: sc.subject.position } : {}),
         ...(sc.subject.rotation ? { rotation: sc.subject.rotation } : {}),
+        ...(sc.subject.cloner ? { cloner: sc.subject.cloner } : {}),
+        ...(sc.subject.animations ? { animations: sc.subject.animations } : {}),
         ...(sc.subject.parts ? { parts: sc.subject.parts } : {}),
       },
       ...(sc.layers ? { layers: sc.layers } : {}),
       ...(sc.postFx ? { postFx: sc.postFx } : {}),
+      ...(sc.animations ? { animations: sc.animations } : {}),
       camera: {
         mode: sc.camera.mode,
         fov: sc.camera.fov,

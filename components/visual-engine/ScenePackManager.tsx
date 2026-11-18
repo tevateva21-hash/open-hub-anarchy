@@ -19,6 +19,7 @@ import type {
 } from "@/lib/visual-engine/contracts";
 import {
   AI_SCENE_PACK_PROMPT,
+  AI_STYLE_PRESETS,
   ANARCHY_BASS_TARGETS,
   ANARCHY_CAMERA_MODES,
   ANARCHY_FLUX_TARGETS,
@@ -29,10 +30,13 @@ import {
   ANARCHY_TERRAIN_TYPES,
   ANARCHY_TREBLE_TARGETS,
   DEFAULT_SCENE_PACKS,
+  JSON_SNIPPETS_3D,
   autoRepairPackJsonSyntax,
   createDefaultAnarchy3DScene,
   exportScenePackAsJson,
+  generateAiPackPromptV3,
   generateRandomScenePack,
+  parseForgivingPackJSON,
   parseScenePackFromText,
   sanitizeAnarchy3DScene,
   validateAnarchy3DPackJson,
@@ -44,6 +48,7 @@ import { SCENE_CATALOG, STUDY_PALETTES } from "@/lib/visual-engine/renderer";
 
 export const PACKS_STORAGE_KEY = "openhub_anarchy_3d_packs_v4";
 export const ACTIVE_PACK_ID_KEY = "openhub_active_3d_pack_id_v4";
+export const FAVORITE_PACKS_STORAGE_KEY = "openhub_favorite_3d_packs_v1";
 
 interface ScenePackManagerProps {
   authorName: string;
@@ -81,6 +86,13 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
   const [showJsonEditor, setShowJsonEditor] = useState<boolean>(false);
   const [editorTab, setEditorTab] = useState<EditorTab>("pack-json");
   const [packJsonDraft, setPackJsonDraft] = useState<string>("");
+  const [selectedSnippetId, setSelectedSnippetId] = useState<string>(
+    JSON_SNIPPETS_3D[0]?.id ?? "horizon-sun"
+  );
+  const [selectedAiStyleId, setSelectedAiStyleId] = useState<string>(
+    AI_STYLE_PRESETS[0]?.id ?? "hotline-miami"
+  );
+  const [favoritePackIds, setFavoritePackIds] = useState<string[]>([]);
 
   // Modales Importer/Exporter un Pack & Doc / Générer avec une IA
   const [showImportExportModal, setShowImportExportModal] =
@@ -94,6 +106,15 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
 
   useEffect(() => {
     try {
+      const rawFavs = window.localStorage.getItem(FAVORITE_PACKS_STORAGE_KEY);
+      if (rawFavs) {
+        const parsedFavs = JSON.parse(rawFavs) as unknown;
+        if (Array.isArray(parsedFavs)) {
+          setFavoritePackIds(
+            parsedFavs.filter((id): id is string => typeof id === "string")
+          );
+        }
+      }
       const raw = window.localStorage.getItem(PACKS_STORAGE_KEY);
       if (raw) {
         const stored = JSON.parse(raw) as unknown[];
@@ -357,6 +378,103 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
     );
   };
 
+  const handleToggleFavoritePack = () => {
+    const isFav = favoritePackIds.includes(currentPack.packId);
+    const nextFavs = isFav
+      ? favoritePackIds.filter((id) => id !== currentPack.packId)
+      : [...favoritePackIds, currentPack.packId];
+    setFavoritePackIds(nextFavs);
+    try {
+      window.localStorage.setItem(
+        FAVORITE_PACKS_STORAGE_KEY,
+        JSON.stringify(nextFavs)
+      );
+      persistPacks(packs);
+    } catch {
+      // ignore storage errors
+    }
+    setFeedback(
+      isFav
+        ? `Pack "${currentPack.name}" retiré des favoris.`
+        : `★ Pack "${currentPack.name}" sauvegardé dans tes favoris !`
+    );
+  };
+
+  const handlePrettifyJsonDraft = () => {
+    const parsed = parseForgivingPackJSON(packJsonDraft);
+    if (!parsed.ok) {
+      setFeedback(`Impossible de formater : ${parsed.error}`);
+      return;
+    }
+    setPackJsonDraft(JSON.stringify(parsed.data, null, 2));
+    setFeedback("✨ JSON formaté (Prettify).");
+  };
+
+  const handleInsertSnippetIntoDraft = () => {
+    const snippet = JSON_SNIPPETS_3D.find((s) => s.id === selectedSnippetId);
+    if (!snippet) return;
+    const parsed = parseForgivingPackJSON(packJsonDraft);
+    if (!parsed.ok || !parsed.data || typeof parsed.data !== "object") {
+      setFeedback(
+        "Corrige d'abord la syntaxe JSON avant d'insérer un Snippet 3D."
+      );
+      return;
+    }
+    const root = structuredClone(parsed.data) as Record<string, unknown>;
+    const scenesArr = Array.isArray(root.scenes)
+      ? (root.scenes as Record<string, unknown>[])
+      : null;
+    if (!scenesArr || scenesArr.length === 0) {
+      setFeedback('Le JSON doit contenir un tableau "scenes" non vide.');
+      return;
+    }
+    const targetIdx = Math.max(0, Math.min(scenesArr.length - 1, safeSlotIndex));
+    const targetScene = scenesArr[targetIdx];
+    targetScene.version = 3;
+
+    if (snippet.target === "backdrop") {
+      const existingLayers = Array.isArray(targetScene.layers)
+        ? (targetScene.layers as Record<string, unknown>[])
+        : [];
+      const withoutBackdrop = existingLayers.filter(
+        (l) => l && l.kind !== "backdrop"
+      );
+      targetScene.layers = [
+        structuredClone(snippet.payload) as Record<string, unknown>,
+        ...withoutBackdrop,
+      ];
+    } else {
+      const subjectPayload = structuredClone(snippet.payload) as Record<
+        string,
+        unknown
+      >;
+      if (Array.isArray(targetScene.layers)) {
+        const layers = targetScene.layers as Record<string, unknown>[];
+        const subjLayer = layers.find((l) => l && l.kind === "subjects");
+        if (subjLayer && Array.isArray(subjLayer.subjects)) {
+          (subjLayer.subjects as unknown[]).push(subjectPayload);
+        } else {
+          layers.push({ kind: "subjects", subjects: [subjectPayload] });
+        }
+      }
+      if (Array.isArray(targetScene.subjects)) {
+        (targetScene.subjects as unknown[]).push(subjectPayload);
+      } else {
+        targetScene.subjects = targetScene.subject
+          ? [targetScene.subject, subjectPayload]
+          : [subjectPayload];
+      }
+      if (!targetScene.subject) {
+        targetScene.subject = subjectPayload;
+      }
+    }
+
+    setPackJsonDraft(JSON.stringify(root, null, 2));
+    setFeedback(
+      `+ Snippet "${snippet.label}" inséré dans la scène #${targetIdx + 1} ! Clique sur "APPLIQUER" pour l'afficher.`
+    );
+  };
+
   return (
     <Card
       moduleTitle="PACK DE SCÈNES // ENCHAÎNEMENT BPM (MOTEUR 3D DATA-DRIVEN JSON)"
@@ -386,6 +504,7 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
             >
               {packs.map((p) => (
                 <option key={p.packId} value={p.packId}>
+                  {favoritePackIds.includes(p.packId) ? "★ " : ""}
                   {p.name} ({p.scenes.length} scènes)
                 </option>
               ))}
@@ -415,6 +534,19 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
               title="Dupliquer ce pack 3D pour le modifier librement"
             >
               ⎘ Dupliquer Pack
+            </button>
+
+            <button
+              type="button"
+              onClick={handleToggleFavoritePack}
+              className={`px-2.5 py-1.5 rounded border-2 font-mono text-[11px] font-bold transition-all ${
+                favoritePackIds.includes(currentPack.packId)
+                  ? "border-amber-600 bg-amber-100 text-amber-900"
+                  : "border-black bg-brand-white hover:bg-brand-pearl text-brand-black"
+              }`}
+              title="Sauvegarder ce pack dans tes favoris (localStorage)"
+            >
+              {favoritePackIds.includes(currentPack.packId) ? "★ Favori" : "☆ Favori"}
             </button>
           </div>
 
@@ -659,6 +791,14 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                   <div className="flex flex-wrap items-center gap-1.5">
                     <button
                       type="button"
+                      onClick={handlePrettifyJsonDraft}
+                      className="px-2.5 py-1 rounded border border-black bg-brand-white hover:bg-brand-pearl text-[10px] font-bold"
+                      title="Formater et indenter proprement le JSON"
+                    >
+                      ✨ Prettify
+                    </button>
+                    <button
+                      type="button"
                       onClick={() => {
                         navigator.clipboard?.writeText(packJsonDraft);
                         setFeedback(
@@ -687,6 +827,71 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                     >
                       ✓ APPLIQUER LE JSON AU MOTEUR 3D
                     </Button>
+                  </div>
+                </div>
+
+                {/* COMPOSER STUDIO v3 : SNIPPETS 3D & GÉNÉRATEUR DE PROMPT IA DYNAMIQUE */}
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-2.5 p-2.5 rounded-lg bg-neutral-900 text-white border-2 border-black">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase text-cyan-300">
+                      🧩 Snippets 3D :
+                    </span>
+                    <select
+                      aria-label="Choisir un Snippet 3D à insérer"
+                      value={selectedSnippetId}
+                      onChange={(e) => setSelectedSnippetId(e.target.value)}
+                      className="flex-1 min-w-[160px] px-2 py-1 rounded border border-neutral-600 bg-neutral-950 text-white text-[11px]"
+                    >
+                      {JSON_SNIPPETS_3D.map((snip) => (
+                        <option key={snip.id} value={snip.id}>
+                          {snip.label} — {snip.description}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={handleInsertSnippetIntoDraft}
+                      className="px-2.5 py-1 rounded border border-cyan-400 bg-cyan-500/20 hover:bg-cyan-500/35 text-cyan-200 text-[10px] font-bold"
+                    >
+                      + Insérer dans Scène #{safeSlotIndex + 1}
+                    </button>
+                  </div>
+
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase text-amber-300">
+                      🤖 Prompt IA v3 :
+                    </span>
+                    <select
+                      aria-label="Choisir un style artistique pour le Prompt IA"
+                      value={selectedAiStyleId}
+                      onChange={(e) => setSelectedAiStyleId(e.target.value)}
+                      className="flex-1 min-w-[140px] px-2 py-1 rounded border border-neutral-600 bg-neutral-950 text-white text-[11px]"
+                    >
+                      {AI_STYLE_PRESETS.map((style) => (
+                        <option key={style.id} value={style.id}>
+                          {style.label}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const prompt = generateAiPackPromptV3(
+                          selectedAiStyleId,
+                          bpm
+                        );
+                        navigator.clipboard?.writeText(prompt);
+                        const styleName =
+                          AI_STYLE_PRESETS.find((s) => s.id === selectedAiStyleId)
+                            ?.label ?? "v3";
+                        setFeedback(
+                          `Prompt IA "${styleName}" (${Math.round(bpm)} BPM) copié dans le presse-papiers !`
+                        );
+                      }}
+                      className="px-2.5 py-1 rounded border border-amber-400 bg-amber-500/20 hover:bg-amber-500/35 text-amber-200 text-[10px] font-bold"
+                    >
+                      🤖 Copier Prompt IA ({Math.round(bpm)} BPM)
+                    </button>
                   </div>
                 </div>
 

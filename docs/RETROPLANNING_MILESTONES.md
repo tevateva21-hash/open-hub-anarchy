@@ -59,3 +59,8 @@ Document de suivi complet des jalons réalisés sur **Open Hub by Anarchy** (`te
 - Schéma SQL complet dans `supabase/schema.sql` + diagnostic `/api/health/supabase`.
 - Page `/reseau` : profils, upload d'avatar personnalisé ou choix parmi 6 styles Anarchy, système Suivre, mur social & collaborations.
 - Textes centralisés éditables indépendamment dans `lib/site-texts.ts`.
+
+### 5. Moteur 3D Data-Driven v2 & v3 (`M25` – `M26`)
+- **M25 (`3730598`)** : Pipeline modulaire multi-calques `Anarchy3DPack v2` (`backdrop`, `terrain`, `sideProps`, `subjects[]`, `procedural_group`, `postFx`) + registre extensible `lib/visual-studio/registry.ts`.
+- **M26 (Actuel)** : `Anarchy3DPack v3` — Cloneurs procéduraux (`linear | radial | grid | spiral`, plafond 256 primitives/scène), évaluateur mathématique déterministe 100 % sandboxé (`lib/visual-studio/math-expr.ts`, zéro `eval`) pour `animations[]`, et **JSON Studio Composer** (Snippets 3D, Prompt IA v3 dynamique par style & BPM, Prettify, Favoris `localStorage`).
+

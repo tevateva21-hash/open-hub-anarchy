@@ -155,9 +155,15 @@ const MILESTONES = [
   },
   {
     id: "M25",
-    commit: "ACTUEL",
+    commit: "3730598",
     title: "Moteur Modulaire Multi-Calques v2 (`Anarchy3DPack v2`, `procedural_group`, `postFx` & Registre Extensible)",
     details: "Refonte du pipeline 3D en calques composables (`backdrop` avec skyGradient, soleil synthwave strié et starfield ; `terrain` incluant neon_highway et mirror_floor ; `sideProps` palm_trees/cyber_towers/dojo_pillars/neon_arches ; `subjects[]` multiples + constructeur `procedural_group` à 7 primitives 3D ; `postFx` par scène avec PS1 jitter, CRT, aberration chromatique, kaléidoscope et bloom). Registre centralisé `lib/visual-studio/registry.ts` mettant automatiquement à jour types, validation et Prompt IA, avec rétrocompatibilité v1 totale.",
+  },
+  {
+    id: "M26",
+    commit: "ACTUEL",
+    title: "Anarchy3DPack v3 : Cloneurs Procéduraux, Expressions Mathématiques Sandboxées & JSON Studio Composer",
+    details: "Ajout du bloc `cloner` (`linear | radial | grid | spiral`, jusqu'à 64 copies et plafond 256 primitives/scène pour 60 FPS) sur `subjects[]` et `parts[]`. Parseur et évaluateur mathématique déterministe 100 % sandboxé (`lib/visual-studio/math-expr.ts`, zéro eval/new Function) animant `pos`, `rot`, `scale`, `emissiveIntensity` et `fov` via `t`, `beat`, `i`, `bass`, `mid`, `treble`, `flux`. Nouveau JSON Studio Composer dans `ScenePackManager` : Snippets 3D insérables en 1 clic, Générateur de Prompt IA v3 dynamique par style et BPM actif, Prettify et sauvegarde des Packs favoris.",
   },
 ];
 

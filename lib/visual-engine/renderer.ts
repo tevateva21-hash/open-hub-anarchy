@@ -1,6 +1,9 @@
 import { getAudioFeaturesAt } from "./audioAnalysis";
+import { evaluateMathExpression } from "@/lib/visual-studio/math-expr";
 import type {
+  Anarchy3DAnimation,
   Anarchy3DBackdropLayer,
+  Anarchy3DCloner,
   Anarchy3DPostFx,
   Anarchy3DScene,
   Anarchy3DSidePropsLayer,
@@ -1828,11 +1831,146 @@ const BLACKOUT_PALETTE: StudyPalette = {
 function buildAnarchy3DScenePolygons(
   scene: Anarchy3DScene,
   timeSeconds: number,
-  audio: SceneAudioState
+  audio: SceneAudioState,
+  beatPhase = 0
 ): Poly3D[] {
   const polygons: Poly3D[] = [];
   const { environment: env, subject: sub, camera: cam, audioMapping: map } = scene;
-  const MAX_POLYS = 260;
+  const MAX_POLYS = 1600;
+  let instanceBudgetRemaining = 256;
+
+  const baseExprCtx = {
+    t: timeSeconds,
+    beat: beatPhase,
+    i: 0,
+    bass: clamp01(audio.bassEnvelope),
+    mid: clamp01(audio.midEnvelope),
+    treble: clamp01(audio.trebleEnvelope),
+    flux: clamp01(audio.transientPulse),
+  };
+
+  interface ClonerTransform {
+    pos: [number, number, number];
+    rot: [number, number, number];
+    scale: [number, number, number];
+  }
+
+  const expandClonerTransforms = (
+    cloner: Anarchy3DCloner | undefined,
+    basePos: [number, number, number],
+    baseRot: [number, number, number],
+    baseScale: [number, number, number]
+  ): ClonerTransform[] => {
+    if (!cloner || cloner.count <= 1) {
+      if (instanceBudgetRemaining <= 0) return [];
+      instanceBudgetRemaining -= 1;
+      return [{ pos: basePos, rot: baseRot, scale: baseScale }];
+    }
+    const count = Math.max(1, Math.min(64, cloner.count, instanceBudgetRemaining));
+    instanceBudgetRemaining -= count;
+    const deg2rad = Math.PI / 180;
+    const sr = cloner.stepRotation ?? [0, 0, 0];
+    const ss = cloner.stepScale ?? [1, 1, 1];
+    const off = cloner.offset ?? [0, 0, 0];
+    const cols = Math.max(1, Math.ceil(Math.sqrt(count)));
+    const out: ClonerTransform[] = [];
+
+    for (let idx = 0; idx < count; idx++) {
+      let px = basePos[0];
+      let py = basePos[1];
+      let pz = basePos[2];
+
+      if (cloner.mode === "linear") {
+        px += off[0] * idx;
+        py += off[1] * idx;
+        pz += off[2] * idx;
+      } else if (cloner.mode === "radial") {
+        const radius = Math.hypot(off[0], off[2]) || 1.6;
+        const angle = (idx / count) * Math.PI * 2;
+        px += Math.cos(angle) * radius;
+        py += off[1] * idx;
+        pz += Math.sin(angle) * radius;
+      } else if (cloner.mode === "grid") {
+        const col = idx % cols;
+        const row = Math.floor(idx / cols);
+        px += col * off[0];
+        py += row * off[1];
+        pz += row * off[2];
+      } else if (cloner.mode === "spiral") {
+        const stepAngle = (sr[2] !== 0 ? sr[2] : 20) * deg2rad;
+        const angle = idx * stepAngle;
+        const rxRadius = off[0] !== 0 ? off[0] : 0.45;
+        const ryRadius = off[1] !== 0 ? off[1] : rxRadius;
+        px += Math.cos(angle) * rxRadius;
+        py += Math.sin(angle) * ryRadius;
+        pz += off[2] * idx;
+      }
+
+      const rx = baseRot[0] + sr[0] * deg2rad * idx;
+      const ry = baseRot[1] + sr[1] * deg2rad * idx;
+      const rz = baseRot[2] + sr[2] * deg2rad * idx;
+      const sx = baseScale[0] * Math.pow(ss[0], idx);
+      const sy = baseScale[1] * Math.pow(ss[1], idx);
+      const sz = baseScale[2] * Math.pow(ss[2], idx);
+      out.push({ pos: [px, py, pz], rot: [rx, ry, rz], scale: [sx, sy, sz] });
+    }
+    return out;
+  };
+
+  const applyAnimations = (
+    anims: Anarchy3DAnimation[] | undefined,
+    i: number,
+    state: {
+      pos: [number, number, number];
+      rot: [number, number, number];
+      scale: [number, number, number];
+      emissiveIntensity: number;
+    }
+  ) => {
+    if (!anims || anims.length === 0) return;
+    const ctx = { ...baseExprCtx, i };
+    for (const anim of anims) {
+      const val = evaluateMathExpression(anim.expr, ctx, Number.NaN);
+      if (!Number.isFinite(val)) continue;
+      switch (anim.target) {
+        case "pos.x":
+          state.pos[0] = val;
+          break;
+        case "pos.y":
+          state.pos[1] = val;
+          break;
+        case "pos.z":
+          state.pos[2] = val;
+          break;
+        case "rot.x":
+          state.rot[0] = val;
+          break;
+        case "rot.y":
+          state.rot[1] = val;
+          break;
+        case "rot.z":
+          state.rot[2] = val;
+          break;
+        case "scale":
+          state.scale[0] *= val;
+          state.scale[1] *= val;
+          state.scale[2] *= val;
+          break;
+        case "scale.x":
+          state.scale[0] = val;
+          break;
+        case "scale.y":
+          state.scale[1] = val;
+          break;
+        case "scale.z":
+          state.scale[2] = val;
+          break;
+        case "emissiveIntensity":
+          state.emissiveIntensity = val;
+          break;
+      }
+    }
+  };
 
   // Extraire les calques v2 s'ils sont présents (sinon fallback v1 transparent)
   const terrainLayer: Anarchy3DTerrainLayer =
@@ -1911,8 +2049,16 @@ function buildAnarchy3DScenePolygons(
     return { x: cx + x3, y: cy + y3, z: cz + z2 };
   };
 
+  const sceneEmissiveAnim = scene.animations?.find(
+    (a) => a.target === "emissiveIntensity"
+  );
+  const sceneEmissiveExtra = sceneEmissiveAnim
+    ? clamp01(evaluateMathExpression(sceneEmissiveAnim.expr, baseExprCtx, 0)) * 0.35
+    : 0;
+
   const emissiveBoost =
-    map.fluxTarget === "glitch_and_emissive" ? audio.transientPulse * 0.25 : 0;
+    (map.fluxTarget === "glitch_and_emissive" ? audio.transientPulse * 0.25 : 0) +
+    sceneEmissiveExtra;
   const wireGlowActive =
     sub.wireframeOverlay ||
     (map.trebleTarget === "wireframe_glow" && audio.trebleEnvelope > 0.22) ||
@@ -2187,113 +2333,133 @@ function buildAnarchy3DScenePolygons(
     cz: number,
     parentScale: number,
     parentAccent: string,
-    baseRotY: number
+    baseRotY: number,
+    parentInstanceIdx = 0
   ) => {
-    const px = cx + part.position[0] * parentScale;
-    const py = cy + part.position[1] * parentScale;
-    const pz = cz + part.position[2] * parentScale;
-    const sx = part.scale[0] * parentScale;
-    const sy = part.scale[1] * parentScale;
-    const sz = part.scale[2] * parentScale;
-    const rx = part.rotation[0];
-    const ry = part.rotation[1] + baseRotY;
-    const rz = part.rotation[2];
+    const partTransforms = expandClonerTransforms(
+      part.cloner,
+      part.position,
+      part.rotation,
+      part.scale
+    );
     const fill = part.color;
     const wire = part.emissive ? "#FFFFFF" : parentAccent;
-    const tone = part.emissive ? 0.96 : 0.78;
+    const baseTone = part.emissive ? 0.96 : 0.78;
     const wireRim = part.wireframe ?? true;
 
-    switch (part.primitive) {
-      case "box":
-        addBox(px, py, pz, sx, sy, sz, fill, wire, tone, wireRim, false, ry, rx, rz);
-        break;
-      case "wedge":
-        addWedge(px, py, pz, sx, sy, sz, fill, wire, tone, wireRim, rx, ry, rz);
-        break;
-      case "pyramid":
-        addPyramid(
-          px,
-          py,
-          pz,
-          Math.max(sx, sz) * 0.55,
-          sy,
-          fill,
-          wire,
-          tone,
-          wireRim,
-          false,
-          ry,
-          rx,
-          rz
-        );
-        break;
-      case "icosahedron":
-        addPyramid(
-          px,
-          py + sy * 0.28,
-          pz,
-          Math.max(sx, sz) * 0.52,
-          sy * 0.6,
-          fill,
-          wire,
-          tone,
-          wireRim,
-          false,
-          ry,
-          rx,
-          rz
-        );
-        addPyramid(
-          px,
-          py - sy * 0.28,
-          pz,
-          Math.max(sx, sz) * 0.52,
-          sy * 0.6,
-          fill,
-          wire,
-          clamp01(tone * 0.85),
-          wireRim,
-          true,
-          ry,
-          rx,
-          rz
-        );
-        break;
-      case "cylinder":
-        addRing(
-          pz - sz * 0.5,
-          Math.max(sx, sy) * 0.5,
-          Math.max(0.18, sz),
-          6,
-          rz,
-          fill,
-          wire,
-          tone,
-          wireRim,
-          px,
-          py,
-          rx,
-          ry
-        );
-        break;
-      case "torus":
-      case "ring":
-        addRing(
-          pz - sz * 0.2,
-          Math.max(sx, sy) * 0.55,
-          Math.max(0.14, sz * 0.45),
-          8,
-          rz,
-          fill,
-          wire,
-          tone,
-          wireRim,
-          px,
-          py,
-          rx,
-          ry
-        );
-        break;
+    for (let pIdx = 0; pIdx < partTransforms.length; pIdx++) {
+      const tr = partTransforms[pIdx];
+      const animState = {
+        pos: [...tr.pos] as [number, number, number],
+        rot: [...tr.rot] as [number, number, number],
+        scale: [...tr.scale] as [number, number, number],
+        emissiveIntensity: baseTone,
+      };
+      applyAnimations(part.animations, pIdx + parentInstanceIdx, animState);
+
+      const px = cx + animState.pos[0] * parentScale;
+      const py = cy + animState.pos[1] * parentScale;
+      const pz = cz + animState.pos[2] * parentScale;
+      const sx = animState.scale[0] * parentScale;
+      const sy = animState.scale[1] * parentScale;
+      const sz = animState.scale[2] * parentScale;
+      const rx = animState.rot[0];
+      const ry = animState.rot[1] + baseRotY;
+      const rz = animState.rot[2];
+      const tone = clamp01(animState.emissiveIntensity);
+
+      switch (part.primitive) {
+        case "box":
+          addBox(px, py, pz, sx, sy, sz, fill, wire, tone, wireRim, false, ry, rx, rz);
+          break;
+        case "wedge":
+          addWedge(px, py, pz, sx, sy, sz, fill, wire, tone, wireRim, rx, ry, rz);
+          break;
+        case "pyramid":
+          addPyramid(
+            px,
+            py,
+            pz,
+            Math.max(sx, sz) * 0.55,
+            sy,
+            fill,
+            wire,
+            tone,
+            wireRim,
+            false,
+            ry,
+            rx,
+            rz
+          );
+          break;
+        case "icosahedron":
+          addPyramid(
+            px,
+            py + sy * 0.28,
+            pz,
+            Math.max(sx, sz) * 0.52,
+            sy * 0.6,
+            fill,
+            wire,
+            tone,
+            wireRim,
+            false,
+            ry,
+            rx,
+            rz
+          );
+          addPyramid(
+            px,
+            py - sy * 0.28,
+            pz,
+            Math.max(sx, sz) * 0.52,
+            sy * 0.6,
+            fill,
+            wire,
+            clamp01(tone * 0.85),
+            wireRim,
+            true,
+            ry,
+            rx,
+            rz
+          );
+          break;
+        case "cylinder":
+          addRing(
+            pz - sz * 0.5,
+            Math.max(sx, sy) * 0.5,
+            Math.max(0.18, sz),
+            6,
+            rz,
+            fill,
+            wire,
+            tone,
+            wireRim,
+            px,
+            py,
+            rx,
+            ry
+          );
+          break;
+        case "torus":
+        case "ring":
+          addRing(
+            pz - sz * 0.2,
+            Math.max(sx, sy) * 0.55,
+            Math.max(0.14, sz * 0.45),
+            8,
+            rz,
+            fill,
+            wire,
+            tone,
+            wireRim,
+            px,
+            py,
+            rx,
+            ry
+          );
+          break;
+      }
     }
   };
 
@@ -2685,11 +2851,22 @@ function buildAnarchy3DScenePolygons(
 
   for (let sIdx = 0; sIdx < subjectsList.length; sIdx++) {
     const curSub = subjectsList[sIdx];
-    const sc = curSub.scale * subjectPulse;
-    const offX = curSub.position?.[0] ?? 0;
-    const offY = curSub.position?.[1] ?? 0;
-    const offZ = curSub.position?.[2] ?? 0;
-    const baseRotY = curSub.rotation?.[1] ?? 0;
+    const baseSubPos: [number, number, number] = [
+      curSub.position?.[0] ?? 0,
+      curSub.position?.[1] ?? 0,
+      curSub.position?.[2] ?? 0,
+    ];
+    const baseSubRot: [number, number, number] = [
+      curSub.rotation?.[0] ?? 0,
+      curSub.rotation?.[1] ?? 0,
+      curSub.rotation?.[2] ?? 0,
+    ];
+    const subTransforms = expandClonerTransforms(
+      curSub.cloner,
+      baseSubPos,
+      baseSubRot,
+      [curSub.scale, curSub.scale, curSub.scale]
+    );
     const sPrimary =
       map.midTarget === "color_shift"
         ? lerpHexColor(
@@ -2701,24 +2878,45 @@ function buildAnarchy3DScenePolygons(
     const sAccent = curSub.accentColor;
     const sWire = curSub.wireframeOverlay || wireGlowActive;
 
-    switch (curSub.meshType) {
-      case "procedural_group": {
-        const centerZ = 4.9 + offZ;
-        const baseY = offY + jumpY * 0.45;
-        const parts = curSub.parts ?? [];
-        for (const part of parts) {
-          addProceduralPart(
-            part,
-            offX,
-            baseY,
-            centerZ,
-            sc,
-            sAccent,
-            baseRotY + (sIdx > 0 ? subRotY * 0.5 : Math.sin(timeSeconds * 0.9) * 0.12)
-          );
+    for (let instIdx = 0; instIdx < subTransforms.length; instIdx++) {
+      const tr = subTransforms[instIdx];
+      const animState = {
+        pos: [...tr.pos] as [number, number, number],
+        rot: [...tr.rot] as [number, number, number],
+        scale: [...tr.scale] as [number, number, number],
+        emissiveIntensity: 0.85,
+      };
+      applyAnimations(curSub.animations, instIdx, animState);
+      const sc =
+        ((animState.scale[0] + animState.scale[1] + animState.scale[2]) / 3) *
+        subjectPulse;
+      const offX = animState.pos[0];
+      const offY = animState.pos[1];
+      const offZ = animState.pos[2];
+      const baseRotY = animState.rot[1];
+
+      switch (curSub.meshType) {
+        case "procedural_group": {
+          const centerZ = 4.9 + offZ;
+          const baseY = offY + jumpY * 0.45;
+          const parts = curSub.parts ?? [];
+          for (const part of parts) {
+            addProceduralPart(
+              part,
+              offX,
+              baseY,
+              centerZ,
+              sc,
+              sAccent,
+              baseRotY +
+                (sIdx > 0 || instIdx > 0
+                  ? subRotY * 0.5
+                  : Math.sin(timeSeconds * 0.9) * 0.12),
+              instIdx
+            );
+          }
+          break;
         }
-        break;
-      }
       case "voxel_runner": {
         const runPhase = timeSeconds * Math.max(4, terrainLayer.speed * 0.65);
         const stride = Math.sin(runPhase) * 0.45;
@@ -2941,6 +3139,7 @@ function buildAnarchy3DScenePolygons(
       }
       case "none":
         break;
+      }
     }
   }
 
@@ -3268,7 +3467,29 @@ export function renderSceneFrame(
     ? Math.max(0.5, Math.min(2.2, 1 / Math.max(0.45, perspCam.distance)))
     : 1;
 
-  const cfgFovFactor = scene3d ? scene3d.camera.fov / 75 : 1;
+  const sceneFovAnim = scene3d?.animations?.find((a) => a.target === "fov");
+  const animatedFov = sceneFovAnim
+    ? Math.max(
+        40,
+        Math.min(
+          115,
+          evaluateMathExpression(
+            sceneFovAnim.expr,
+            {
+              t: input.timeSeconds,
+              beat: beatPhase,
+              i: 0,
+              bass: clamp01(audio.bassEnvelope),
+              mid: clamp01(audio.midEnvelope),
+              treble: clamp01(audio.trebleEnvelope),
+              flux: clamp01(audio.transientPulse),
+            },
+            scene3d?.camera.fov ?? 75
+          )
+        )
+      )
+    : scene3d?.camera.fov ?? 75;
+  const cfgFovFactor = scene3d ? animatedFov / 75 : 1;
 
   const camOff: PerspectiveOffsets = {
     yawRad:
@@ -3417,7 +3638,8 @@ export function renderSceneFrame(
     const customPolys = buildAnarchy3DScenePolygons(
       scene3d,
       effectiveTime,
-      audio
+      audio,
+      beatPhase
     );
     if (customPolys.length > 0) {
       const customCounts = renderLowPolyMesh(
