@@ -508,9 +508,9 @@ export const VisualEngineStudio: React.FC = () => {
 
       if (ctx) {
         const nextReport = renderSceneFrame(ctx, {
-          sceneId: activeSlot ? activeSlot.sceneId : effectivePreset.sceneId,
+          sceneId: activeSlot?.sceneId ?? effectivePreset.sceneId,
           paletteId:
-            useCustomPaletteRef.current || !activeSlot
+            useCustomPaletteRef.current || !activeSlot?.paletteId
               ? effectivePreset.paletteId
               : activeSlot.paletteId,
           timeSeconds,
@@ -549,8 +549,7 @@ export const VisualEngineStudio: React.FC = () => {
           camera: effectivePreset.render.camera,
           seed: activeSlot?.seed ?? effectivePreset.seed,
           aspectRatio,
-          scene3dConfig: activeSlot?.config3d,
-          script3d: activeSlot?.script3d,
+          anarchy3dScene: activeSlot,
         });
 
         setRenderReport(nextReport);
@@ -1512,10 +1511,10 @@ export const VisualEngineStudio: React.FC = () => {
           updatePreset(
             (curr) => ({
               ...curr,
-              sceneId: slot.sceneId,
+              sceneId: slot.sceneId ?? curr.sceneId,
               paletteId: useCustomPaletteRef.current
                 ? curr.paletteId
-                : slot.paletteId,
+                : slot.paletteId ?? curr.paletteId,
               seed: slot.seed ?? curr.seed,
             }),
             false

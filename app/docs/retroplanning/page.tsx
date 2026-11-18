@@ -143,9 +143,15 @@ const MILESTONES = [
   },
   {
     id: "M23",
+    commit: "5aadf17",
+    title: "Suppression totale du système 2D JS/C++ parallèle & Unification du Moteur 3D",
+    details: "Suppression définitive de la page '/anarchy-visual-design/editeur', du transpileur C++→JS, du moteur Canvas 2D filaire et du panneau AnarchyPresetPanel pour faire du moteur 3D Low-Poly PS2 l'unique moteur graphique d'Open Hub.",
+  },
+  {
+    id: "M24",
     commit: "ACTUEL",
-    title: "Suppression totale du système 2D JS/C++ parallèle & Personnalisation/Export des vraies Scènes 3D profondes",
-    details: "Suppression définitive de la page '/anarchy-visual-design/editeur', du transpileur C++→JS, du moteur Canvas 2D filaire et du panneau AnarchyPresetPanel. Exposition sur le vrai moteur 3D profond ('PACK DE SCÈNES // ENCHAÎNEMENT BPM') de l'objet 'config3d' (géométries 3D, terrain, caméra perspective, éclairage/brouillard, couleurs, réactivité audio) et du hook 60 FPS 'customizeScene3D(scene3d, audio, t)', avec modale Exporter/Importer Pack 3D (JSON), Doc & Prompt IA 3D et isolation stricte des 10 faders et du BPM.",
+    title: "Architecture Data-Driven JSON ('Cartouche / Pack 3D' Anarchy3DPack & Anarchy3DScene)",
+    details: "Refactorisation du moteur 3D en Data-Driven piloté par JSON strict ('Anarchy3DPack' / 'Anarchy3DScene' : environment, subject, camera, audioMapping) sans aucune exécution de code arbitraire (zéro eval / new Function). Les 10 Faders agissent comme multiplicateurs temps réel sans jamais être écrasés, avec éditeur JSON validé en direct, bouton '+ Ajouter une scène', import/export .json et Prompt IA dédié.",
   },
 ];
 

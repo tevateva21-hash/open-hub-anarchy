@@ -257,53 +257,102 @@ export interface SceneDescriptor {
   audioMappings: readonly { band: string; target: string }[];
 }
 
-export type ExtraGeometry3DKind =
-  | "none"
-  | "katana-blades"
-  | "floating-monoliths"
-  | "octo-rings"
-  | "cyber-pyramids";
+export type AnarchyTerrainType =
+  | "infinite_grid"
+  | "lowpoly_mountains"
+  | "dojo_pillars"
+  | "tunnel";
 
-export interface Scene3DConfig {
-  geometries: {
-    monolithScale: number;
-    coreScale: number;
-    extraObjects: ExtraGeometry3DKind;
-    extraCount: number;
-    wireframeRim: boolean;
-    checkerTexture: boolean;
-  };
-  environment: {
-    horizonOffset: number;
-    tunnelSpeed: number;
-    floorDepth: number;
-  };
-  camera: {
-    distance: number;
-    pitchDegrees: number;
-    yawDegrees: number;
-    fovDegrees: number;
-    orbitSpeed: number;
-  };
-  lighting: {
-    fogDensity: number;
-    ditherStrength: number;
-    ambientBoost: number;
-  };
-  colors?: {
-    sky?: string;
-    haze?: string;
-    structure?: string;
-    face?: string;
-    light?: string;
-    glow?: string;
-  };
-  audioReactive: {
-    bassPulse: number;
-    midMorph: number;
-    trebleStrobe: number;
-    fluxJolt: number;
-  };
+export type AnarchySubjectMeshType =
+  | "voxel_runner"
+  | "floating_monolith"
+  | "cyber_katana"
+  | "abstract_polyhedron"
+  | "none";
+
+export type AnarchyCameraMode =
+  | "chase_low"
+  | "orbit"
+  | "fps_arms"
+  | "dramatic_tilt";
+
+export type AnarchyBassTarget =
+  | "camera_zoom_and_jump"
+  | "subject_pulse"
+  | "pillar_slam"
+  | "tunnel_boost";
+
+export type AnarchyMidTarget =
+  | "terrain_wave_height"
+  | "subject_rotation"
+  | "color_shift"
+  | "camera_sway";
+
+export type AnarchyTrebleTarget =
+  | "particles_burst"
+  | "wireframe_glow"
+  | "sky_flash"
+  | "katana_slash";
+
+export type AnarchyFluxTarget =
+  | "glitch_and_emissive"
+  | "camera_shake"
+  | "fov_kick"
+  | "invert_strobe";
+
+export interface Anarchy3DEnvironment {
+  skyColor: string;
+  fogColor: string;
+  fogDensity: number;
+  terrainType: AnarchyTerrainType;
+  terrainSpeed: number;
+  terrainPrimaryColor: string;
+  terrainSecondaryColor: string;
+}
+
+export interface Anarchy3DSubject {
+  meshType: AnarchySubjectMeshType;
+  primaryColor: string;
+  accentColor: string;
+  wireframeOverlay: boolean;
+  scale: number;
+}
+
+export interface Anarchy3DCamera {
+  mode: AnarchyCameraMode;
+  fov: number;
+  shakeIntensity: number;
+}
+
+export interface Anarchy3DAudioMapping {
+  bassTarget: AnarchyBassTarget;
+  midTarget: AnarchyMidTarget;
+  trebleTarget: AnarchyTrebleTarget;
+  fluxTarget: AnarchyFluxTarget;
+}
+
+export interface Anarchy3DScene {
+  id: string;
+  name: string;
+  environment: Anarchy3DEnvironment;
+  subject: Anarchy3DSubject;
+  camera: Anarchy3DCamera;
+  audioMapping: Anarchy3DAudioMapping;
+  /** Identifiants optionnels de liaison avec le catalogue interne du moteur 3D */
+  sceneId?: SceneId;
+  paletteId?: PaletteId;
+  seed?: number;
+}
+
+export interface Anarchy3DPack {
+  packId: string;
+  name: string;
+  author: string;
+  scenes: Anarchy3DScene[];
+  bpm?: number;
+  beatsPerScene?: number;
+  seed?: number;
+  createdAt?: string;
 }
 
 export interface SceneFrameInput {
@@ -322,10 +371,8 @@ export interface SceneFrameInput {
   camera?: OrthographicCameraSettings | PerspectiveCameraSettings;
   seed?: number;
   aspectRatio?: VideoAspectRatio;
-  /** Configuration 3D éditable de la scène active (géométries, caméra, lumière, audio-réactivité). */
-  scene3dConfig?: Scene3DConfig;
-  /** Script 3D JS optionnel injectant des volumes 3D low-poly dans le moteur 3D principal à 60 FPS. */
-  script3d?: string;
+  /** Configuration 3D Data-Driven (JSON) de la scène active. */
+  anarchy3dScene?: Anarchy3DScene;
 }
 
 export type TransitionKind = "cut" | "dither-dissolve";

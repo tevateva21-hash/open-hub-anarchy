@@ -1,515 +1,813 @@
 import type {
-  ExtraGeometry3DKind,
+  Anarchy3DAudioMapping,
+  Anarchy3DCamera,
+  Anarchy3DEnvironment,
+  Anarchy3DPack,
+  Anarchy3DScene,
+  Anarchy3DSubject,
+  AnarchyBassTarget,
+  AnarchyCameraMode,
+  AnarchyFluxTarget,
+  AnarchyMidTarget,
+  AnarchySubjectMeshType,
+  AnarchyTerrainType,
+  AnarchyTrebleTarget,
   PaletteId,
-  Scene3DConfig,
   SceneId,
 } from "@/lib/visual-engine/contracts";
 import { PALETTE_IDS, SCENE_IDS } from "@/lib/visual-engine/presets";
 
-export interface ScenePackSlot {
-  label?: string;
-  sceneId: SceneId;
-  paletteId: PaletteId;
-  intensity: number; // 0..100
-  strobe: number; // 0..100
-  kaleidoscope: number; // 0..100
-  feedbackTrails: number; // 0..100
-  acidHueShift: number; // 0..100
-  bloom?: number; // 0..100
-  glitch?: number; // 0..100
-  seed?: number;
-  /** Configuration 3D profonde éditable en temps réel (géométries, caméra, lumière, brouillard, audio-réactivité). */
-  config3d: Scene3DConfig;
-  /** Script JS 3D optionnel exécuté à 60 FPS dans le moteur 3D principal (scene3d, audio, t). */
-  script3d?: string;
-}
+export type {
+  Anarchy3DPack,
+  Anarchy3DScene,
+  Anarchy3DEnvironment,
+  Anarchy3DSubject,
+  Anarchy3DCamera,
+  Anarchy3DAudioMapping,
+};
 
-export interface ScenePack {
-  id: string;
-  name: string;
-  author: string;
-  bpm: number;
-  beatsPerScene: number;
-  seed: number;
-  scenes: ScenePackSlot[];
-  createdAt: string;
-}
+export type ScenePackSlot = Anarchy3DScene;
+export type ScenePack = Anarchy3DPack;
 
-const EXTRA_GEOMETRY_KINDS: readonly ExtraGeometry3DKind[] = [
-  "none",
-  "katana-blades",
-  "floating-monoliths",
-  "octo-rings",
-  "cyber-pyramids",
+export const ANARCHY_TERRAIN_TYPES: readonly {
+  value: AnarchyTerrainType;
+  label: string;
+  desc: string;
+}[] = [
+  {
+    value: "infinite_grid",
+    label: "infinite_grid (Grille Perspective Infinie)",
+    desc: "Dallage cybernétique 3D en perspective infinie avec lignes d'horizon réactives.",
+  },
+  {
+    value: "lowpoly_mountains",
+    label: "lowpoly_mountains (Montagnes Low-Poly PS2)",
+    desc: "Crêtes et canyons low-poly 3D défilant sur les flancs gauche et droit.",
+  },
+  {
+    value: "dojo_pillars",
+    label: "dojo_pillars (Piliers & Arches Dojo Brutaliste)",
+    desc: "Colonnes et portiques 3D monumentaux rythmant la profondeur Z.",
+  },
+  {
+    value: "tunnel",
+    label: "tunnel (Tunnel Octogonal 3D)",
+    desc: "Anneaux octogonaux 3D concentriques propulsés vers la caméra.",
+  },
 ];
 
-export const DEFAULT_SCRIPT_3D_TEMPLATE = `// Script 3D temps réel exécuté à 60 FPS dans le moteur 3D principal
-// Variables : scene3d (API 3D), audio ({ bass, mid, treble, rms, flux }), t (secondes)
-function customizeScene3D(scene3d, audio, t) {
-  const pulse = 1 + audio.bass * 0.65;
-  // Arche / Piliers 3D latéraux synchronisés sur le kick
-  scene3d.addBox3D(-3.4, -0.4, 6.2, 0.55, 2.2 * pulse, 0.55, 0.72, audio.flux > 0.3, true, t * 0.4);
-  scene3d.addBox3D(3.4, -0.4, 6.2, 0.55, 2.2 * pulse, 0.55, 0.72, audio.flux > 0.3, true, -t * 0.4);
-  // Pyramide 3D inversée en lévitation
-  scene3d.addPyramid3D(0, 1.1 + Math.sin(t * 2) * 0.35, 5.5, 0.85 * pulse, 1.5, 0.88, true, true, t * 1.1);
-}`;
+export const ANARCHY_SUBJECT_MESH_TYPES: readonly {
+  value: AnarchySubjectMeshType;
+  label: string;
+  desc: string;
+}[] = [
+  {
+    value: "voxel_runner",
+    label: "voxel_runner (Runner Cyber Low-Poly Articulé)",
+    desc: "Personnage 3D articulé en course avec jambes, bras et ailes d'énergie.",
+  },
+  {
+    value: "floating_monolith",
+    label: "floating_monolith (Monolithe Brutaliste en Lévitation)",
+    desc: "Obélisque 3D massif entouré de fragments orbitaux synchronisés.",
+  },
+  {
+    value: "cyber_katana",
+    label: "cyber_katana (Lames Katana Croisées & Noyau Shogun)",
+    desc: "Lames 3D croisées et diamant central découpant l'espace sur les aigus.",
+  },
+  {
+    value: "abstract_polyhedron",
+    label: "abstract_polyhedron (Polyèdre Gyroscopique 3D)",
+    desc: "Octaèdre 3D central imbriqué dans des anneaux gyroscopiques.",
+  },
+  {
+    value: "none",
+    label: "none (Aucun sujet central — Décor 3D pur)",
+    desc: "Laisse toute la place au terrain 3D et au monde environnant.",
+  },
+];
 
-export function createDefaultScene3DConfig(
-  sceneId: SceneId = "rave-dungeon",
-  overrides?: Partial<{
-    geometries: Partial<Scene3DConfig["geometries"]>;
-    environment: Partial<Scene3DConfig["environment"]>;
-    camera: Partial<Scene3DConfig["camera"]>;
-    lighting: Partial<Scene3DConfig["lighting"]>;
-    colors: Scene3DConfig["colors"];
-    audioReactive: Partial<Scene3DConfig["audioReactive"]>;
-  }>
-): Scene3DConfig {
-  const baseByScene: Record<SceneId, Scene3DConfig> = {
-    "industrial-city": {
-      geometries: {
-        monolithScale: 1.1,
-        coreScale: 1.0,
-        extraObjects: "katana-blades",
-        extraCount: 4,
-        wireframeRim: true,
-        checkerTexture: true,
-      },
-      environment: {
-        horizonOffset: 0,
-        tunnelSpeed: 1.2,
-        floorDepth: 1.15,
-      },
-      camera: {
-        distance: 8.5,
-        pitchDegrees: 6,
-        yawDegrees: 0,
-        fovDegrees: 72,
-        orbitSpeed: 0.35,
-      },
-      lighting: {
-        fogDensity: 0.38,
-        ditherStrength: 0.45,
-        ambientBoost: 0.05,
-      },
-      audioReactive: {
-        bassPulse: 1.2,
-        midMorph: 1.0,
-        trebleStrobe: 1.15,
-        fluxJolt: 1.1,
-      },
-    },
-    "rave-dungeon": {
-      geometries: {
-        monolithScale: 1.25,
-        coreScale: 1.15,
-        extraObjects: "floating-monoliths",
-        extraCount: 4,
-        wireframeRim: true,
-        checkerTexture: true,
-      },
-      environment: {
-        horizonOffset: 0,
-        tunnelSpeed: 1.8,
-        floorDepth: 1.3,
-      },
-      camera: {
-        distance: 6.8,
-        pitchDegrees: 5,
-        yawDegrees: 0,
-        fovDegrees: 75,
-        orbitSpeed: 0.45,
-      },
-      lighting: {
-        fogDensity: 0.42,
-        ditherStrength: 0.5,
-        ambientBoost: 0.08,
-      },
-      audioReactive: {
-        bassPulse: 1.35,
-        midMorph: 1.15,
-        trebleStrobe: 1.2,
-        fluxJolt: 1.25,
-      },
-    },
-    "techno-therapy": {
-      geometries: {
-        monolithScale: 1.2,
-        coreScale: 1.3,
-        extraObjects: "octo-rings",
-        extraCount: 4,
-        wireframeRim: true,
-        checkerTexture: true,
-      },
-      environment: {
-        horizonOffset: 0,
-        tunnelSpeed: 2.1,
-        floorDepth: 1.2,
-      },
-      camera: {
-        distance: 4.8,
-        pitchDegrees: 3,
-        yawDegrees: 0,
-        fovDegrees: 78,
-        orbitSpeed: 0.65,
-      },
-      lighting: {
-        fogDensity: 0.35,
-        ditherStrength: 0.48,
-        ambientBoost: 0.1,
-      },
-      audioReactive: {
-        bassPulse: 1.45,
-        midMorph: 1.3,
-        trebleStrobe: 1.35,
-        fluxJolt: 1.3,
-      },
-    },
-    "ps1-nightmare": {
-      geometries: {
-        monolithScale: 1.3,
-        coreScale: 1.25,
-        extraObjects: "cyber-pyramids",
-        extraCount: 4,
-        wireframeRim: true,
-        checkerTexture: true,
-      },
-      environment: {
-        horizonOffset: -2,
-        tunnelSpeed: 1.4,
-        floorDepth: 1.35,
-      },
-      camera: {
-        distance: 10.5,
-        pitchDegrees: 14,
-        yawDegrees: 18,
-        fovDegrees: 74,
-        orbitSpeed: 0.45,
-      },
-      lighting: {
-        fogDensity: 0.48,
-        ditherStrength: 0.55,
-        ambientBoost: 0.04,
-      },
-      audioReactive: {
-        bassPulse: 1.3,
-        midMorph: 1.15,
-        trebleStrobe: 1.1,
-        fluxJolt: 1.2,
-      },
-    },
-    "digital-void": {
-      geometries: {
-        monolithScale: 1.35,
-        coreScale: 1.4,
-        extraObjects: "floating-monoliths",
-        extraCount: 6,
-        wireframeRim: true,
-        checkerTexture: true,
-      },
-      environment: {
-        horizonOffset: 0,
-        tunnelSpeed: 2.0,
-        floorDepth: 1.4,
-      },
-      camera: {
-        distance: 7.4,
-        pitchDegrees: 8,
-        yawDegrees: 0,
-        fovDegrees: 80,
-        orbitSpeed: 0.55,
-      },
-      lighting: {
-        fogDensity: 0.45,
-        ditherStrength: 0.52,
-        ambientBoost: 0.12,
-      },
-      audioReactive: {
-        bassPulse: 1.5,
-        midMorph: 1.25,
-        trebleStrobe: 1.4,
-        fluxJolt: 1.35,
-      },
-    },
+export const ANARCHY_CAMERA_MODES: readonly {
+  value: AnarchyCameraMode;
+  label: string;
+  desc: string;
+}[] = [
+  {
+    value: "chase_low",
+    label: "chase_low (Poursuite Basse Dynamique)",
+    desc: "Caméra en contre-plongée derrière le sujet, idéale pour la vitesse.",
+  },
+  {
+    value: "orbit",
+    label: "orbit (Orbite Panoramique 360°)",
+    desc: "Rotation orbitale fluide autour du sujet et du décor 3D.",
+  },
+  {
+    value: "fps_arms",
+    label: "fps_arms (Vue Première Personne + Bras/Lames 3D)",
+    desc: "Immersion subjective avec bras/lames 3D cybernétiques au premier plan.",
+  },
+  {
+    value: "dramatic_tilt",
+    label: "dramatic_tilt (Angle Dramatique & Plongée)",
+    desc: "Cadrage incliné nerveux à fort impact visuel sur les drops.",
+  },
+];
+
+export const ANARCHY_BASS_TARGETS: readonly {
+  value: AnarchyBassTarget;
+  label: string;
+}[] = [
+  { value: "camera_zoom_and_jump", label: "camera_zoom_and_jump (Zoom & Saut Caméra)" },
+  { value: "subject_pulse", label: "subject_pulse (Pulsation d'Échelle du Sujet 3D)" },
+  { value: "pillar_slam", label: "pillar_slam (Impact & Élévation des Piliers/Sol)" },
+  { value: "tunnel_boost", label: "tunnel_boost (Accélération Brutale du Décor)" },
+];
+
+export const ANARCHY_MID_TARGETS: readonly {
+  value: AnarchyMidTarget;
+  label: string;
+}[] = [
+  { value: "terrain_wave_height", label: "terrain_wave_height (Hauteur d'Onde du Terrain)" },
+  { value: "subject_rotation", label: "subject_rotation (Vitesse de Rotation du Sujet)" },
+  { value: "color_shift", label: "color_shift (Glissement Chromatique des Matériaux)" },
+  { value: "camera_sway", label: "camera_sway (Balancement Latéral Caméra)" },
+];
+
+export const ANARCHY_TREBLE_TARGETS: readonly {
+  value: AnarchyTrebleTarget;
+  label: string;
+}[] = [
+  { value: "particles_burst", label: "particles_burst (Pluie d'Étincelles & Particules 3D)" },
+  { value: "wireframe_glow", label: "wireframe_glow (Surbrillance des Arêtes 3D)" },
+  { value: "sky_flash", label: "sky_flash (Éclair Atmosphérique Horizon/Ciel)" },
+  { value: "katana_slash", label: "katana_slash (Faisceaux & Découpe Laser 3D)" },
+];
+
+export const ANARCHY_FLUX_TARGETS: readonly {
+  value: AnarchyFluxTarget;
+  label: string;
+}[] = [
+  { value: "glitch_and_emissive", label: "glitch_and_emissive (Flash Émissif & Glitch)" },
+  { value: "camera_shake", label: "camera_shake (Secousse Caméra sur Transitoires)" },
+  { value: "fov_kick", label: "fov_kick (Ouverture Focale FOV sur Clap/Kick)" },
+  { value: "invert_strobe", label: "invert_strobe (Inversion Stroboscopique)" },
+];
+
+const TERRAIN_SET = new Set<AnarchyTerrainType>(
+  ANARCHY_TERRAIN_TYPES.map((t) => t.value)
+);
+const SUBJECT_SET = new Set<AnarchySubjectMeshType>(
+  ANARCHY_SUBJECT_MESH_TYPES.map((s) => s.value)
+);
+const CAMERA_MODE_SET = new Set<AnarchyCameraMode>(
+  ANARCHY_CAMERA_MODES.map((c) => c.value)
+);
+const BASS_TARGET_SET = new Set<AnarchyBassTarget>(
+  ANARCHY_BASS_TARGETS.map((b) => b.value)
+);
+const MID_TARGET_SET = new Set<AnarchyMidTarget>(
+  ANARCHY_MID_TARGETS.map((m) => m.value)
+);
+const TREBLE_TARGET_SET = new Set<AnarchyTrebleTarget>(
+  ANARCHY_TREBLE_TARGETS.map((t) => t.value)
+);
+const FLUX_TARGET_SET = new Set<AnarchyFluxTarget>(
+  ANARCHY_FLUX_TARGETS.map((f) => f.value)
+);
+
+/**
+ * Associe automatiquement un `terrainType` et un `meshType` au monde 3D interne le plus pertinent
+ * lorsque `sceneId` n'est pas explicitement fourni dans le JSON.
+ */
+export function inferSceneIdFromAnarchy3DScene(
+  terrainType: AnarchyTerrainType,
+  meshType: AnarchySubjectMeshType
+): SceneId {
+  if (terrainType === "dojo_pillars") return "rave-dungeon";
+  if (terrainType === "tunnel") return "techno-therapy";
+  if (terrainType === "lowpoly_mountains") {
+    return meshType === "floating_monolith" ? "ps1-nightmare" : "industrial-city";
+  }
+  if (meshType === "floating_monolith" || meshType === "cyber_katana") {
+    return "ps1-nightmare";
+  }
+  if (meshType === "abstract_polyhedron") return "techno-therapy";
+  return "digital-void";
+}
+
+export function createDefaultAnarchy3DScene(
+  index = 0,
+  overrides?: {
+    id?: string;
+    name?: string;
+    environment?: Partial<Anarchy3DEnvironment>;
+    subject?: Partial<Anarchy3DSubject>;
+    camera?: Partial<Anarchy3DCamera>;
+    audioMapping?: Partial<Anarchy3DAudioMapping>;
+    sceneId?: SceneId;
+    paletteId?: PaletteId;
+    seed?: number;
+  }
+): Anarchy3DScene {
+  const environment: Anarchy3DEnvironment = {
+    skyColor: "#060A12",
+    fogColor: "#060A12",
+    fogDensity: 0.045,
+    terrainType: "infinite_grid",
+    terrainSpeed: 12.0,
+    terrainPrimaryColor: "#00F0FF",
+    terrainSecondaryColor: "#FF0055",
+    ...overrides?.environment,
+  };
+  const subject: Anarchy3DSubject = {
+    meshType: "voxel_runner",
+    primaryColor: "#00838F",
+    accentColor: "#FF0055",
+    wireframeOverlay: true,
+    scale: 1.0,
+    ...overrides?.subject,
+  };
+  const camera: Anarchy3DCamera = {
+    mode: "chase_low",
+    fov: 75,
+    shakeIntensity: 0.4,
+    ...overrides?.camera,
+  };
+  const audioMapping: Anarchy3DAudioMapping = {
+    bassTarget: "camera_zoom_and_jump",
+    midTarget: "terrain_wave_height",
+    trebleTarget: "particles_burst",
+    fluxTarget: "glitch_and_emissive",
+    ...overrides?.audioMapping,
   };
 
-  const base = baseByScene[sceneId] ?? baseByScene["rave-dungeon"];
+  const sceneId =
+    overrides?.sceneId ??
+    inferSceneIdFromAnarchy3DScene(environment.terrainType, subject.meshType);
+
   return {
-    geometries: { ...base.geometries, ...overrides?.geometries },
-    environment: { ...base.environment, ...overrides?.environment },
-    camera: { ...base.camera, ...overrides?.camera },
-    lighting: { ...base.lighting, ...overrides?.lighting },
-    colors: overrides?.colors ? { ...overrides.colors } : undefined,
-    audioReactive: { ...base.audioReactive, ...overrides?.audioReactive },
+    id: overrides?.id ?? `scene-${index + 1}`,
+    name: overrides?.name ?? `0${index + 1}. Scène 3D`,
+    environment,
+    subject,
+    camera,
+    audioMapping,
+    sceneId,
+    paletteId: overrides?.paletteId ?? "anarchy-anaglyph",
+    seed: overrides?.seed ?? (index + 1) * 137,
   };
 }
 
-export const DEFAULT_SCENE_PACKS: ScenePack[] = [
+/**
+ * Packs 3D officiels au format strict `Anarchy3DPack` :
+ * 1. PS2 // Enter the Dragon (5 Scènes)
+ * 2. PS2 // Nether & Brutalist Runner (5 Scènes)
+ * 3. Psy-Acid 145 BPM (5 Scènes)
+ */
+export const DEFAULT_SCENE_PACKS: Anarchy3DPack[] = [
   {
-    id: "pack-ps2-enter-the-dragon",
+    packId: "ps2-enter-the-dragon",
     name: "PS2 // Enter the Dragon (5 Scènes)",
     author: "Anarchy Studio",
     bpm: 140,
     beatsPerScene: 16,
-    seed: 2003,
-    createdAt: "2026-11-15T00:00:00Z",
+    seed: 199902,
+    createdAt: "2026-11-15T12:00:00.000Z",
     scenes: [
-      {
-        label: "01. Dojo Néon",
-        sceneId: "industrial-city",
-        paletteId: "cold-concrete",
-        intensity: 68,
-        strobe: 10,
-        kaleidoscope: 0,
-        feedbackTrails: 22,
-        acidHueShift: 0,
-        bloom: 35,
-        glitch: 8,
-        seed: 101,
-        config3d: createDefaultScene3DConfig("industrial-city", {
-          geometries: {
-            monolithScale: 1.15,
-            coreScale: 1.1,
-            extraObjects: "katana-blades",
-            extraCount: 4,
-            wireframeRim: true,
-            checkerTexture: true,
-          },
-          camera: {
-            distance: 8.2,
-            pitchDegrees: 6,
-            yawDegrees: 0,
-            fovDegrees: 72,
-            orbitSpeed: 0.35,
-          },
-        }),
-        script3d: `function customizeScene3D(scene3d, audio, t) {
-  // Torii / Piliers 3D Dojo Néon réactifs au kick
-  const h = 2.0 + audio.bass * 1.1;
-  scene3d.addBox3D(-3.2, -0.5, 6.4, 0.5, h, 0.5, 0.68, audio.flux > 0.28, true, t * 0.25);
-  scene3d.addBox3D(3.2, -0.5, 6.4, 0.5, h, 0.5, 0.68, audio.flux > 0.28, true, -t * 0.25);
-  scene3d.addBox3D(0, 1.2 + audio.bass * 0.3, 6.4, 7.2, 0.32, 0.45, 0.84, true, false, 0);
-}`,
-      },
-      {
-        label: "02. Enter the Dragon",
+      createDefaultAnarchy3DScene(0, {
+        id: "scene-1",
+        name: "01. Dojo Néon",
         sceneId: "rave-dungeon",
         paletteId: "anarchy-anaglyph",
-        intensity: 88,
-        strobe: 35,
-        kaleidoscope: 30,
-        feedbackTrails: 48,
-        acidHueShift: 18,
-        bloom: 55,
-        glitch: 15,
-        seed: 202,
-        config3d: createDefaultScene3DConfig("rave-dungeon", {
-          geometries: {
-            monolithScale: 1.3,
-            coreScale: 1.25,
-            extraObjects: "floating-monoliths",
-            extraCount: 4,
-            wireframeRim: true,
-            checkerTexture: true,
-          },
-          environment: {
-            horizonOffset: 0,
-            tunnelSpeed: 1.9,
-            floorDepth: 1.35,
-          },
-        }),
-        script3d: `function customizeScene3D(scene3d, audio, t) {
-  // Totem Dragon 3D central dans la voûte souterraine
-  const spin = t * 1.2;
-  const r = 0.75 + audio.bass * 0.45;
-  scene3d.addPyramid3D(0, 0.2 + Math.sin(t * 2.2) * 0.3, 5.8, r, 1.8, 0.86, true, false, spin);
-  scene3d.addPyramid3D(0, -0.3 - Math.sin(t * 2.2) * 0.2, 5.8, r * 0.85, 1.4, 0.64, true, true, -spin);
-}`,
-      },
-      {
-        label: "03. Katana Overdrive",
-        sceneId: "techno-therapy",
-        paletteId: "blood-red",
-        intensity: 95,
-        strobe: 60,
-        kaleidoscope: 55,
-        feedbackTrails: 62,
-        acidHueShift: 35,
-        bloom: 70,
-        glitch: 28,
-        seed: 303,
-        config3d: createDefaultScene3DConfig("techno-therapy", {
-          geometries: {
-            monolithScale: 1.35,
-            coreScale: 1.4,
-            extraObjects: "katana-blades",
-            extraCount: 6,
-            wireframeRim: true,
-            checkerTexture: true,
-          },
-          environment: {
-            horizonOffset: 0,
-            tunnelSpeed: 2.35,
-            floorDepth: 1.3,
-          },
-        }),
-        script3d: `function customizeScene3D(scene3d, audio, t) {
-  // Anneau Katana Overdrive haute vitesse
-  scene3d.addRing3D(4.2, 1.9 + audio.bass * 0.5, 0.5, 8, -t * 1.8, 0.9, audio.treble > 0.3);
-}`,
-      },
-      {
-        label: "04. PS2 Nightmare",
+        seed: 101,
+        environment: {
+          skyColor: "#060812",
+          fogColor: "#090D1C",
+          fogDensity: 0.045,
+          terrainType: "dojo_pillars",
+          terrainSpeed: 11.5,
+          terrainPrimaryColor: "#00F0FF",
+          terrainSecondaryColor: "#FF1B24",
+        },
+        subject: {
+          meshType: "cyber_katana",
+          primaryColor: "#142238",
+          accentColor: "#FF1B24",
+          wireframeOverlay: true,
+          scale: 1.15,
+        },
+        camera: {
+          mode: "chase_low",
+          fov: 75,
+          shakeIntensity: 0.35,
+        },
+        audioMapping: {
+          bassTarget: "pillar_slam",
+          midTarget: "subject_rotation",
+          trebleTarget: "katana_slash",
+          fluxTarget: "glitch_and_emissive",
+        },
+      }),
+      createDefaultAnarchy3DScene(1, {
+        id: "scene-2",
+        name: "02. Enter the Dragon",
         sceneId: "ps1-nightmare",
+        paletteId: "blood-red",
+        seed: 202,
+        environment: {
+          skyColor: "#140408",
+          fogColor: "#22060D",
+          fogDensity: 0.055,
+          terrainType: "lowpoly_mountains",
+          terrainSpeed: 13.0,
+          terrainPrimaryColor: "#FF1B24",
+          terrainSecondaryColor: "#FFB300",
+        },
+        subject: {
+          meshType: "floating_monolith",
+          primaryColor: "#3D0A14",
+          accentColor: "#FF2A36",
+          wireframeOverlay: true,
+          scale: 1.3,
+        },
+        camera: {
+          mode: "orbit",
+          fov: 78,
+          shakeIntensity: 0.45,
+        },
+        audioMapping: {
+          bassTarget: "subject_pulse",
+          midTarget: "terrain_wave_height",
+          trebleTarget: "particles_burst",
+          fluxTarget: "camera_shake",
+        },
+      }),
+      createDefaultAnarchy3DScene(2, {
+        id: "scene-3",
+        name: "03. Katana Rush",
+        sceneId: "techno-therapy",
+        paletteId: "techno-therapy",
+        seed: 303,
+        environment: {
+          skyColor: "#040A14",
+          fogColor: "#071426",
+          fogDensity: 0.04,
+          terrainType: "tunnel",
+          terrainSpeed: 16.5,
+          terrainPrimaryColor: "#00E5FF",
+          terrainSecondaryColor: "#FF0055",
+        },
+        subject: {
+          meshType: "voxel_runner",
+          primaryColor: "#00838F",
+          accentColor: "#00F0FF",
+          wireframeOverlay: true,
+          scale: 1.1,
+        },
+        camera: {
+          mode: "fps_arms",
+          fov: 84,
+          shakeIntensity: 0.5,
+        },
+        audioMapping: {
+          bassTarget: "tunnel_boost",
+          midTarget: "subject_rotation",
+          trebleTarget: "katana_slash",
+          fluxTarget: "fov_kick",
+        },
+      }),
+      createDefaultAnarchy3DScene(3, {
+        id: "scene-4",
+        name: "04. Shogun Boss",
+        sceneId: "industrial-city",
         paletteId: "furnace-amber",
-        intensity: 80,
-        strobe: 20,
-        kaleidoscope: 25,
-        feedbackTrails: 72,
-        acidHueShift: 15,
-        bloom: 45,
-        glitch: 35,
         seed: 404,
-        config3d: createDefaultScene3DConfig("ps1-nightmare", {
-          geometries: {
-            monolithScale: 1.35,
-            coreScale: 1.3,
-            extraObjects: "cyber-pyramids",
-            extraCount: 4,
-            wireframeRim: true,
-            checkerTexture: true,
-          },
-        }),
-        script3d: `function customizeScene3D(scene3d, audio, t) {
-  // Satellites low-poly autour de l'obélisque brutaliste
-  for (let i = 0; i < 4; i++) {
-    const a = t * 0.9 + (i * Math.PI) / 2;
-    scene3d.addBox3D(Math.cos(a) * 3.1, 0.8 + Math.sin(t * 2 + i) * 0.4, Math.sin(a) * 3.1, 0.55, 0.9 + audio.bass * 0.6, 0.55, 0.78, true, true, a);
-  }
-}`,
-      },
-      {
-        label: "05. Digital Void",
+        environment: {
+          skyColor: "#120804",
+          fogColor: "#1F0E06",
+          fogDensity: 0.05,
+          terrainType: "dojo_pillars",
+          terrainSpeed: 10.5,
+          terrainPrimaryColor: "#FF6D00",
+          terrainSecondaryColor: "#FF1B24",
+        },
+        subject: {
+          meshType: "abstract_polyhedron",
+          primaryColor: "#3E1C08",
+          accentColor: "#FFAB00",
+          wireframeOverlay: true,
+          scale: 1.35,
+        },
+        camera: {
+          mode: "dramatic_tilt",
+          fov: 74,
+          shakeIntensity: 0.55,
+        },
+        audioMapping: {
+          bassTarget: "pillar_slam",
+          midTarget: "color_shift",
+          trebleTarget: "wireframe_glow",
+          fluxTarget: "glitch_and_emissive",
+        },
+      }),
+      createDefaultAnarchy3DScene(4, {
+        id: "scene-5",
+        name: "05. Digital Void",
         sceneId: "digital-void",
-        paletteId: "acid-violet",
-        intensity: 100,
-        strobe: 75,
-        kaleidoscope: 82,
-        feedbackTrails: 68,
-        acidHueShift: 65,
-        bloom: 80,
-        glitch: 40,
+        paletteId: "anarchy-anaglyph",
         seed: 505,
-        config3d: createDefaultScene3DConfig("digital-void", {
-          geometries: {
-            monolithScale: 1.4,
-            coreScale: 1.45,
-            extraObjects: "octo-rings",
-            extraCount: 5,
-            wireframeRim: true,
-            checkerTexture: true,
-          },
-        }),
-        script3d: `function customizeScene3D(scene3d, audio, t) {
-  // Vortex 3D au coeur du gouffre de données Digital Void
-  scene3d.addRing3D(5.2, 1.65 + audio.bass * 0.55, 0.55, 8, t * 1.4, 0.85, true);
-  scene3d.addPyramid3D(0, 0, 5.4, 0.75 + audio.bass * 0.4, 1.6, 0.92, true, true, -t * 1.5);
-}`,
-      },
+        environment: {
+          skyColor: "#05070E",
+          fogColor: "#080D1A",
+          fogDensity: 0.042,
+          terrainType: "infinite_grid",
+          terrainSpeed: 15.0,
+          terrainPrimaryColor: "#00F0FF",
+          terrainSecondaryColor: "#FF1B24",
+        },
+        subject: {
+          meshType: "cyber_katana",
+          primaryColor: "#101B2E",
+          accentColor: "#00F0FF",
+          wireframeOverlay: true,
+          scale: 1.25,
+        },
+        camera: {
+          mode: "chase_low",
+          fov: 80,
+          shakeIntensity: 0.45,
+        },
+        audioMapping: {
+          bassTarget: "camera_zoom_and_jump",
+          midTarget: "terrain_wave_height",
+          trebleTarget: "particles_burst",
+          fluxTarget: "invert_strobe",
+        },
+      }),
     ],
   },
   {
-    id: "pack-psy-acid-5",
-    name: "Psy-Acid 145 BPM (5 Scènes)",
-    author: "PsyLab",
-    bpm: 145,
-    beatsPerScene: 8,
-    seed: 1450,
-    createdAt: "2026-11-15T00:00:00Z",
+    packId: "ps2-nether-runner-v1",
+    name: "PS2 // Nether & Brutalist Runner",
+    author: "Anarchy Studio",
+    bpm: 136,
+    beatsPerScene: 16,
+    seed: 202601,
+    createdAt: "2026-11-16T12:00:00.000Z",
     scenes: [
-      {
-        label: "01. Tunnel Void",
+      createDefaultAnarchy3DScene(0, {
+        id: "scene-1",
+        name: "01. Cyber Corridor",
         sceneId: "digital-void",
-        paletteId: "acid-violet",
-        intensity: 72,
-        strobe: 12,
-        kaleidoscope: 45,
-        feedbackTrails: 50,
-        acidHueShift: 55,
-        bloom: 60,
-        glitch: 10,
-        seed: 111,
-        config3d: createDefaultScene3DConfig("digital-void", {
-          geometries: { extraObjects: "octo-rings", extraCount: 5 },
-          environment: { tunnelSpeed: 2.2 },
-        }),
-      },
-      {
-        label: "02. Furnace Pulse",
+        paletteId: "anarchy-anaglyph",
+        seed: 701,
+        environment: {
+          skyColor: "#060A12",
+          fogColor: "#060A12",
+          fogDensity: 0.045,
+          terrainType: "infinite_grid",
+          terrainSpeed: 12.0,
+          terrainPrimaryColor: "#00F0FF",
+          terrainSecondaryColor: "#FF0055",
+        },
+        subject: {
+          meshType: "voxel_runner",
+          primaryColor: "#00838F",
+          accentColor: "#FF0055",
+          wireframeOverlay: true,
+          scale: 1.0,
+        },
+        camera: {
+          mode: "chase_low",
+          fov: 75,
+          shakeIntensity: 0.4,
+        },
+        audioMapping: {
+          bassTarget: "camera_zoom_and_jump",
+          midTarget: "terrain_wave_height",
+          trebleTarget: "particles_burst",
+          fluxTarget: "glitch_and_emissive",
+        },
+      }),
+      createDefaultAnarchy3DScene(1, {
+        id: "scene-2",
+        name: "02. Brutalist Canyon",
+        sceneId: "ps1-nightmare",
+        paletteId: "cold-concrete",
+        seed: 702,
+        environment: {
+          skyColor: "#0A0D14",
+          fogColor: "#111622",
+          fogDensity: 0.05,
+          terrainType: "lowpoly_mountains",
+          terrainSpeed: 14.0,
+          terrainPrimaryColor: "#78909C",
+          terrainSecondaryColor: "#00E5FF",
+        },
+        subject: {
+          meshType: "voxel_runner",
+          primaryColor: "#263238",
+          accentColor: "#00E5FF",
+          wireframeOverlay: true,
+          scale: 1.08,
+        },
+        camera: {
+          mode: "chase_low",
+          fov: 78,
+          shakeIntensity: 0.42,
+        },
+        audioMapping: {
+          bassTarget: "camera_zoom_and_jump",
+          midTarget: "terrain_wave_height",
+          trebleTarget: "wireframe_glow",
+          fluxTarget: "camera_shake",
+        },
+      }),
+      createDefaultAnarchy3DScene(2, {
+        id: "scene-3",
+        name: "03. Monolith Sanctum",
         sceneId: "rave-dungeon",
-        paletteId: "furnace-amber",
-        intensity: 85,
-        strobe: 35,
-        kaleidoscope: 60,
-        feedbackTrails: 60,
-        acidHueShift: 35,
-        bloom: 50,
-        glitch: 20,
-        seed: 222,
-        config3d: createDefaultScene3DConfig("rave-dungeon", {
-          geometries: { extraObjects: "floating-monoliths", extraCount: 4 },
-          environment: { tunnelSpeed: 2.0 },
-        }),
-      },
-      {
-        label: "03. Techno Therapy",
+        paletteId: "blood-red",
+        seed: 703,
+        environment: {
+          skyColor: "#0E0508",
+          fogColor: "#1A070D",
+          fogDensity: 0.052,
+          terrainType: "dojo_pillars",
+          terrainSpeed: 11.0,
+          terrainPrimaryColor: "#FF1744",
+          terrainSecondaryColor: "#00E5FF",
+        },
+        subject: {
+          meshType: "floating_monolith",
+          primaryColor: "#310B15",
+          accentColor: "#FF1744",
+          wireframeOverlay: true,
+          scale: 1.25,
+        },
+        camera: {
+          mode: "orbit",
+          fov: 74,
+          shakeIntensity: 0.38,
+        },
+        audioMapping: {
+          bassTarget: "pillar_slam",
+          midTarget: "subject_rotation",
+          trebleTarget: "particles_burst",
+          fluxTarget: "glitch_and_emissive",
+        },
+      }),
+      createDefaultAnarchy3DScene(3, {
+        id: "scene-4",
+        name: "04. Nether Overdrive",
         sceneId: "techno-therapy",
-        paletteId: "techno-therapy",
-        intensity: 92,
-        strobe: 50,
-        kaleidoscope: 75,
-        feedbackTrails: 75,
-        acidHueShift: 70,
-        bloom: 75,
-        glitch: 25,
-        seed: 333,
-        config3d: createDefaultScene3DConfig("techno-therapy", {
-          geometries: { extraObjects: "octo-rings", extraCount: 6 },
-          environment: { tunnelSpeed: 2.4 },
-        }),
-      },
-      {
-        label: "04. Toxic Oxide",
+        paletteId: "acid-violet",
+        seed: 704,
+        environment: {
+          skyColor: "#090414",
+          fogColor: "#140828",
+          fogDensity: 0.04,
+          terrainType: "tunnel",
+          terrainSpeed: 18.0,
+          terrainPrimaryColor: "#D500F9",
+          terrainSecondaryColor: "#00E5FF",
+        },
+        subject: {
+          meshType: "cyber_katana",
+          primaryColor: "#311B92",
+          accentColor: "#00E5FF",
+          wireframeOverlay: true,
+          scale: 1.2,
+        },
+        camera: {
+          mode: "fps_arms",
+          fov: 86,
+          shakeIntensity: 0.55,
+        },
+        audioMapping: {
+          bassTarget: "tunnel_boost",
+          midTarget: "color_shift",
+          trebleTarget: "katana_slash",
+          fluxTarget: "fov_kick",
+        },
+      }),
+      createDefaultAnarchy3DScene(4, {
+        id: "scene-5",
+        name: "05. Core Collapse",
         sceneId: "industrial-city",
         paletteId: "toxic-oxide",
-        intensity: 88,
-        strobe: 40,
-        kaleidoscope: 30,
-        feedbackTrails: 40,
-        acidHueShift: 45,
-        bloom: 40,
-        glitch: 30,
-        seed: 444,
-        config3d: createDefaultScene3DConfig("industrial-city", {
-          geometries: { extraObjects: "cyber-pyramids", extraCount: 4 },
-        }),
-      },
-      {
-        label: "05. Red Overload",
+        seed: 705,
+        environment: {
+          skyColor: "#050E0A",
+          fogColor: "#0A1C14",
+          fogDensity: 0.048,
+          terrainType: "infinite_grid",
+          terrainSpeed: 15.5,
+          terrainPrimaryColor: "#00E676",
+          terrainSecondaryColor: "#FF1744",
+        },
+        subject: {
+          meshType: "abstract_polyhedron",
+          primaryColor: "#004D40",
+          accentColor: "#00E676",
+          wireframeOverlay: true,
+          scale: 1.3,
+        },
+        camera: {
+          mode: "dramatic_tilt",
+          fov: 80,
+          shakeIntensity: 0.5,
+        },
+        audioMapping: {
+          bassTarget: "subject_pulse",
+          midTarget: "camera_sway",
+          trebleTarget: "sky_flash",
+          fluxTarget: "invert_strobe",
+        },
+      }),
+    ],
+  },
+  {
+    packId: "psy-acid-145-v1",
+    name: "Psy-Acid 145 BPM (5 Scènes)",
+    author: "Anarchy Studio",
+    bpm: 145,
+    beatsPerScene: 8,
+    seed: 145303,
+    createdAt: "2026-11-14T12:00:00.000Z",
+    scenes: [
+      createDefaultAnarchy3DScene(0, {
+        id: "scene-1",
+        name: "01. Acid Tunnel",
+        sceneId: "techno-therapy",
+        paletteId: "toxic-oxide",
+        seed: 111,
+        environment: {
+          skyColor: "#041008",
+          fogColor: "#071F10",
+          fogDensity: 0.038,
+          terrainType: "tunnel",
+          terrainSpeed: 17.0,
+          terrainPrimaryColor: "#00E676",
+          terrainSecondaryColor: "#00E5FF",
+        },
+        subject: {
+          meshType: "abstract_polyhedron",
+          primaryColor: "#004D40",
+          accentColor: "#76FF03",
+          wireframeOverlay: true,
+          scale: 1.2,
+        },
+        camera: {
+          mode: "chase_low",
+          fov: 82,
+          shakeIntensity: 0.45,
+        },
+        audioMapping: {
+          bassTarget: "tunnel_boost",
+          midTarget: "subject_rotation",
+          trebleTarget: "particles_burst",
+          fluxTarget: "fov_kick",
+        },
+      }),
+      createDefaultAnarchy3DScene(1, {
+        id: "scene-2",
+        name: "02. Vortex Psyché",
+        sceneId: "rave-dungeon",
+        paletteId: "acid-violet",
+        seed: 222,
+        environment: {
+          skyColor: "#0C0418",
+          fogColor: "#1A0833",
+          fogDensity: 0.045,
+          terrainType: "dojo_pillars",
+          terrainSpeed: 14.5,
+          terrainPrimaryColor: "#D500F9",
+          terrainSecondaryColor: "#00E5FF",
+        },
+        subject: {
+          meshType: "floating_monolith",
+          primaryColor: "#311B92",
+          accentColor: "#EA80FC",
+          wireframeOverlay: true,
+          scale: 1.28,
+        },
+        camera: {
+          mode: "orbit",
+          fov: 78,
+          shakeIntensity: 0.4,
+        },
+        audioMapping: {
+          bassTarget: "pillar_slam",
+          midTarget: "color_shift",
+          trebleTarget: "wireframe_glow",
+          fluxTarget: "glitch_and_emissive",
+        },
+      }),
+      createDefaultAnarchy3DScene(2, {
+        id: "scene-3",
+        name: "03. Bolide Rave",
+        sceneId: "digital-void",
+        paletteId: "techno-therapy",
+        seed: 333,
+        environment: {
+          skyColor: "#050A14",
+          fogColor: "#0A1428",
+          fogDensity: 0.04,
+          terrainType: "infinite_grid",
+          terrainSpeed: 18.5,
+          terrainPrimaryColor: "#00E5FF",
+          terrainSecondaryColor: "#FF1744",
+        },
+        subject: {
+          meshType: "voxel_runner",
+          primaryColor: "#006064",
+          accentColor: "#00E5FF",
+          wireframeOverlay: true,
+          scale: 1.15,
+        },
+        camera: {
+          mode: "chase_low",
+          fov: 85,
+          shakeIntensity: 0.5,
+        },
+        audioMapping: {
+          bassTarget: "camera_zoom_and_jump",
+          midTarget: "terrain_wave_height",
+          trebleTarget: "particles_burst",
+          fluxTarget: "camera_shake",
+        },
+      }),
+      createDefaultAnarchy3DScene(3, {
+        id: "scene-4",
+        name: "04. Fractal Core",
         sceneId: "ps1-nightmare",
+        paletteId: "furnace-amber",
+        seed: 444,
+        environment: {
+          skyColor: "#140802",
+          fogColor: "#261004",
+          fogDensity: 0.05,
+          terrainType: "lowpoly_mountains",
+          terrainSpeed: 13.5,
+          terrainPrimaryColor: "#FF9100",
+          terrainSecondaryColor: "#FF1744",
+        },
+        subject: {
+          meshType: "cyber_katana",
+          primaryColor: "#4E2608",
+          accentColor: "#FFD600",
+          wireframeOverlay: true,
+          scale: 1.3,
+        },
+        camera: {
+          mode: "fps_arms",
+          fov: 80,
+          shakeIntensity: 0.48,
+        },
+        audioMapping: {
+          bassTarget: "subject_pulse",
+          midTarget: "terrain_wave_height",
+          trebleTarget: "katana_slash",
+          fluxTarget: "glitch_and_emissive",
+        },
+      }),
+      createDefaultAnarchy3DScene(4, {
+        id: "scene-5",
+        name: "05. Strobe Finale",
+        sceneId: "industrial-city",
         paletteId: "anarchy-anaglyph",
-        intensity: 98,
-        strobe: 80,
-        kaleidoscope: 90,
-        feedbackTrails: 85,
-        acidHueShift: 80,
-        bloom: 85,
-        glitch: 45,
         seed: 555,
-        config3d: createDefaultScene3DConfig("ps1-nightmare", {
-          geometries: { extraObjects: "katana-blades", extraCount: 6 },
-        }),
-      },
+        environment: {
+          skyColor: "#060810",
+          fogColor: "#0E1324",
+          fogDensity: 0.042,
+          terrainType: "tunnel",
+          terrainSpeed: 20.0,
+          terrainPrimaryColor: "#FF1B24",
+          terrainSecondaryColor: "#00F0FF",
+        },
+        subject: {
+          meshType: "abstract_polyhedron",
+          primaryColor: "#1A237E",
+          accentColor: "#FF1B24",
+          wireframeOverlay: true,
+          scale: 1.4,
+        },
+        camera: {
+          mode: "dramatic_tilt",
+          fov: 88,
+          shakeIntensity: 0.6,
+        },
+        audioMapping: {
+          bassTarget: "tunnel_boost",
+          midTarget: "camera_sway",
+          trebleTarget: "sky_flash",
+          fluxTarget: "invert_strobe",
+        },
+      }),
     ],
   },
 ];
@@ -525,226 +823,305 @@ function mulberry32(seed: number) {
   };
 }
 
-function clampNum(val: unknown, min: number, max: number, fallback: number): number {
+function clampNum(
+  val: unknown,
+  min: number,
+  max: number,
+  fallback: number
+): number {
   const n = Number(val);
   if (!Number.isFinite(n)) return fallback;
   return Math.max(min, Math.min(max, n));
 }
 
-export function sanitizeScene3DConfig(
-  sceneId: SceneId,
-  raw?: unknown
-): Scene3DConfig {
-  const base = createDefaultScene3DConfig(sceneId);
-  if (!raw || typeof raw !== "object") return base;
-  const obj = raw as Record<string, unknown>;
-  const geom = (obj.geometries ?? {}) as Record<string, unknown>;
-  const env = (obj.environment ?? {}) as Record<string, unknown>;
-  const cam = (obj.camera ?? {}) as Record<string, unknown>;
-  const light = (obj.lighting ?? {}) as Record<string, unknown>;
-  const audio = (obj.audioReactive ?? {}) as Record<string, unknown>;
-  const colors =
-    obj.colors && typeof obj.colors === "object"
-      ? (obj.colors as Record<string, unknown>)
-      : undefined;
+function sanitizeHexColor(val: unknown, fallback: string): string {
+  if (typeof val === "string") {
+    const trimmed = val.trim();
+    if (/^#[0-9a-fA-F]{6}$/.test(trimmed)) return trimmed.toUpperCase();
+    if (/^#[0-9a-fA-F]{3}$/.test(trimmed)) {
+      const r = trimmed[1];
+      const g = trimmed[2];
+      const b = trimmed[3];
+      return `#${r}${r}${g}${g}${b}${b}`.toUpperCase();
+    }
+  }
+  return fallback;
+}
 
-  const rawExtra = String(geom.extraObjects ?? base.geometries.extraObjects);
-  const extraObjects: ExtraGeometry3DKind = EXTRA_GEOMETRY_KINDS.includes(
-    rawExtra as ExtraGeometry3DKind
+function sanitizeSceneId(val: unknown, fallback: SceneId): SceneId {
+  return typeof val === "string" && SCENE_IDS.includes(val as SceneId)
+    ? (val as SceneId)
+    : fallback;
+}
+
+function sanitizePaletteId(val: unknown, fallback: PaletteId): PaletteId {
+  return typeof val === "string" && PALETTE_IDS.includes(val as PaletteId)
+    ? (val as PaletteId)
+    : fallback;
+}
+
+/**
+ * Nettoie et valide une scène 3D JSON (`Anarchy3DScene`) avec valeurs de repli (fallbacks) sécurisées.
+ * Zéro exécution de code dynamique arbitraire.
+ */
+export function sanitizeAnarchy3DScene(
+  raw: unknown,
+  idx = 0
+): Anarchy3DScene {
+  const fallback = createDefaultAnarchy3DScene(idx);
+  if (!raw || typeof raw !== "object") return fallback;
+
+  const item = raw as Record<string, unknown>;
+  const rawEnv =
+    item.environment && typeof item.environment === "object"
+      ? (item.environment as Record<string, unknown>)
+      : {};
+  const rawSub =
+    item.subject && typeof item.subject === "object"
+      ? (item.subject as Record<string, unknown>)
+      : {};
+  const rawCam =
+    item.camera && typeof item.camera === "object"
+      ? (item.camera as Record<string, unknown>)
+      : {};
+  const rawAudio =
+    item.audioMapping && typeof item.audioMapping === "object"
+      ? (item.audioMapping as Record<string, unknown>)
+      : {};
+
+  const terrainType: AnarchyTerrainType = TERRAIN_SET.has(
+    rawEnv.terrainType as AnarchyTerrainType
   )
-    ? (rawExtra as ExtraGeometry3DKind)
-    : base.geometries.extraObjects;
+    ? (rawEnv.terrainType as AnarchyTerrainType)
+    : fallback.environment.terrainType;
 
-  const sanitizeHex = (v: unknown): string | undefined =>
-    typeof v === "string" && /^#[0-9a-fA-F]{6}$/.test(v.trim())
-      ? v.trim()
-      : undefined;
+  const meshType: AnarchySubjectMeshType = SUBJECT_SET.has(
+    rawSub.meshType as AnarchySubjectMeshType
+  )
+    ? (rawSub.meshType as AnarchySubjectMeshType)
+    : fallback.subject.meshType;
+
+  const camMode: AnarchyCameraMode = CAMERA_MODE_SET.has(
+    rawCam.mode as AnarchyCameraMode
+  )
+    ? (rawCam.mode as AnarchyCameraMode)
+    : fallback.camera.mode;
+
+  const bassTarget: AnarchyBassTarget = BASS_TARGET_SET.has(
+    rawAudio.bassTarget as AnarchyBassTarget
+  )
+    ? (rawAudio.bassTarget as AnarchyBassTarget)
+    : fallback.audioMapping.bassTarget;
+
+  const midTarget: AnarchyMidTarget = MID_TARGET_SET.has(
+    rawAudio.midTarget as AnarchyMidTarget
+  )
+    ? (rawAudio.midTarget as AnarchyMidTarget)
+    : fallback.audioMapping.midTarget;
+
+  const trebleTarget: AnarchyTrebleTarget = TREBLE_TARGET_SET.has(
+    rawAudio.trebleTarget as AnarchyTrebleTarget
+  )
+    ? (rawAudio.trebleTarget as AnarchyTrebleTarget)
+    : fallback.audioMapping.trebleTarget;
+
+  const fluxTarget: AnarchyFluxTarget = FLUX_TARGET_SET.has(
+    rawAudio.fluxTarget as AnarchyFluxTarget
+  )
+    ? (rawAudio.fluxTarget as AnarchyFluxTarget)
+    : fallback.audioMapping.fluxTarget;
+
+  const environment: Anarchy3DEnvironment = {
+    skyColor: sanitizeHexColor(rawEnv.skyColor, fallback.environment.skyColor),
+    fogColor: sanitizeHexColor(rawEnv.fogColor, fallback.environment.fogColor),
+    fogDensity: Number(
+      clampNum(
+        rawEnv.fogDensity,
+        0,
+        0.25,
+        fallback.environment.fogDensity
+      ).toFixed(4)
+    ),
+    terrainType,
+    terrainSpeed: Number(
+      clampNum(
+        rawEnv.terrainSpeed,
+        0.5,
+        40,
+        fallback.environment.terrainSpeed
+      ).toFixed(2)
+    ),
+    terrainPrimaryColor: sanitizeHexColor(
+      rawEnv.terrainPrimaryColor,
+      fallback.environment.terrainPrimaryColor
+    ),
+    terrainSecondaryColor: sanitizeHexColor(
+      rawEnv.terrainSecondaryColor,
+      fallback.environment.terrainSecondaryColor
+    ),
+  };
+
+  const subject: Anarchy3DSubject = {
+    meshType,
+    primaryColor: sanitizeHexColor(
+      rawSub.primaryColor,
+      fallback.subject.primaryColor
+    ),
+    accentColor: sanitizeHexColor(
+      rawSub.accentColor,
+      fallback.subject.accentColor
+    ),
+    wireframeOverlay:
+      typeof rawSub.wireframeOverlay === "boolean"
+        ? rawSub.wireframeOverlay
+        : fallback.subject.wireframeOverlay,
+    scale: Number(
+      clampNum(rawSub.scale, 0.25, 3.0, fallback.subject.scale).toFixed(2)
+    ),
+  };
+
+  const camera: Anarchy3DCamera = {
+    mode: camMode,
+    fov: Math.round(clampNum(rawCam.fov, 40, 115, fallback.camera.fov)),
+    shakeIntensity: Number(
+      clampNum(
+        rawCam.shakeIntensity,
+        0,
+        2.0,
+        fallback.camera.shakeIntensity
+      ).toFixed(2)
+    ),
+  };
+
+  const audioMapping: Anarchy3DAudioMapping = {
+    bassTarget,
+    midTarget,
+    trebleTarget,
+    fluxTarget,
+  };
+
+  const inferredSceneId = inferSceneIdFromAnarchy3DScene(terrainType, meshType);
+  const rawName =
+    typeof item.name === "string" && item.name.trim()
+      ? item.name.trim()
+      : typeof item.label === "string" && item.label.trim()
+      ? item.label.trim()
+      : `0${idx + 1}. Scène 3D`;
 
   return {
-    geometries: {
-      monolithScale: clampNum(
-        geom.monolithScale,
-        0.3,
-        2.5,
-        base.geometries.monolithScale
-      ),
-      coreScale: clampNum(geom.coreScale, 0.3, 2.5, base.geometries.coreScale),
-      extraObjects,
-      extraCount: Math.round(
-        clampNum(geom.extraCount, 0, 12, base.geometries.extraCount)
-      ),
-      wireframeRim:
-        typeof geom.wireframeRim === "boolean"
-          ? geom.wireframeRim
-          : base.geometries.wireframeRim,
-      checkerTexture:
-        typeof geom.checkerTexture === "boolean"
-          ? geom.checkerTexture
-          : base.geometries.checkerTexture,
-    },
-    environment: {
-      horizonOffset: Math.round(
-        clampNum(env.horizonOffset, -30, 30, base.environment.horizonOffset)
-      ),
-      tunnelSpeed: clampNum(
-        env.tunnelSpeed,
-        0.2,
-        3.5,
-        base.environment.tunnelSpeed
-      ),
-      floorDepth: clampNum(
-        env.floorDepth,
-        0.5,
-        2.5,
-        base.environment.floorDepth
-      ),
-    },
-    camera: {
-      distance: clampNum(cam.distance, 2.8, 16, base.camera.distance),
-      pitchDegrees: clampNum(
-        cam.pitchDegrees,
-        -25,
-        35,
-        base.camera.pitchDegrees
-      ),
-      yawDegrees: clampNum(cam.yawDegrees, -45, 45, base.camera.yawDegrees),
-      fovDegrees: clampNum(cam.fovDegrees, 40, 110, base.camera.fovDegrees),
-      orbitSpeed: clampNum(cam.orbitSpeed, 0, 2.5, base.camera.orbitSpeed),
-    },
-    lighting: {
-      fogDensity: clampNum(
-        light.fogDensity,
-        0,
-        1,
-        base.lighting.fogDensity
-      ),
-      ditherStrength: clampNum(
-        light.ditherStrength,
-        0,
-        1,
-        base.lighting.ditherStrength
-      ),
-      ambientBoost: clampNum(
-        light.ambientBoost,
-        -0.3,
-        0.5,
-        base.lighting.ambientBoost
-      ),
-    },
-    colors: colors
-      ? {
-          sky: sanitizeHex(colors.sky),
-          haze: sanitizeHex(colors.haze),
-          structure: sanitizeHex(colors.structure),
-          face: sanitizeHex(colors.face),
-          light: sanitizeHex(colors.light),
-          glow: sanitizeHex(colors.glow),
-        }
-      : undefined,
-    audioReactive: {
-      bassPulse: clampNum(
-        audio.bassPulse,
-        0,
-        2.5,
-        base.audioReactive.bassPulse
-      ),
-      midMorph: clampNum(audio.midMorph, 0, 2.5, base.audioReactive.midMorph),
-      trebleStrobe: clampNum(
-        audio.trebleStrobe,
-        0,
-        2.5,
-        base.audioReactive.trebleStrobe
-      ),
-      fluxJolt: clampNum(audio.fluxJolt, 0, 2.5, base.audioReactive.fluxJolt),
-    },
+    id:
+      typeof item.id === "string" && item.id.trim()
+        ? item.id.trim()
+        : `scene-${idx + 1}`,
+    name: rawName,
+    environment,
+    subject,
+    camera,
+    audioMapping,
+    sceneId: sanitizeSceneId(item.sceneId, inferredSceneId),
+    paletteId: sanitizePaletteId(item.paletteId, "anarchy-anaglyph"),
+    seed: Number(item.seed) || (idx + 1) * 137,
   };
 }
 
 /**
- * Génère un nouveau Pack de Scènes 3D procédural unique (chaque génération
- * possède sa propre seed, ses palettes, intensités, géométries 3D, caméra et effets).
+ * Génère un nouveau Pack 3D (`Anarchy3DPack`) procédural unique par seed.
  */
 export function generateRandomScenePack(
-  author = "Anonyme",
+  author = "Anarchy Studio",
   customName?: string,
   bpm = 140,
   beatsPerScene = 16,
-  sceneCount = 5
-): ScenePack {
-  const seed = Math.floor(Math.random() * 900000) + 100000;
+  sceneCount = 5,
+  explicitSeed?: number
+): Anarchy3DPack {
+  const seed =
+    explicitSeed !== undefined
+      ? explicitSeed >>> 0
+      : Math.floor(Math.random() * 900000) + 100000;
   const rng = mulberry32(seed);
 
-  const shuffledScenes = [...SCENE_IDS].sort(() => rng() - 0.5);
-  const shuffledPalettes = [...PALETTE_IDS].sort(() => rng() - 0.5);
-  const extraPool: ExtraGeometry3DKind[] = [
-    "katana-blades",
-    "floating-monoliths",
-    "octo-rings",
-    "cyber-pyramids",
+  const skyPool = ["#060A12", "#120408", "#050D1A", "#0A0416", "#05100A"];
+  const neonPool = [
+    "#00F0FF",
+    "#FF0055",
+    "#00E676",
+    "#FFAB00",
+    "#D500F9",
+    "#FF1B24",
   ];
+  const primaryPool = [
+    "#00838F",
+    "#263238",
+    "#311B92",
+    "#3E1C08",
+    "#101B2E",
+    "#3D0A14",
+  ];
+  const terrains = ANARCHY_TERRAIN_TYPES.map((t) => t.value);
+  const subjects = ANARCHY_SUBJECT_MESH_TYPES.map((s) => s.value).filter(
+    (s) => s !== "none"
+  );
+  const camModes = ANARCHY_CAMERA_MODES.map((c) => c.value);
+  const bassTargets = ANARCHY_BASS_TARGETS.map((b) => b.value);
+  const midTargets = ANARCHY_MID_TARGETS.map((m) => m.value);
+  const trebleTargets = ANARCHY_TREBLE_TARGETS.map((t) => t.value);
+  const fluxTargets = ANARCHY_FLUX_TARGETS.map((f) => f.value);
+  const shuffledPalettes = [...PALETTE_IDS].sort(() => rng() - 0.5);
 
   const count = Math.max(1, Math.min(16, Math.round(sceneCount)));
-  const scenes: ScenePackSlot[] = Array.from({ length: count }, (_, idx) => {
-    const sId = shuffledScenes[idx % shuffledScenes.length];
-    const pId = shuffledPalettes[idx % shuffledPalettes.length];
-    const extraKind = extraPool[Math.floor(rng() * extraPool.length)];
-    return {
-      label: `0${idx + 1}. ${sId
-        .split("-")
-        .map((w) => w[0].toUpperCase() + w.slice(1))
-        .join(" ")}`,
-      sceneId: sId,
-      paletteId: pId,
-      intensity: Math.round(62 + rng() * 38),
-      strobe: Math.round(10 + rng() * 65),
-      kaleidoscope: Math.round(rng() * 85),
-      feedbackTrails: Math.round(20 + rng() * 70),
-      acidHueShift: Math.round(rng() * 90),
-      bloom: Math.round(25 + rng() * 65),
-      glitch: Math.round(rng() * 50),
+  const scenes: Anarchy3DScene[] = Array.from({ length: count }, (_, idx) => {
+    const terrainType = terrains[Math.floor(rng() * terrains.length)];
+    const meshType = subjects[Math.floor(rng() * subjects.length)];
+    const camMode = camModes[Math.floor(rng() * camModes.length)];
+    const sky = skyPool[Math.floor(rng() * skyPool.length)];
+    const colA = neonPool[Math.floor(rng() * neonPool.length)];
+    const colB =
+      neonPool[(Math.floor(rng() * neonPool.length) + 1) % neonPool.length];
+    const subPri = primaryPool[Math.floor(rng() * primaryPool.length)];
+
+    return createDefaultAnarchy3DScene(idx, {
+      id: `scene-${idx + 1}`,
+      name: `0${idx + 1}. ${terrainType.replace("_", " ").toUpperCase()}`,
+      paletteId: shuffledPalettes[idx % shuffledPalettes.length],
       seed: Math.floor(rng() * 99999) + 1,
-      config3d: createDefaultScene3DConfig(sId, {
-        geometries: {
-          monolithScale: Number((0.8 + rng() * 0.9).toFixed(2)),
-          coreScale: Number((0.85 + rng() * 0.9).toFixed(2)),
-          extraObjects: extraKind,
-          extraCount: 3 + Math.floor(rng() * 4),
-          wireframeRim: rng() > 0.2,
-          checkerTexture: true,
-        },
-        environment: {
-          horizonOffset: Math.round((rng() - 0.5) * 12),
-          tunnelSpeed: Number((0.9 + rng() * 1.8).toFixed(2)),
-          floorDepth: Number((0.9 + rng() * 0.7).toFixed(2)),
-        },
-        camera: {
-          distance: Number((4.8 + rng() * 6.2).toFixed(1)),
-          pitchDegrees: Math.round(-6 + rng() * 22),
-          yawDegrees: Math.round((rng() - 0.5) * 28),
-          fovDegrees: Math.round(64 + rng() * 24),
-          orbitSpeed: Number((0.2 + rng() * 0.9).toFixed(2)),
-        },
-        lighting: {
-          fogDensity: Number((0.25 + rng() * 0.45).toFixed(2)),
-          ditherStrength: Number((0.35 + rng() * 0.4).toFixed(2)),
-          ambientBoost: Number(((rng() - 0.3) * 0.25).toFixed(2)),
-        },
-        audioReactive: {
-          bassPulse: Number((0.9 + rng() * 1.1).toFixed(2)),
-          midMorph: Number((0.8 + rng() * 1.0).toFixed(2)),
-          trebleStrobe: Number((0.8 + rng() * 1.1).toFixed(2)),
-          fluxJolt: Number((0.8 + rng() * 1.1).toFixed(2)),
-        },
-      }),
-      script3d: DEFAULT_SCRIPT_3D_TEMPLATE,
-    };
+      environment: {
+        skyColor: sky,
+        fogColor: sky,
+        fogDensity: Number((0.03 + rng() * 0.04).toFixed(3)),
+        terrainType,
+        terrainSpeed: Number((8 + rng() * 12).toFixed(1)),
+        terrainPrimaryColor: colA,
+        terrainSecondaryColor: colB,
+      },
+      subject: {
+        meshType,
+        primaryColor: subPri,
+        accentColor: colB,
+        wireframeOverlay: rng() > 0.15,
+        scale: Number((0.85 + rng() * 0.6).toFixed(2)),
+      },
+      camera: {
+        mode: camMode,
+        fov: Math.round(68 + rng() * 22),
+        shakeIntensity: Number((0.25 + rng() * 0.45).toFixed(2)),
+      },
+      audioMapping: {
+        bassTarget: bassTargets[Math.floor(rng() * bassTargets.length)],
+        midTarget: midTargets[Math.floor(rng() * midTargets.length)],
+        trebleTarget: trebleTargets[Math.floor(rng() * trebleTargets.length)],
+        fluxTarget: fluxTargets[Math.floor(rng() * fluxTargets.length)],
+      },
+    });
   });
 
   const cleanName = customName?.trim();
   return {
-    id: `pack-gen-${seed}`,
-    name: cleanName || `Pack 3D #${seed.toString().slice(-4)} (${count} Scènes)`,
-    author: author.trim() || "Anonyme",
+    packId: `pack-3d-${seed}`,
+    name:
+      cleanName ||
+      `Pack 3D #${seed.toString().slice(-4)} (${count} Scènes)`,
+    author: author.trim() || "Anarchy Studio",
     bpm,
     beatsPerScene,
     seed,
@@ -753,170 +1130,267 @@ export function generateRandomScenePack(
   };
 }
 
-export const AI_SCENE_PACK_PROMPT = `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio.
-Génère un Pack de Scènes 3D profondes au format JSON (nombre libre de scènes : 1, 3, 5, 8+).
-
-Mondes 3D de base disponibles ("sceneId") :
-- "industrial-city" (éclipse industrielle, usines, ponts & monolithes)
-- "rave-dungeon" (voûte souterraine 3D, arches béton, portail central & sol inondé)
-- "techno-therapy" (vortex octogonal 3D rotatif, noyau diamant, lasers & ECG)
-- "ps1-nightmare" (cour brutaliste low-poly 32-bit, obélisque inversé en lévitation, dallage en perspective)
-- "digital-void" (gouffre de données 3D, tours serveurs, noyau lumineux & passerelles)
-
-Palettes disponibles ("paletteId") :
-- "anarchy-anaglyph" | "techno-therapy" | "blood-red" | "furnace-amber" | "toxic-oxide" | "cold-concrete" | "acid-violet"
-
-Objets 3D additionnels ("config3d.geometries.extraObjects") :
-- "none" | "katana-blades" | "floating-monoliths" | "octo-rings" | "cyber-pyramids"
-
-Script 3D optionnel ("script3d") :
-Fonction JS "function customizeScene3D(scene3d, audio, t)" pouvant appeler :
-- scene3d.addBox3D(x, y, z, w, h, d, tone, wireRim, checker, rotY)
-- scene3d.addPyramid3D(x, y, z, radius, height, tone, wireRim, inverted, rotY)
-- scene3d.addRing3D(z, radius, depth, segments, spinRad, tone, wireRim)
-
-Réponds uniquement avec un objet JSON valide suivant cette structure :
-{
-  "name": "Nom du Pack 3D",
-  "author": "Anarchy Studio",
-  "bpm": 140,
-  "beatsPerScene": 16,
-  "scenes": [
-    {
-      "label": "01. Dojo Néon",
-      "sceneId": "rave-dungeon",
-      "paletteId": "anarchy-anaglyph",
-      "intensity": 88,
-      "strobe": 35,
-      "kaleidoscope": 30,
-      "feedbackTrails": 48,
-      "acidHueShift": 18,
-      "config3d": {
-        "geometries": { "monolithScale": 1.3, "coreScale": 1.25, "extraObjects": "katana-blades", "extraCount": 4, "wireframeRim": true, "checkerTexture": true },
-        "environment": { "horizonOffset": 0, "tunnelSpeed": 1.8, "floorDepth": 1.3 },
-        "camera": { "distance": 6.8, "pitchDegrees": 5, "yawDegrees": 0, "fovDegrees": 75, "orbitSpeed": 0.45 },
-        "lighting": { "fogDensity": 0.42, "ditherStrength": 0.5, "ambientBoost": 0.08 },
-        "audioReactive": { "bassPulse": 1.35, "midMorph": 1.15, "trebleStrobe": 1.2, "fluxJolt": 1.25 }
-      },
-      "script3d": "function customizeScene3D(scene3d, audio, t) { scene3d.addPyramid3D(0, 0.4, 5.6, 0.85 + audio.bass * 0.4, 1.7, 0.88, true, false, t); }"
-    }
-  ]
-}`;
-
-function sanitizeSceneId(val: string): SceneId {
-  return SCENE_IDS.includes(val as SceneId)
-    ? (val as SceneId)
-    : "rave-dungeon";
-}
-
-function sanitizePaletteId(val: string): PaletteId {
-  return PALETTE_IDS.includes(val as PaletteId)
-    ? (val as PaletteId)
-    : "anarchy-anaglyph";
-}
-
-function clamp100(n: unknown, fallback = 75): number {
-  const num = Number(n);
-  if (!Number.isFinite(num)) return fallback;
-  return Math.max(0, Math.min(100, Math.round(num)));
-}
-
-export function sanitizeScenePackSlot(
-  item: Record<string, unknown>,
-  idx = 0
-): ScenePackSlot {
-  const sceneId = sanitizeSceneId(String(item.sceneId || "rave-dungeon"));
-  const paletteId = sanitizePaletteId(
-    String(item.paletteId || "anarchy-anaglyph")
-  );
-  return {
-    label: item.label ? String(item.label) : `0${idx + 1}. Scène 3D`,
-    sceneId,
-    paletteId,
-    intensity: clamp100(item.intensity, 85),
-    strobe: clamp100(item.strobe, 25),
-    kaleidoscope: clamp100(item.kaleidoscope, 30),
-    feedbackTrails: clamp100(item.feedbackTrails, 45),
-    acidHueShift: clamp100(item.acidHueShift, 20),
-    bloom: clamp100(item.bloom, 50),
-    glitch: clamp100(item.glitch, 20),
-    seed: Number(item.seed) || (idx + 1) * 137,
-    config3d: sanitizeScene3DConfig(sceneId, item.config3d),
-    script3d:
-      typeof item.script3d === "string" && item.script3d.trim().length > 0
-        ? item.script3d
-        : undefined,
-  };
-}
-
 /**
- * Parse un Pack de Scènes 3D (1 à 24 scènes) depuis un bloc JSON (ou bloc markdown ```json).
+ * Valide en temps réel un JSON de Pack 3D (`Anarchy3DPack`) ou de scène 3D et retourne
+ * le pack nettoyé avec la liste éventuelle des champs corrigés par fallback.
  */
-export function parseScenePackFromText(
-  raw: string,
-  author = "Communauté",
+export function validateAnarchy3DPackJson(
+  rawText: string,
+  authorFallback = "Anarchy Studio",
   customName?: string
-): ScenePack | null {
-  let trimmed = raw.trim();
-  if (!trimmed) return null;
+):
+  | { ok: true; pack: Anarchy3DPack; warnings: string[] }
+  | { ok: false; error: string } {
+  let trimmed = rawText.trim();
+  if (!trimmed) {
+    return { ok: false, error: "Le JSON est vide." };
+  }
 
-  const fenced = trimmed.match(/```(?:json|js|javascript)?\s*([\s\S]*?)```/i);
+  const fenced = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fenced?.[1]) {
     trimmed = fenced[1].trim();
   }
 
-  if (trimmed.startsWith("{") || trimmed.startsWith("[")) {
-    try {
-      const parsed = JSON.parse(trimmed);
-      const rawScenes = Array.isArray(parsed)
-        ? parsed
-        : Array.isArray(parsed.scenes)
-        ? parsed.scenes
-        : parsed.sceneId || parsed.config3d
-        ? [parsed]
-        : null;
-
-      if (Array.isArray(rawScenes) && rawScenes.length > 0) {
-        const scenes: ScenePackSlot[] = rawScenes
-          .slice(0, 24)
-          .map((item, idx) =>
-            sanitizeScenePackSlot(
-              (item && typeof item === "object" ? item : {}) as Record<
-                string,
-                unknown
-              >,
-              idx
-            )
-          );
-        const finalName =
-          customName?.trim() ||
-          (!Array.isArray(parsed) && typeof parsed.name === "string"
-            ? parsed.name.trim()
-            : "") ||
-          `Pack 3D #${Date.now().toString().slice(-4)} (${scenes.length} Scènes)`;
-        return {
-          id: `pack-3d-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
-          name: finalName,
-          author:
-            (!Array.isArray(parsed) && typeof parsed.author === "string"
-              ? parsed.author.trim()
-              : "") || author,
-          bpm: Number(!Array.isArray(parsed) && parsed.bpm) || 140,
-          beatsPerScene:
-            Number(!Array.isArray(parsed) && parsed.beatsPerScene) || 16,
-          seed: Number(!Array.isArray(parsed) && parsed.seed) || Date.now() % 100000,
-          scenes,
-          createdAt: new Date().toISOString(),
-        };
-      }
-    } catch {
-      return null;
-    }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch (err) {
+    return {
+      ok: false,
+      error:
+        err instanceof Error
+          ? `Erreur de syntaxe JSON : ${err.message}`
+          : "Format JSON invalide.",
+    };
   }
 
-  return null;
+  if (!parsed || typeof parsed !== "object") {
+    return { ok: false, error: "La racine du JSON doit être un objet ou un tableau." };
+  }
+
+  const warnings: string[] = [];
+  const obj = parsed as Record<string, unknown>;
+  const rawScenes = Array.isArray(parsed)
+    ? parsed
+    : Array.isArray(obj.scenes)
+    ? obj.scenes
+    : obj.environment || obj.subject || obj.camera
+    ? [parsed]
+    : null;
+
+  if (!Array.isArray(rawScenes) || rawScenes.length === 0) {
+    return {
+      ok: false,
+      error:
+        'Le JSON doit contenir un tableau "scenes" non vide (ou une scène 3D).',
+    };
+  }
+
+  const scenes: Anarchy3DScene[] = rawScenes.slice(0, 24).map((rawSc, idx) => {
+    if (rawSc && typeof rawSc === "object") {
+      const scObj = rawSc as Record<string, unknown>;
+      const env = (scObj.environment ?? {}) as Record<string, unknown>;
+      const sub = (scObj.subject ?? {}) as Record<string, unknown>;
+      const cam = (scObj.camera ?? {}) as Record<string, unknown>;
+      const aud = (scObj.audioMapping ?? {}) as Record<string, unknown>;
+      if (
+        env.terrainType &&
+        !TERRAIN_SET.has(env.terrainType as AnarchyTerrainType)
+      ) {
+        warnings.push(
+          `Scène #${idx + 1} : terrainType "${String(env.terrainType)}" inconnu → repli sur "infinite_grid".`
+        );
+      }
+      if (
+        sub.meshType &&
+        !SUBJECT_SET.has(sub.meshType as AnarchySubjectMeshType)
+      ) {
+        warnings.push(
+          `Scène #${idx + 1} : meshType "${String(sub.meshType)}" inconnu → repli sur "voxel_runner".`
+        );
+      }
+      if (cam.mode && !CAMERA_MODE_SET.has(cam.mode as AnarchyCameraMode)) {
+        warnings.push(
+          `Scène #${idx + 1} : camera.mode "${String(cam.mode)}" inconnu → repli sur "chase_low".`
+        );
+      }
+      if (
+        aud.bassTarget &&
+        !BASS_TARGET_SET.has(aud.bassTarget as AnarchyBassTarget)
+      ) {
+        warnings.push(
+          `Scène #${idx + 1} : bassTarget "${String(aud.bassTarget)}" inconnu → repli sur "camera_zoom_and_jump".`
+        );
+      }
+      if (
+        aud.midTarget &&
+        !MID_TARGET_SET.has(aud.midTarget as AnarchyMidTarget)
+      ) {
+        warnings.push(
+          `Scène #${idx + 1} : midTarget "${String(aud.midTarget)}" inconnu → repli sur "terrain_wave_height".`
+        );
+      }
+      if (
+        aud.trebleTarget &&
+        !TREBLE_TARGET_SET.has(aud.trebleTarget as AnarchyTrebleTarget)
+      ) {
+        warnings.push(
+          `Scène #${idx + 1} : trebleTarget "${String(aud.trebleTarget)}" inconnu → repli sur "particles_burst".`
+        );
+      }
+      if (
+        aud.fluxTarget &&
+        !FLUX_TARGET_SET.has(aud.fluxTarget as AnarchyFluxTarget)
+      ) {
+        warnings.push(
+          `Scène #${idx + 1} : fluxTarget "${String(aud.fluxTarget)}" inconnu → repli sur "glitch_and_emissive".`
+        );
+      }
+    }
+    return sanitizeAnarchy3DScene(rawSc, idx);
+  });
+
+  const rawPackId =
+    !Array.isArray(parsed) && typeof obj.packId === "string" && obj.packId.trim()
+      ? obj.packId.trim()
+      : !Array.isArray(parsed) && typeof obj.id === "string" && obj.id.trim()
+      ? obj.id.trim()
+      : `pack-3d-${Date.now().toString().slice(-5)}`;
+
+  const finalName =
+    customName?.trim() ||
+    (!Array.isArray(parsed) && typeof obj.name === "string" && obj.name.trim()
+      ? obj.name.trim()
+      : `Pack 3D (${scenes.length} Scènes)`);
+
+  const finalAuthor =
+    (!Array.isArray(parsed) && typeof obj.author === "string" && obj.author.trim()
+      ? obj.author.trim()
+      : "") || authorFallback;
+
+  return {
+    ok: true,
+    warnings,
+    pack: {
+      packId: rawPackId,
+      name: finalName,
+      author: finalAuthor,
+      scenes,
+      bpm: Number(!Array.isArray(parsed) && obj.bpm) || 140,
+      beatsPerScene: Number(!Array.isArray(parsed) && obj.beatsPerScene) || 16,
+      seed:
+        Number(!Array.isArray(parsed) && obj.seed) || Date.now() % 100000,
+      createdAt: new Date().toISOString(),
+    },
+  };
 }
 
-export function exportScenePackAsJson(pack: ScenePack): string {
-  return JSON.stringify(pack, null, 2);
+/**
+ * Parse un Pack 3D (`Anarchy3DPack`) depuis un texte JSON (ou bloc markdown ```json).
+ */
+export function parseScenePackFromText(
+  raw: string,
+  author = "Anarchy Studio",
+  customName?: string
+): Anarchy3DPack | null {
+  const result = validateAnarchy3DPackJson(raw, author, customName);
+  return result.ok ? result.pack : null;
 }
+
+/**
+ * Exporte un Pack 3D au format JSON strict `Anarchy3DPack` ("Cartouche / Pack 3D").
+ */
+export function exportScenePackAsJson(pack: Anarchy3DPack): string {
+  const cleanExport = {
+    packId: pack.packId,
+    name: pack.name,
+    author: pack.author,
+    scenes: pack.scenes.map((sc, idx) => ({
+      id: sc.id || `scene-${idx + 1}`,
+      name: sc.name || `0${idx + 1}. Scène 3D`,
+      environment: {
+        skyColor: sc.environment.skyColor,
+        fogColor: sc.environment.fogColor,
+        fogDensity: sc.environment.fogDensity,
+        terrainType: sc.environment.terrainType,
+        terrainSpeed: sc.environment.terrainSpeed,
+        terrainPrimaryColor: sc.environment.terrainPrimaryColor,
+        terrainSecondaryColor: sc.environment.terrainSecondaryColor,
+      },
+      subject: {
+        meshType: sc.subject.meshType,
+        primaryColor: sc.subject.primaryColor,
+        accentColor: sc.subject.accentColor,
+        wireframeOverlay: sc.subject.wireframeOverlay,
+        scale: sc.subject.scale,
+      },
+      camera: {
+        mode: sc.camera.mode,
+        fov: sc.camera.fov,
+        shakeIntensity: sc.camera.shakeIntensity,
+      },
+      audioMapping: {
+        bassTarget: sc.audioMapping.bassTarget,
+        midTarget: sc.audioMapping.midTarget,
+        trebleTarget: sc.audioMapping.trebleTarget,
+        fluxTarget: sc.audioMapping.fluxTarget,
+      },
+    })),
+  };
+  return JSON.stringify(cleanExport, null, 2);
+}
+
+export const AI_SCENE_PACK_PROMPT = `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio.
+Génère une "Cartouche / Pack 3D" au format JSON strict (Anarchy3DPack) contenant un nombre libre de scènes 3D profondes (ex: 5 scènes).
+
+IMPORTANT — RÈGLES STRICTES :
+1. Réponds UNIQUEMENT avec un bloc JSON valide (aucun code JS/C++, aucune fonction).
+2. Utilise exclusivement les valeurs autorisées ci-dessous :
+   - environment.terrainType : "infinite_grid" | "lowpoly_mountains" | "dojo_pillars" | "tunnel"
+   - subject.meshType : "voxel_runner" | "floating_monolith" | "cyber_katana" | "abstract_polyhedron" | "none"
+   - camera.mode : "chase_low" | "orbit" | "fps_arms" | "dramatic_tilt"
+   - audioMapping.bassTarget : "camera_zoom_and_jump" | "subject_pulse" | "pillar_slam" | "tunnel_boost"
+   - audioMapping.midTarget : "terrain_wave_height" | "subject_rotation" | "color_shift" | "camera_sway"
+   - audioMapping.trebleTarget : "particles_burst" | "wireframe_glow" | "sky_flash" | "katana_slash"
+   - audioMapping.fluxTarget : "glitch_and_emissive" | "camera_shake" | "fov_kick" | "invert_strobe"
+3. Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".
+
+Schéma JSON exact attendu :
+{
+  "packId": "ps2-nether-runner-v1",
+  "name": "PS2 // Nether & Brutalist Runner",
+  "author": "Anarchy Studio",
+  "scenes": [
+    {
+      "id": "scene-1",
+      "name": "01. Cyber Corridor",
+      "environment": {
+        "skyColor": "#060A12",
+        "fogColor": "#060A12",
+        "fogDensity": 0.045,
+        "terrainType": "infinite_grid",
+        "terrainSpeed": 12.0,
+        "terrainPrimaryColor": "#00F0FF",
+        "terrainSecondaryColor": "#FF0055"
+      },
+      "subject": {
+        "meshType": "voxel_runner",
+        "primaryColor": "#00838F",
+        "accentColor": "#FF0055",
+        "wireframeOverlay": true,
+        "scale": 1.0
+      },
+      "camera": {
+        "mode": "chase_low",
+        "fov": 75,
+        "shakeIntensity": 0.4
+      },
+      "audioMapping": {
+        "bassTarget": "camera_zoom_and_jump",
+        "midTarget": "terrain_wave_height",
+        "trebleTarget": "particles_burst",
+        "fluxTarget": "glitch_and_emissive"
+      }
+    }
+  ]
+}`;

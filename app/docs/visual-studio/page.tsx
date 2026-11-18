@@ -6,6 +6,13 @@ import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
   AI_SCENE_PACK_PROMPT,
+  ANARCHY_BASS_TARGETS,
+  ANARCHY_CAMERA_MODES,
+  ANARCHY_FLUX_TARGETS,
+  ANARCHY_MID_TARGETS,
+  ANARCHY_SUBJECT_MESH_TYPES,
+  ANARCHY_TERRAIN_TYPES,
+  ANARCHY_TREBLE_TARGETS,
   DEFAULT_SCENE_PACKS,
   exportScenePackAsJson,
 } from "@/lib/visual-engine/scene-packs";
@@ -15,34 +22,56 @@ Format exact par ligne : [mm:ss.xx] #SECTION TEXTE COURT
 Sections disponibles : #INTRO, #COUPLET, #PRE_DROP, #DROP, #REFRAIN, #OUTRO.
 Garde 3 à 6 mots max par ligne pour un rendu TikTok / 9:16 lisible.`;
 
-const JS_3D_EXAMPLE_FULL = `// Hook 3D temps réel exécuté à 60 FPS dans le moteur 3D profond (Low-Poly PS1/PS2)
-function customizeScene3D(scene3d, audio, t) {
-  // 1. Piliers 3D verticaux audio-réactifs sur le kick (audio.bass)
-  for (let i = 0; i < 4; i++) {
-    const z = ((i * 1.4 - t * 2.2) % 5.6 + 5.6) % 5.6 - 2.2;
-    const h = 0.65 + audio.bass * 0.95;
-    scene3d.addBox(-1.6, 0, z, 0.24, h, 0.24, 0, t * 0.4, 0, "#FF1B24", 0.55 + audio.bass * 0.4);
-    scene3d.addBox( 1.6, 0, z, 0.24, h, 0.24, 0, -t * 0.4, 0, "#00E5FF", 0.55 + audio.treble * 0.4);
-  }
-
-  // 2. Anneau octaédrique 3D central en rotation rapide sur les transitoires (audio.flux)
-  scene3d.addRing(0, 0.1, 0.2, 1.05 + audio.bass * 0.35, 0.08, t * 1.1, t * 1.7, "#00E5FF", 0.85);
-
-  // 3. Pyramide 3D suspendue au-dessus du dojo
-  scene3d.addPyramid(0, 0.55 + audio.treble * 0.3, 0.1, 0.45, 0.65, -t * 1.4, "#FF1B24", 0.9);
+const CANONICAL_PACK_EXAMPLE = `{
+  "packId": "ps2-nether-runner-v1",
+  "name": "PS2 // Nether & Brutalist Runner",
+  "author": "Anarchy Studio",
+  "scenes": [
+    {
+      "id": "scene-1",
+      "name": "01. Cyber Corridor",
+      "environment": {
+        "skyColor": "#060A12",
+        "fogColor": "#060A12",
+        "fogDensity": 0.045,
+        "terrainType": "infinite_grid",
+        "terrainSpeed": 12.0,
+        "terrainPrimaryColor": "#00F0FF",
+        "terrainSecondaryColor": "#FF0055"
+      },
+      "subject": {
+        "meshType": "voxel_runner",
+        "primaryColor": "#00838F",
+        "accentColor": "#FF0055",
+        "wireframeOverlay": true,
+        "scale": 1.0
+      },
+      "camera": {
+        "mode": "chase_low",
+        "fov": 75,
+        "shakeIntensity": 0.4
+      },
+      "audioMapping": {
+        "bassTarget": "camera_zoom_and_jump",
+        "midTarget": "terrain_wave_height",
+        "trebleTarget": "particles_burst",
+        "fluxTarget": "glitch_and_emissive"
+      }
+    }
+  ]
 }`;
 
 const FADERS_DOC = [
-  { bank: "01 // Dynamique", name: "Bass Punch", desc: "Amplifie la réaction aux kicks et basses fréquences (scale 3D, rebond caméra, flash)." },
-  { bank: "01 // Dynamique", name: "Aigus / Clap", desc: "Amplifie les hautes fréquences (claps, charleys, transitoires)." },
-  { bank: "01 // Dynamique", name: "Master Int.", desc: "Intensité énergétique globale de la scène 3D (0% à 100%)." },
+  { bank: "01 // Dynamique", name: "Bass Punch", desc: "Multiplicateur direct sur audioMapping.bassTarget (zoom/jump caméra, pulsation du sujet 3D, impact des piliers)." },
+  { bank: "01 // Dynamique", name: "Aigus / Clap", desc: "Multiplicateur direct sur audioMapping.trebleTarget (pluie de particules 3D, surbrillance wireframe, slash katana)." },
+  { bank: "01 // Dynamique", name: "Master Int.", desc: "Multiplicateur global sur la vitesse terrainSpeed, la densité du brouillard fogDensity et l'échelle du sujet 3D." },
   { bank: "02 // FX", name: "Strobe Aigu", desc: "Déclenche un flash clair d'arrière-plan lorsque les aigus ou claps frappent." },
   { bank: "02 // FX", name: "Kick Blackout", desc: "Coupe ou assombrit brièvement l'image sur les gros kicks." },
   { bank: "02 // FX", name: "Psychédélie", desc: "Ajoute kaléidoscope, symétries et déformation psychédélique sur le rendu 3D." },
   { bank: "02 // FX", name: "Morph Couleur", desc: "Fait glisser la Palette Principale vers la palette Cible Color Morph." },
   { bank: "02 // FX", name: "Anaglyph 3D", desc: "Séparation Rouge / Cyan 3D réactive à l'audio." },
-  { bank: "03 // Caméra", name: "Zoom Cam", desc: "Zoom unifié de la caméra perspective 3D (50% à 220%)." },
-  { bank: "03 // Caméra", name: "Pendule Cam", desc: "Balancement pendulaire de la caméra 3D calé sur le tempo." },
+  { bank: "03 // Caméra", name: "Zoom Cam", desc: "Multiplicateur unifié sur camera.fov et la distance de projection perspective 3D (50% à 220%)." },
+  { bank: "03 // Caméra", name: "Pendule Cam", desc: "Amplifie le roulis et camera.shakeIntensity calés sur le tempo BPM." },
 ];
 
 const FORMATS_DOC = [
@@ -73,14 +102,14 @@ export default function VisualStudioDocsPage() {
       <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-black pb-4">
         <div>
           <span className="inline-block px-2 py-0.5 rounded bg-brand-red text-white font-mono text-[10px] font-bold uppercase mb-2">
-            DOCUMENTATION OFFICIELLE // ANARCHY VISUAL STUDIO 3D
+            DOCUMENTATION OFFICIELLE // ANARCHY VISUAL STUDIO 3D (DATA-DRIVEN JSON)
           </span>
           <h1 className="font-mono text-2xl sm:text-3xl font-bold text-brand-black">
-            Guide Complet : Packs de Scènes 3D, Faders, Whisper &amp; Prompts IA
+            Guide Complet : Cartouches / Packs 3D JSON (`Anarchy3DPack`), Faders, Whisper &amp; Prompts IA
           </h1>
           <p className="font-sans text-sm text-neutral-600 mt-1">
-            Tout comprendre pour importer un son (jusqu&apos;à 70 Mio), personnaliser les vraies scènes 3D profondes (JSON / JS 3D),
-            piloter les 10 faders et exporter en 9:16 TikTok ou 16:9 YouTube avec son.
+            Tout comprendre pour importer un son (jusqu&apos;à 70 Mio), personnaliser les scènes 3D profondes via le schéma JSON{" "}
+            <code>Anarchy3DPack</code> (zéro <code>eval</code>, zéro crash), piloter les 10 faders et exporter en 9:16 TikTok ou 16:9 YouTube.
           </p>
         </div>
 
@@ -104,10 +133,10 @@ export default function VisualStudioDocsPage() {
           {[
             ["#audio-lab", "1. Audio Lab (70 Mio) & Calage BPM"],
             ["#packs-couleurs", "2. Packs de Scènes 3D & Enchaînement BPM"],
-            ["#faders", "3. Console 10 Faders (Isolation Stricte)"],
+            ["#faders", "3. Console 10 Faders (Multiplicateurs Temps Réel)"],
             ["#formats-export", "4. Formats TikTok/Insta & Export MP4"],
             ["#whisper-lrc", "5. Whisper & Scénario LRC"],
-            ["#config-3d", "6. Personnalisation 3D (JSON / JS 3D) & Import/Export"],
+            ["#config-3d", "6. Schéma JSON Cartouche 3D (Anarchy3DPack)"],
             ["#prompts-ia", "7. Système de Prompts IA 3D (Copier)"],
           ].map(([href, label]) => (
             <a
@@ -174,19 +203,20 @@ export default function VisualStudioDocsPage() {
       <div id="packs-couleurs">
         <Card
           moduleTitle="02 // PACKS DE SCÈNES 3D PROFONDES & ENCHAÎNEMENT BPM"
-          moduleMeta="PS2 ENTER THE DRAGON · PSY-ACID 145 BPM · CADENCE 2/4 MESURES"
+          moduleMeta="PS2 ENTER THE DRAGON · NETHER RUNNER · PSY-ACID 145 BPM · CADENCE 2/4 MESURES"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-sans text-xs sm:text-sm text-neutral-700 leading-relaxed">
             <div className="space-y-2">
               <h3 className="font-mono font-bold text-brand-black text-sm">
-                Moteur de Rendu 3D Profond Unique (Low-Poly PS1/PS2)
+                Moteur de Rendu 3D Data-Driven (Low-Poly PS1/PS2)
               </h3>
               <p>
-                Le moteur 3D Low-Poly / PS2 est l&apos;unique moteur graphique du Studio. Dans{" "}
+                Le moteur 3D Low-Poly / PS2 est l&apos;unique moteur graphique du Studio et fonctionne en mode{" "}
+                <strong>100% Data-Driven JSON</strong>. Dans{" "}
                 <strong>PACK DE SCÈNES // ENCHAÎNEMENT BPM</strong>, chaque pack (comme{" "}
-                <strong>PS2 // Enter the Dragon (5 Scènes)</strong> avec <code>01. Dojo Néon</code>,{" "}
-                <code>02. Enter the Dragon</code>, <code>03. Katana Rush</code>, <code>04. Shogun Boss</code>,{" "}
-                <code>05. Digital Void</code>) contient un nombre libre de scènes 3D profondes (1, 3, 5, 8+) qui
+                <strong>PS2 // Enter the Dragon (5 Scènes)</strong>,{" "}
+                <strong>PS2 // Nether &amp; Brutalist Runner</strong> ou{" "}
+                <strong>Psy-Acid 145 BPM (5 Scènes)</strong>) contient un nombre libre de scènes 3D profondes (1, 3, 5, 8+) qui
                 s&apos;enchaînent automatiquement toutes les <strong>2 mesures (8T)</strong> ou{" "}
                 <strong>4 mesures (16T)</strong> selon le BPM.
               </p>
@@ -209,15 +239,17 @@ export default function VisualStudioDocsPage() {
       {/* 3. Console 10 Faders */}
       <div id="faders">
         <Card
-          moduleTitle="03 // CONSOLE DES 10 FADERS LIVE (ISOLATION STRICTE)"
-          moduleMeta="TEMPS RÉEL 60 FPS · JAMAIS ÉCRASÉS PAR LES PACKS 3D"
+          moduleTitle="03 // CONSOLE DES 10 FADERS LIVE (MULTIPLICATEURS TEMPS RÉEL)"
+          moduleMeta="ZÉRO CONFLIT · JAMAIS ÉCRASÉS PAR LES PACKS 3D JSON"
         >
           <div className="space-y-3">
             <div className="p-3 rounded-lg bg-brand-pearl border-l-4 border-[#00E5FF] font-sans text-xs text-neutral-700">
-              <strong>Isolation stricte des Faders &amp; du BPM :</strong> changer de Pack 3D, importer un
-              nouveau Pack JSON ou laisser les scènes 3D s&apos;enchaîner toutes les 2 ou 4 mesures{" "}
-              <strong>ne réinitialise jamais aucun des 10 faders ni le BPM</strong>. Les faders modulent
-              toujours le rendu 3D en temps réel par-dessus la scène active.
+              <strong>Les Faders restent souverains :</strong> le JSON d&apos;une scène 3D définit les{" "}
+              <em>valeurs de base</em> (<code>terrainSpeed</code>, <code>fogDensity</code>,{" "}
+              <code>camera.fov</code>, <code>camera.shakeIntensity</code>, <code>subject.scale</code>,{" "}
+              <code>audioMapping.*</code>), et les <strong>10 faders de l&apos;interface</strong> agissent comme{" "}
+              <strong>multiplicateurs en temps réel</strong> par-dessus. Changer ou importer un Pack 3D JSON ne
+              modifie jamais aucun fader ni le BPM.
             </div>
             <div className="overflow-x-auto">
               <table className="w-full border-collapse font-mono text-xs">
@@ -225,7 +257,7 @@ export default function VisualStudioDocsPage() {
                   <tr className="bg-brand-pearl border-b-2 border-black text-left">
                     <th className="p-2">Banque</th>
                     <th className="p-2">Fader</th>
-                    <th className="p-2">Effet réel sur la scène 3D</th>
+                    <th className="p-2">Multiplicateur temps réel sur la scène 3D JSON</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -320,86 +352,88 @@ export default function VisualStudioDocsPage() {
         </Card>
       </div>
 
-      {/* 6. Personnalisation 3D Profonde (JSON / JS 3D) & Import/Export */}
+      {/* 6. Schéma JSON Cartouche 3D (Anarchy3DPack & Anarchy3DScene) */}
       <div id="config-3d">
         <Card
-          moduleTitle="06 // PERSONNALISATION DES SCÈNES 3D (JSON / JS 3D) & EXPORT PACK 3D"
-          moduleMeta="CONFIG3D · CUSTOMIZESCENE3D 60 FPS · IMPORT/EXPORT JSON"
+          moduleTitle="06 // ARCHITECTURE DATA-DRIVEN : CARTOUCHE / PACK 3D JSON (ANARCHY3DPACK)"
+          moduleMeta="ZÉRO EVAL · ZÉRO CRASH · VALIDATION TEMPS RÉEL"
           activeIndicator
         >
           <div className="space-y-4">
             <p className="font-sans text-xs sm:text-sm text-neutral-700">
-              Dans le panneau <strong>PACK DE SCÈNES // ENCHAÎNEMENT BPM</strong> du Studio, cliquez sur{" "}
-              <code>🎛 ÉDITER SCÈNE 3D (JSON / JS 3D)</code> pour personnaliser en direct à 60 FPS la scène 3D active,
-              ou sur <code>⇄ EXPORTER / IMPORTER PACK 3D (JSON)</code> pour partager un pack complet de scènes 3D.
+              Au lieu d&apos;exécuter du code arbitraire fragile, chaque Pack 3D exportable ou généré par une IA suit le schéma JSON strict{" "}
+              <code>Anarchy3DPack</code>. Dans le panneau <strong>PACK DE SCÈNES // ENCHAÎNEMENT BPM</strong>, utilisez{" "}
+              <code>{`{ } ÉDITER / VOIR LE JSON`}</code>, <code>⇄ IMPORTER / EXPORTER UN PACK</code> ou{" "}
+              <code>📖 DOC / GÉNÉRER AVEC UNE IA</code>.
             </p>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-sans text-xs text-neutral-700">
-              <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">1. Onglet Paramètres 3D &amp; Audio</div>
-                <p>
-                  Réglez le moteur 3D de base (<code>ps1-bolide</code>, <code>lowpoly-tunnel</code>,{" "}
-                  <code>lowpoly-vortex</code>), les géométries 3D additionnelles (<code>katana-blades</code>,{" "}
-                  <code>floating-monoliths</code>, <code>octo-rings</code>, <code>cyber-pyramids</code>), la caméra
-                  perspective (FOV, distance, pitch, yaw, orbite), le brouillard et les multiplicateurs audio.
-                </p>
-              </div>
-              <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">2. Onglet Script 3D Live (JS 60 FPS)</div>
-                <p>
-                  Injectez des volumes 3D low-poly directement dans le pipeline Z-buffer/Lambert via{" "}
-                  <code>customizeScene3D(scene3d, audio, t)</code> : boîtes 3D, pyramides 3D, anneaux octaédriques
-                  et rubans 3D éclairés et projetés en perspective avec la scène principale.
-                </p>
-              </div>
-              <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">3. Onglet Config JSON 3D &amp; Export Pack</div>
-                <p>
-                  Éditez l&apos;objet <code>config3d</code> complet d&apos;une scène ou exportez/importez un{" "}
-                  <strong>Pack 3D JSON</strong> entier (1, 3, 5, 8 scènes ou plus) en un clic ou via un fichier{" "}
-                  <code>.json</code>.
-                </p>
-              </div>
-            </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-[11px]">
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1.5">
-                <div className="font-bold text-brand-red">API JS 3D LIVE (scene3d.* dans customizeScene3D)</div>
+                <div className="font-bold text-brand-red">1. ENVIRONMENT &amp; SUBJECT (VALEURS AUTORISÉES)</div>
                 <ul className="space-y-1 text-neutral-800">
-                  <li><code>scene3d.addBox(x, y, z, w, h, d, rx, ry, rz, colorHex, emissive)</code> — Volume 3D plein</li>
-                  <li><code>scene3d.addPyramid(x, y, z, radius, height, ry, colorHex, emissive)</code> — Pyramide 3D</li>
-                  <li><code>scene3d.addRing(x, y, z, radius, thickness, rx, ry, colorHex, emissive)</code> — Anneau 3D</li>
-                  <li><code>scene3d.addRibbon(x1, y1, z1, x2, y2, z2, width, colorHex, emissive)</code> — Lame / Ruban 3D</li>
+                  <li>
+                    <strong>environment.terrainType</strong> :{" "}
+                    <code>{ANARCHY_TERRAIN_TYPES.map((x) => x.value).join(" | ")}</code>
+                  </li>
+                  <li>
+                    <strong>environment.terrainSpeed</strong> : vitesse de défilement (<code>0.5</code> à <code>30.0</code>)
+                  </li>
+                  <li>
+                    <strong>environment.fogDensity</strong> : densité du brouillard 3D (<code>0.005</code> à <code>0.12</code>)
+                  </li>
+                  <li>
+                    <strong>subject.meshType</strong> :{" "}
+                    <code>{ANARCHY_SUBJECT_MESH_TYPES.map((x) => x.value).join(" | ")}</code>
+                  </li>
+                  <li>
+                    <strong>subject.wireframeOverlay</strong> : <code>true | false</code> · <strong>scale</strong> : <code>0.3</code> à <code>3.0</code>
+                  </li>
                 </ul>
               </div>
 
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1.5">
-                <div className="font-bold text-brand-black">VARIABLES AUDIO &amp; TEMPS (audio.*, t)</div>
+                <div className="font-bold text-brand-black">2. CAMERA &amp; AUDIOMAPPING (VALEURS AUTORISÉES)</div>
                 <ul className="space-y-1 text-neutral-800">
-                  <li><code>audio.bass</code> (0..1) — Kicks &amp; basses fréquences</li>
-                  <li><code>audio.mid</code> (0..1) — Médiums &amp; synthés</li>
-                  <li><code>audio.treble</code> (0..1) — Aigus &amp; charleys</li>
-                  <li><code>audio.rms</code> (0..1) — Volume énergétique global</li>
-                  <li><code>audio.flux</code> (0..1) — Transitoires rapides / claps</li>
-                  <li><code>t</code> (secondes) — Horloge continue à 60 FPS</li>
+                  <li>
+                    <strong>camera.mode</strong> :{" "}
+                    <code>{ANARCHY_CAMERA_MODES.map((x) => x.value).join(" | ")}</code>
+                  </li>
+                  <li>
+                    <strong>audioMapping.bassTarget</strong> :{" "}
+                    <code>{ANARCHY_BASS_TARGETS.map((x) => x.value).join(" | ")}</code>
+                  </li>
+                  <li>
+                    <strong>audioMapping.midTarget</strong> :{" "}
+                    <code>{ANARCHY_MID_TARGETS.map((x) => x.value).join(" | ")}</code>
+                  </li>
+                  <li>
+                    <strong>audioMapping.trebleTarget</strong> :{" "}
+                    <code>{ANARCHY_TREBLE_TARGETS.map((x) => x.value).join(" | ")}</code>
+                  </li>
+                  <li>
+                    <strong>audioMapping.fluxTarget</strong> :{" "}
+                    <code>{ANARCHY_FLUX_TARGETS.map((x) => x.value).join(" | ")}</code>
+                  </li>
                 </ul>
               </div>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5 font-mono text-xs">
-                <span className="font-bold text-brand-black">EXEMPLE DE SCRIPT JS 3D LIVE (PILIERS, ANNEAU &amp; PYRAMIDE 3D AUDIO-RÉACTIFS)</span>
+                <span className="font-bold text-brand-black">
+                  SCHÉMA OFFICIEL `Anarchy3DPack` (&quot;PS2 // Nether &amp; Brutalist Runner&quot;)
+                </span>
                 <Button
                   type="button"
                   variant="clinical"
                   size="sm"
-                  onClick={() => void copyText("js3d-ex", JS_3D_EXAMPLE_FULL)}
+                  onClick={() => void copyText("canonical-pack", CANONICAL_PACK_EXAMPLE)}
                 >
-                  {copiedId === "js3d-ex" ? "✅ COPIÉ !" : "📋 COPIER SCRIPT 3D"}
+                  {copiedId === "canonical-pack" ? "✅ COPIÉ !" : "📋 COPIER CE SCHÉMA JSON"}
                 </Button>
               </div>
               <pre className="p-3 rounded-lg border-2 border-black bg-[#101216] text-[#00E5FF] font-mono text-[11px] overflow-x-auto leading-relaxed">
-                {JS_3D_EXAMPLE_FULL}
+                {CANONICAL_PACK_EXAMPLE}
               </pre>
             </div>
           </div>
@@ -410,21 +444,21 @@ export default function VisualStudioDocsPage() {
       <div id="prompts-ia">
         <Card
           moduleTitle="07 // SYSTÈME DE PROMPTS IA 3D (PRÊTS À COPIER)"
-          moduleMeta="PACK 3D MULTI-SCÈNES (JSON + JS 3D) · SCÉNARIO LRC"
+          moduleMeta="GÉNÉRER UN PACK 3D JSON 100% VALIDE · SCÉNARIO LRC"
           activeIndicator
         >
           <div className="space-y-5">
             <p className="font-sans text-xs sm:text-sm text-neutral-700">
               Copiez l&apos;un de ces prompts système dans votre IA (ChatGPT, Claude, Gemini...),
               ajoutez votre ambiance ou vos paroles, puis collez directement le JSON généré dans{" "}
-              <code>⇄ EXPORTER / IMPORTER PACK 3D (JSON)</code> !
+              <code>⇄ IMPORTER / EXPORTER UN PACK (.JSON / COPIER LE CODE)</code> !
             </p>
 
             {/* Prompt 1 : Pack 3D */}
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-mono text-xs font-bold text-brand-black uppercase">
-                  1. Prompt IA — Générer un Pack de Scènes 3D Profondes (JSON + Script 3D Live)
+                  1. Prompt IA — Générer un Pack de Scènes 3D (`Anarchy3DPack` JSON)
                 </h3>
                 <Button
                   type="button"
@@ -432,7 +466,7 @@ export default function VisualStudioDocsPage() {
                   size="sm"
                   onClick={() => void copyText("p1", AI_SCENE_PACK_PROMPT)}
                 >
-                  {copiedId === "p1" ? "✅ PROMPT 3D COPIÉ !" : "📋 COPIER PROMPT PACK 3D"}
+                  {copiedId === "p1" ? "✅ PROMPT 3D COPIÉ !" : "📋 COPIER LE PROMPT IA"}
                 </Button>
               </div>
               <pre className="p-3 rounded-lg border border-black bg-[#101216] font-mono text-[11px] text-[#00E5FF] whitespace-pre-wrap">
