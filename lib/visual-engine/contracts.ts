@@ -257,6 +257,55 @@ export interface SceneDescriptor {
   audioMappings: readonly { band: string; target: string }[];
 }
 
+export type ExtraGeometry3DKind =
+  | "none"
+  | "katana-blades"
+  | "floating-monoliths"
+  | "octo-rings"
+  | "cyber-pyramids";
+
+export interface Scene3DConfig {
+  geometries: {
+    monolithScale: number;
+    coreScale: number;
+    extraObjects: ExtraGeometry3DKind;
+    extraCount: number;
+    wireframeRim: boolean;
+    checkerTexture: boolean;
+  };
+  environment: {
+    horizonOffset: number;
+    tunnelSpeed: number;
+    floorDepth: number;
+  };
+  camera: {
+    distance: number;
+    pitchDegrees: number;
+    yawDegrees: number;
+    fovDegrees: number;
+    orbitSpeed: number;
+  };
+  lighting: {
+    fogDensity: number;
+    ditherStrength: number;
+    ambientBoost: number;
+  };
+  colors?: {
+    sky?: string;
+    haze?: string;
+    structure?: string;
+    face?: string;
+    light?: string;
+    glow?: string;
+  };
+  audioReactive: {
+    bassPulse: number;
+    midMorph: number;
+    trebleStrobe: number;
+    fluxJolt: number;
+  };
+}
+
 export interface SceneFrameInput {
   sceneId: SceneId;
   paletteId: PaletteId;
@@ -273,6 +322,10 @@ export interface SceneFrameInput {
   camera?: OrthographicCameraSettings | PerspectiveCameraSettings;
   seed?: number;
   aspectRatio?: VideoAspectRatio;
+  /** Configuration 3D éditable de la scène active (géométries, caméra, lumière, audio-réactivité). */
+  scene3dConfig?: Scene3DConfig;
+  /** Script 3D JS optionnel injectant des volumes 3D low-poly dans le moteur 3D principal à 60 FPS. */
+  script3d?: string;
 }
 
 export type TransitionKind = "cut" | "dither-dissolve";

@@ -7,38 +7,12 @@ import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
 import { useAudioPlayer } from "@/components/audio/AudioPlayerContext";
 import { ConsoleFader } from "@/components/visual-engine/ConsoleFader";
-import { AnarchyPresetPanel } from "@/components/visual-engine/AnarchyPresetPanel";
-import {
-  ANARCHY_PRESETS_EVENT,
-  DEFAULT_ANARCHY_PACK,
-  DEFAULT_ANARCHY_PRESETS,
-  loadAnarchyPresets,
-  saveAnarchyPresets,
-  type AnarchyPreset,
-} from "@/lib/visual-engine/anarchy-presets";
+import { ScenePackManager } from "@/components/visual-engine/ScenePackManager";
 import {
   DEFAULT_SCENE_PACKS,
   type ScenePack,
   type ScenePackSlot,
 } from "@/lib/visual-engine/scene-packs";
-import {
-  compileVisualScript,
-  createCppRenderContext,
-  parseCppUniforms,
-  type CppCompileResult,
-  type CppUniformValue,
-  type ScriptLanguage,
-} from "@/lib/visual-engine/cpp-runtime";
-import {
-  CPP_WORKSPACE_EVENT,
-  applyCppSceneTransition,
-  createDefaultCppWorkspace,
-  extractDocumentUniformValues,
-  loadCppWorkspace,
-  resolveActiveCppScene,
-  saveCppWorkspace,
-  type CppWorkspaceState,
-} from "@/lib/visual-engine/cpp-workspace";
 import { WaveformCanvas } from "@/components/visual-engine/WaveformCanvas";
 import {
   type AudioAnalysis,
@@ -53,7 +27,6 @@ import {
 } from "@/lib/visual-engine/contracts";
 import {
   VIDEO_ASPECT_FORMATS,
-  evaluateLyricsAt,
   extractAudioClipWav,
   formatLrcTimestamp,
   formatWhisperToLrc,
@@ -74,7 +47,6 @@ import {
 import {
   STUDY_FPS,
   STUDY_PALETTES,
-  applyStudioPostFxAndLyrics,
   getSceneDescriptor,
   renderSceneFrame,
   type SceneRenderReport,
@@ -94,7 +66,7 @@ const ZERO_FEATURES: AudioFeatures = {
 /**
  * Composant `VisualEngineStudio` — Intégration complète V2 dans Open Hub :
  * - Console modulaire à 10 Faders DAW/VJ essentiels (Basses, Aigus/Clap, Strobe Aigu, Psyché, Caméra)
- * - Packs de 5 scènes enchaînées au BPM + 4 Variations rapides & Changement de couleur / Color Morph
+ * - Packs de scènes 3D profondes enchaînées au BPM + Éditeur 3D en direct (JSON / JS 3D)
  * - Incrustation de paroles bitmap 5x5 + Micro Web Speech API
  * - Synthèse piste démo WAV + Import MP3/WAV FFT Worker + Export MP4 avec son
  */
@@ -144,7 +116,7 @@ export const VisualEngineStudio: React.FC = () => {
   const [autoSceneSwitchBeats, setAutoSceneSwitchBeats] = useState<number>(16);
   const kickBlackoutMode = "duck-on-kick" as const;
   const activePackRef = useRef<ScenePack>(DEFAULT_SCENE_PACKS[0]);
-  const [, setLivePackSlotIndex] = useState<number>(0);
+  const [livePackSlotIndex, setLivePackSlotIndex] = useState<number>(0);
   const livePackSlotIndexRef = useRef<number>(0);
   const [useCustomPalette, setUseCustomPalette] = useState<boolean>(false);
   const useCustomPaletteRef = useRef<boolean>(false);
@@ -206,36 +178,6 @@ export const VisualEngineStudio: React.FC = () => {
   const [showMatrixPanel, setShowMatrixPanel] = useState<boolean>(true);
   const [showFadersPanel, setShowFadersPanel] = useState<boolean>(true);
   const [showLyricsPanel, setShowLyricsPanel] = useState<boolean>(true);
-  const [showCppPanel, setShowCppPanel] = useState<boolean>(false);
-
-  const [cppWorkspace, setCppWorkspace] = useState<CppWorkspaceState>(() =>
-    createDefaultCppWorkspace()
-  );
-  const [cppActiveStatus, setCppActiveStatus] = useState<string>("");
-  const [cppRuntimeError, setCppRuntimeError] = useState<string>("");
-
-  // Système modulaire AnarchyPreset (nombre libre de scènes .js / .cpp, faders & BPM strictement isolés)
-  const [anarchyPresets, setAnarchyPresets] = useState<AnarchyPreset[]>(
-    DEFAULT_ANARCHY_PRESETS
-  );
-  const [activeAnarchyPresetId, setActiveAnarchyPresetId] = useState<string>(
-    DEFAULT_ANARCHY_PACK.id
-  );
-  const [anarchySceneIndex, setAnarchySceneIndex] = useState<number>(0);
-  const [anarchyManualLock, setAnarchyManualLock] = useState<boolean>(false);
-  const [anarchyRuntimeError, setAnarchyRuntimeError] = useState<string>("");
-
-  const activeAnarchyPreset =
-    anarchyPresets.find((p) => p.id === activeAnarchyPresetId) ??
-    anarchyPresets[0] ??
-    DEFAULT_ANARCHY_PACK;
-  const activeAnarchyPresetRef = useRef<AnarchyPreset>(activeAnarchyPreset);
-  activeAnarchyPresetRef.current = activeAnarchyPreset;
-  const anarchySceneIndexRef = useRef<number>(anarchySceneIndex);
-  anarchySceneIndexRef.current = anarchySceneIndex;
-  const anarchyManualLockRef = useRef<boolean>(anarchyManualLock);
-  anarchyManualLockRef.current = anarchyManualLock;
-  const anarchyLastErrRef = useRef<string>("");
 
   const stageCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
@@ -243,44 +185,6 @@ export const VisualEngineStudio: React.FC = () => {
   const prevFreqRef = useRef<Uint8Array>(new Uint8Array(128));
   const smoothedFeaturesRef = useRef<AudioFeatures>({ ...ZERO_FEATURES });
   const timeAccumRef = useRef<number>(0);
-
-  const cppWorkspaceRef = useRef<CppWorkspaceState>(cppWorkspace);
-  cppWorkspaceRef.current = cppWorkspace;
-  const cppCompiledCacheRef = useRef<Map<string, CppCompileResult>>(new Map());
-  const cppLastSceneKeyRef = useRef<string>("");
-  const cppTransitionStartRef = useRef<number>(0);
-  const cppLastErrRef = useRef<string>("");
-  const cppLastStatusRef = useRef<string>("");
-
-  useEffect(() => {
-    const syncWorkspace = () => {
-      const loaded = loadCppWorkspace();
-      setCppWorkspace(loaded);
-      cppWorkspaceRef.current = loaded;
-      if (loaded.enabled) {
-        setShowCppPanel(true);
-      }
-    };
-    const syncAnarchyPresets = () => {
-      const loaded = loadAnarchyPresets();
-      setAnarchyPresets(loaded.presets);
-      setActiveAnarchyPresetId(loaded.activePresetId);
-    };
-    syncWorkspace();
-    syncAnarchyPresets();
-    window.addEventListener("storage", syncWorkspace);
-    window.addEventListener("focus", syncWorkspace);
-    window.addEventListener(CPP_WORKSPACE_EVENT, syncWorkspace);
-    window.addEventListener("storage", syncAnarchyPresets);
-    window.addEventListener(ANARCHY_PRESETS_EVENT, syncAnarchyPresets);
-    return () => {
-      window.removeEventListener("storage", syncWorkspace);
-      window.removeEventListener("focus", syncWorkspace);
-      window.removeEventListener(CPP_WORKSPACE_EVENT, syncWorkspace);
-      window.removeEventListener("storage", syncAnarchyPresets);
-      window.removeEventListener(ANARCHY_PRESETS_EVENT, syncAnarchyPresets);
-    };
-  }, []);
 
   const preset = project.activePreset;
   const activeDescriptor = getSceneDescriptor(
@@ -579,14 +483,23 @@ export const VisualEngineStudio: React.FC = () => {
       const effectivePreset = sequenceEval.activePreset;
       const pack = activePackRef.current;
       let activeSlot: ScenePackSlot | undefined;
-      if (autoSceneSwitchBeats > 0 && pack.scenes.length > 0) {
-        const beatFloat = Math.max(0, (timeSeconds - beatOffset) * (bpm / 60));
-        const slotIdx =
-          Math.floor(beatFloat / autoSceneSwitchBeats) % pack.scenes.length;
-        activeSlot = pack.scenes[slotIdx];
-        if (livePackSlotIndexRef.current !== slotIdx) {
-          livePackSlotIndexRef.current = slotIdx;
-          setLivePackSlotIndex(slotIdx);
+      if (pack.scenes.length > 0) {
+        if (autoSceneSwitchBeats > 0) {
+          const beatFloat = Math.max(
+            0,
+            (timeSeconds - beatOffset) * (bpm / 60)
+          );
+          const slotIdx =
+            Math.floor(beatFloat / autoSceneSwitchBeats) % pack.scenes.length;
+          activeSlot = pack.scenes[slotIdx];
+          if (livePackSlotIndexRef.current !== slotIdx) {
+            livePackSlotIndexRef.current = slotIdx;
+            setLivePackSlotIndex(slotIdx);
+          }
+        } else {
+          const safeIdx =
+            Math.max(0, livePackSlotIndexRef.current) % pack.scenes.length;
+          activeSlot = pack.scenes[safeIdx];
         }
       }
 
@@ -594,21 +507,8 @@ export const VisualEngineStudio: React.FC = () => {
       const ctx = canvas?.getContext("2d");
 
       if (ctx) {
-        const lyricEval = evaluateLyricsAt(
-          lyricsText,
-          timeSeconds,
-          timedWords
-        );
-        const ws = cppWorkspaceRef.current;
-        const resolvedCpp =
-          ws.enabled && ws.manualSceneId !== null
-            ? resolveActiveCppScene(ws, timeSeconds, lyricEval.section)
-            : null;
-
         const nextReport = renderSceneFrame(ctx, {
-          sceneId:
-            resolvedCpp?.scene?.baseSceneId ??
-            (activeSlot ? activeSlot.sceneId : effectivePreset.sceneId),
+          sceneId: activeSlot ? activeSlot.sceneId : effectivePreset.sceneId,
           paletteId:
             useCustomPaletteRef.current || !activeSlot
               ? effectivePreset.paletteId
@@ -649,230 +549,9 @@ export const VisualEngineStudio: React.FC = () => {
           camera: effectivePreset.render.camera,
           seed: activeSlot?.seed ?? effectivePreset.seed,
           aspectRatio,
+          scene3dConfig: activeSlot?.config3d,
+          script3d: activeSlot?.script3d,
         });
-
-        const liveFaderTelemetry = {
-          intensity: effectivePreset.intensity,
-          strobe: effectivePreset.effects.strobeGlow ?? 0.45,
-          kickBlackout: effectivePreset.effects.kickBlackout ?? 0,
-          psychedelic: effectivePreset.effects.psychedelic ?? 0,
-          colorMorph: effectivePreset.effects.colorTransition ?? 0,
-          anaglyph: effectivePreset.effects.anaglyphSplit ?? 0.16,
-          cameraZoom:
-            effectivePreset.render.camera.kind === "orthographic"
-              ? effectivePreset.render.camera.zoom
-              : 1 / Math.max(0.45, effectivePreset.render.camera.distance),
-          pendulumSwing: effectivePreset.effects.pendulumSwing ?? 0.25,
-        };
-
-        if (resolvedCpp) {
-          const doc = resolvedCpp.document;
-          const docLang: ScriptLanguage =
-            doc.language ?? (doc.name.toLowerCase().endsWith(".js") ? "js" : "cpp");
-          const cacheKey = `${doc.id}::${docLang}::${doc.code}`;
-          let compiled = cppCompiledCacheRef.current.get(cacheKey);
-          if (!compiled) {
-            if (cppCompiledCacheRef.current.size > 40) {
-              cppCompiledCacheRef.current.clear();
-            }
-            compiled = compileVisualScript(doc.code, docLang);
-            cppCompiledCacheRef.current.set(cacheKey, compiled);
-          }
-
-          const sceneKey = `${resolvedCpp.scene?.id ?? "fallback"}::${doc.id}`;
-          if (
-            cppLastSceneKeyRef.current &&
-            cppLastSceneKeyRef.current !== sceneKey
-          ) {
-            cppTransitionStartRef.current = now;
-          }
-          cppLastSceneKeyRef.current = sceneKey;
-
-          const statusText = `${doc.name} (${resolvedCpp.matchedReason})`;
-          if (cppLastStatusRef.current !== statusText) {
-            cppLastStatusRef.current = statusText;
-            setCppActiveStatus(statusText);
-          }
-
-          if (compiled.ok && compiled.fn) {
-            try {
-              const beatFloat = Math.max(
-                0,
-                (timeSeconds - beatOffset) * (bpm / 60)
-              );
-              const cppCtx = createCppRenderContext(
-                ctx,
-                aspectSpec.width,
-                aspectSpec.height,
-                {
-                  t: timeSeconds,
-                  bpm,
-                  beat: Math.floor(beatFloat),
-                  beatPhase: beatFloat - Math.floor(beatFloat),
-                  bass: nextReport.audio.bassEnvelope,
-                  mid: nextReport.audio.midEnvelope,
-                  treble: nextReport.audio.trebleEnvelope,
-                  rms: nextReport.audio.rmsEnvelope,
-                  flux: nextReport.audio.transientPulse,
-                  sceneIndex: livePackSlotIndexRef.current,
-                  lyricLine: lyricEval.line,
-                  lyricWord: lyricEval.activeWord,
-                  lyricProgress: lyricEval.progress,
-                  lyricSection: lyricEval.section,
-                  ...liveFaderTelemetry,
-                  params: resolvedCpp.uniforms,
-                }
-              );
-              compiled.fn(cppCtx, resolvedCpp.uniforms);
-
-              if (
-                resolvedCpp.scene &&
-                cppTransitionStartRef.current > 0
-              ) {
-                const dur = Math.max(
-                  0.05,
-                  resolvedCpp.scene.transitionDuration || 0.35
-                );
-                const elapsedSec = (now - cppTransitionStartRef.current) / 1000;
-                if (elapsedSec < dur) {
-                  applyCppSceneTransition(
-                    cppCtx,
-                    resolvedCpp.scene.transition,
-                    elapsedSec / dur
-                  );
-                }
-              }
-
-              applyStudioPostFxAndLyrics(ctx, {
-                width: aspectSpec.width,
-                height: aspectSpec.height,
-                timeSeconds,
-                paletteId: effectivePreset.paletteId,
-                applyPaletteTint: useCustomPaletteRef.current,
-                audio: nextReport.audio,
-                effects: effectivePreset.effects,
-                lyrics: {
-                  enabled: lyricsEnabled,
-                  text: lyricsText,
-                  style: lyricsStyle,
-                  autoVocalSync: true,
-                  timedWords,
-                },
-                reducedMotion: project.reducedMotion,
-              });
-
-              if (cppLastErrRef.current !== "") {
-                cppLastErrRef.current = "";
-                setCppRuntimeError("");
-              }
-            } catch (err) {
-              const msg =
-                err instanceof Error ? err.message : "Erreur runtime C++.";
-              if (cppLastErrRef.current !== msg) {
-                cppLastErrRef.current = msg;
-                setCppRuntimeError(msg);
-              }
-            }
-          } else if (!compiled.ok && compiled.error) {
-            if (cppLastErrRef.current !== compiled.error) {
-              cppLastErrRef.current = compiled.error;
-              setCppRuntimeError(compiled.error);
-            }
-          }
-        } else if (activeAnarchyPresetRef.current.scenes.length > 0) {
-          const activeAnarchy = activeAnarchyPresetRef.current;
-          const sceneCount = activeAnarchy.scenes.length;
-          const beatFloat = Math.max(
-            0,
-            (timeSeconds - beatOffset) * (bpm / 60)
-          );
-          let targetIdx = anarchySceneIndexRef.current % sceneCount;
-          if (!anarchyManualLockRef.current && autoSceneSwitchBeats > 0) {
-            targetIdx =
-              Math.floor(beatFloat / autoSceneSwitchBeats) % sceneCount;
-            if (anarchySceneIndexRef.current !== targetIdx) {
-              anarchySceneIndexRef.current = targetIdx;
-              setAnarchySceneIndex(targetIdx);
-            }
-          }
-          const scene = activeAnarchy.scenes[targetIdx];
-          if (scene) {
-            const cacheKey = `anarchy::${scene.id}::${scene.language}::${scene.code}`;
-            let compiled = cppCompiledCacheRef.current.get(cacheKey);
-            if (!compiled) {
-              if (cppCompiledCacheRef.current.size > 40) {
-                cppCompiledCacheRef.current.clear();
-              }
-              compiled = compileVisualScript(scene.code, scene.language);
-              cppCompiledCacheRef.current.set(cacheKey, compiled);
-            }
-
-            if (compiled.ok && compiled.fn) {
-              try {
-                const sceneCtx = createCppRenderContext(
-                  ctx,
-                  aspectSpec.width,
-                  aspectSpec.height,
-                  {
-                    t: timeSeconds,
-                    bpm,
-                    beat: Math.floor(beatFloat),
-                    beatPhase: beatFloat - Math.floor(beatFloat),
-                    bass: nextReport.audio.bassEnvelope,
-                    mid: nextReport.audio.midEnvelope,
-                    treble: nextReport.audio.trebleEnvelope,
-                    rms: nextReport.audio.rmsEnvelope,
-                    flux: nextReport.audio.transientPulse,
-                    sceneIndex: targetIdx,
-                    lyricLine: lyricEval.line,
-                    lyricWord: lyricEval.activeWord,
-                    lyricProgress: lyricEval.progress,
-                    lyricSection: lyricEval.section,
-                    ...liveFaderTelemetry,
-                  }
-                );
-                compiled.fn(sceneCtx);
-
-                applyStudioPostFxAndLyrics(ctx, {
-                  width: aspectSpec.width,
-                  height: aspectSpec.height,
-                  timeSeconds,
-                  paletteId: effectivePreset.paletteId,
-                  applyPaletteTint: useCustomPaletteRef.current,
-                  audio: nextReport.audio,
-                  effects: effectivePreset.effects,
-                  lyrics: {
-                    enabled: lyricsEnabled,
-                    text: lyricsText,
-                    style: lyricsStyle,
-                    autoVocalSync: true,
-                    timedWords,
-                  },
-                  reducedMotion: project.reducedMotion,
-                });
-
-                if (anarchyLastErrRef.current !== "") {
-                  anarchyLastErrRef.current = "";
-                  setAnarchyRuntimeError("");
-                }
-              } catch (err) {
-                const msg =
-                  err instanceof Error
-                    ? err.message
-                    : "Erreur runtime Scène Preset.";
-                if (anarchyLastErrRef.current !== msg) {
-                  anarchyLastErrRef.current = msg;
-                  setAnarchyRuntimeError(msg);
-                }
-              }
-            } else if (!compiled.ok && compiled.error) {
-              if (anarchyLastErrRef.current !== compiled.error) {
-                anarchyLastErrRef.current = compiled.error;
-                setAnarchyRuntimeError(compiled.error);
-              }
-            }
-          }
-        }
 
         setRenderReport(nextReport);
       }
@@ -1354,8 +1033,8 @@ export const VisualEngineStudio: React.FC = () => {
                 </span>
               </h1>
               <p className="text-sm text-neutral-600 max-w-2xl">
-                Packs de 5 scènes génératives, flash strobe aigu sur clap, psychédélie &amp; caméra,
-                éditeur C++ live et export MP4 avec son sur votre extrait audio.
+                Packs de scènes 3D profondes personnalisables (JSON / JS 3D), flash strobe aigu sur clap,
+                psychédélie &amp; caméra, et export MP4 avec son sur votre extrait audio.
               </p>
             </div>
           </div>
@@ -1388,7 +1067,6 @@ export const VisualEngineStudio: React.FC = () => {
           { label: "🎨 COULEURS & VARIATIONS", open: showMatrixPanel, toggle: () => setShowMatrixPanel((v) => !v) },
           { label: "🎚 CONSOLE 10 FADERS", open: showFadersPanel, toggle: () => setShowFadersPanel((v) => !v) },
           { label: "🎤 PAROLES & MICRO", open: showLyricsPanel, toggle: () => setShowLyricsPanel((v) => !v) },
-          { label: "💻 C++ SCÈNES & PADS", open: showCppPanel, toggle: () => setShowCppPanel((v) => !v) },
         ].map((win) => (
           <button
             key={win.label}
@@ -1811,268 +1489,39 @@ export const VisualEngineStudio: React.FC = () => {
         </div>
       )}
 
-      <AnarchyPresetPanel
-        presets={anarchyPresets}
-        activePreset={activeAnarchyPreset}
-        activeSceneIndex={anarchySceneIndex}
-        manualSceneLock={anarchyManualLock}
+      {/* Système unifié de Packs de Scènes 3D profondes (JSON / JS 3D) avec isolation stricte des 10 Faders et du BPM */}
+      <ScenePackManager
+        authorName="Anarchy Studio"
+        liveSlotIndex={livePackSlotIndex}
         bpm={bpm}
-        autoSceneSwitchBeats={autoSceneSwitchBeats}
-        runtimeError={anarchyRuntimeError}
-        onSelectPreset={(presetId) => {
-          // ISOLATION STRICTE : aucun fader ni le BPM ne sont touchés lors d'un changement de Preset
-          setActiveAnarchyPresetId(presetId);
-          anarchySceneIndexRef.current = 0;
-          setAnarchySceneIndex(0);
-          anarchyLastErrRef.current = "";
-          setAnarchyRuntimeError("");
-          saveAnarchyPresets(anarchyPresets, presetId);
+        beatsPerScene={autoSceneSwitchBeats}
+        onChangeBeatsPerScene={setAutoSceneSwitchBeats}
+        onPackChange={(pack: ScenePack) => {
+          // ISOLATION STRICTE : aucun des 10 faders ni le BPM ne sont modifiés lors d'un changement ou édition de Pack 3D
+          activePackRef.current = pack;
         }}
-        onSelectSceneIndex={(idx, lockManual) => {
-          anarchySceneIndexRef.current = idx;
-          setAnarchySceneIndex(idx);
-          anarchyManualLockRef.current = lockManual;
-          setAnarchyManualLock(lockManual);
-        }}
-        onChangeCadenceBeats={(beats) => {
-          setAutoSceneSwitchBeats(beats);
-        }}
-        onUpdateActivePreset={(updater) => {
-          setAnarchyPresets((curr) => {
-            const next = curr.map((p) =>
-              p.id === activeAnarchyPreset.id ? updater(p) : p
-            );
-            saveAnarchyPresets(next, activeAnarchyPreset.id);
-            return next;
-          });
-        }}
-        onInstallPreset={(newPreset) => {
-          // ISOLATION STRICTE : l'import d'un Preset n'écrase aucun fader ni le BPM
-          setAnarchyPresets((curr) => {
-            const filtered = curr.filter((p) => p.id !== newPreset.id);
-            const next = [...filtered, newPreset];
-            saveAnarchyPresets(next, newPreset.id);
-            return next;
-          });
-          setActiveAnarchyPresetId(newPreset.id);
-          anarchySceneIndexRef.current = 0;
-          setAnarchySceneIndex(0);
-        }}
-        onDeletePreset={(presetId) => {
-          setAnarchyPresets((curr) => {
-            const next = curr.filter((p) => p.id !== presetId);
-            const fallbackId = next[0]?.id ?? DEFAULT_ANARCHY_PACK.id;
-            setActiveAnarchyPresetId(fallbackId);
-            saveAnarchyPresets(next, fallbackId);
-            return next;
-          });
+        onSelectSlot={(
+          slotIndex: number,
+          slot: ScenePackSlot,
+          pack: ScenePack
+        ) => {
+          // ISOLATION STRICTE : on met uniquement à jour la scène 3D active sans écraser les faders (intensity, effects, camera, gains) ni le BPM
+          activePackRef.current = pack;
+          livePackSlotIndexRef.current = slotIndex;
+          setLivePackSlotIndex(slotIndex);
+          updatePreset(
+            (curr) => ({
+              ...curr,
+              sceneId: slot.sceneId,
+              paletteId: useCustomPaletteRef.current
+                ? curr.paletteId
+                : slot.paletteId,
+              seed: slot.seed ?? curr.seed,
+            }),
+            false
+          );
         }}
       />
-
-      {showCppPanel && (() => {
-        const activeCppDoc =
-          cppWorkspace.documents.find(
-            (d) => d.id === cppWorkspace.activeDocumentId
-          ) ?? cppWorkspace.documents[0];
-        const activeUniformSpecs = parseCppUniforms(activeCppDoc.code);
-        const activeUniforms = extractDocumentUniformValues(activeCppDoc);
-
-        const commitWorkspace = (
-          updater: (curr: CppWorkspaceState) => CppWorkspaceState
-        ) => {
-          setCppWorkspace((curr) => {
-            const next = updater(curr);
-            cppWorkspaceRef.current = next;
-            saveCppWorkspace(next);
-            return next;
-          });
-        };
-
-        return (
-          <Card
-            moduleTitle="JS_CPP_RUNTIME // SCÈNES MUSICALES, PADS VJ & UNIFORMS"
-            moduleMeta={
-              cppWorkspace.enabled
-                ? cppActiveStatus || `ACTIF · ${activeCppDoc.name}`
-                : "INACTIF (CLIQUE ACTIVER)"
-            }
-            activeIndicator={cppWorkspace.enabled}
-          >
-            <div className="space-y-3 font-mono text-xs">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <Button
-                    type="button"
-                    variant={cppWorkspace.enabled ? "comic" : "primary"}
-                    size="sm"
-                    onClick={() =>
-                      commitWorkspace((curr) => ({
-                        ...curr,
-                        enabled: !curr.enabled,
-                      }))
-                    }
-                  >
-                    {cppWorkspace.enabled ? "🟢 RUNTIME ACTIF" : "🚀 ACTIVER JS/C++"}
-                  </Button>
-                  <button
-                    type="button"
-                    onClick={() =>
-                      commitWorkspace((curr) => ({
-                        ...curr,
-                        manualSceneId: null,
-                      }))
-                    }
-                    className={`px-2.5 py-1 rounded border-2 font-bold ${
-                      cppWorkspace.manualSceneId === null
-                        ? "bg-brand-black text-white border-black"
-                        : "bg-brand-pearl text-brand-black border-neutral-300"
-                    }`}
-                  >
-                    🔁 AUTO LRC
-                  </button>
-                  {cppWorkspace.scenes.map((sc) => {
-                    const locked = cppWorkspace.manualSceneId === sc.id;
-                    return (
-                      <button
-                        key={`studio-pad-${sc.id}`}
-                        type="button"
-                        onClick={() =>
-                          commitWorkspace((curr) => ({
-                            ...curr,
-                            enabled: true,
-                            manualSceneId: locked ? null : sc.id,
-                          }))
-                        }
-                        className={`px-2.5 py-1 rounded border-2 font-bold transition-all ${
-                          locked
-                            ? "bg-brand-red text-white border-black shadow-comic-sm"
-                            : "bg-brand-white hover:bg-brand-pearl text-brand-black border-black"
-                        }`}
-                      >
-                        {locked ? "🔒 " : "▶ "}
-                        {sc.label}
-                      </button>
-                    );
-                  })}
-                </div>
-
-                <Link href="/anarchy-visual-design/editeur">
-                  <Button type="button" variant="clinical" size="sm">
-                    💻 ÉDITEUR JS / C++ ↗
-                  </Button>
-                </Link>
-              </div>
-
-              {cppRuntimeError && (
-                <div
-                  role="alert"
-                  className="p-2 rounded border-2 border-brand-red bg-red-50 text-brand-red font-bold"
-                >
-                  Erreur Script — {cppRuntimeError}
-                </div>
-              )}
-
-              {activeUniformSpecs.length > 0 && (
-                <div className="pt-2 border-t border-neutral-200 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-                  {activeUniformSpecs.map((u) => {
-                    const val = activeUniforms[u.name] ?? u.defaultValue;
-                    const updateVal = (nextVal: CppUniformValue) =>
-                      commitWorkspace((curr) => ({
-                        ...curr,
-                        documents: curr.documents.map((d) =>
-                          d.id === activeCppDoc.id
-                            ? {
-                                ...d,
-                                presets: d.presets.map((p) =>
-                                  p.id === d.activePresetId
-                                    ? {
-                                        ...p,
-                                        values: {
-                                          ...p.values,
-                                          [u.name]: nextVal,
-                                        },
-                                      }
-                                    : p
-                                ),
-                              }
-                            : d
-                        ),
-                      }));
-
-                    if (u.kind === "color") {
-                      return (
-                        <div
-                          key={`st-u-${u.name}`}
-                          className="flex items-center justify-between p-2 rounded border border-neutral-300 bg-brand-pearl"
-                        >
-                          <span className="font-bold">{u.name}</span>
-                          <input
-                            type="color"
-                            value={
-                              /^#[0-9a-f]{6}$/i.test(String(val))
-                                ? String(val)
-                                : "#00E5FF"
-                            }
-                            onChange={(e) => updateVal(e.target.value)}
-                            className="w-7 h-6 border border-black rounded cursor-pointer"
-                          />
-                        </div>
-                      );
-                    }
-                    if (u.kind === "bool") {
-                      return (
-                        <label
-                          key={`st-u-${u.name}`}
-                          className="flex items-center justify-between p-2 rounded border border-neutral-300 bg-brand-pearl cursor-pointer font-bold"
-                        >
-                          <span>{u.name}</span>
-                          <input
-                            type="checkbox"
-                            checked={Boolean(val)}
-                            onChange={(e) => updateVal(e.target.checked)}
-                            className="w-4 h-4 accent-brand-red"
-                          />
-                        </label>
-                      );
-                    }
-                    const num = Number(val);
-                    return (
-                      <div
-                        key={`st-u-${u.name}`}
-                        className="p-2 rounded border border-neutral-300 bg-brand-pearl"
-                      >
-                        <div className="flex justify-between mb-1">
-                          <span className="font-bold">{u.name}</span>
-                          <span className="text-brand-red font-bold">
-                            {u.kind === "int"
-                              ? Math.round(num)
-                              : num.toFixed(2)}
-                          </span>
-                        </div>
-                        <input
-                          type="range"
-                          min={u.min ?? 0}
-                          max={u.max ?? 10}
-                          step={u.step ?? (u.kind === "int" ? 1 : 0.05)}
-                          value={num}
-                          onChange={(e) =>
-                            updateVal(
-                              u.kind === "int"
-                                ? Math.round(Number(e.target.value))
-                                : Number(e.target.value)
-                            )
-                          }
-                          className="w-full accent-brand-red"
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </Card>
-        );
-      })()}
 
       {(showStagePanel || showMatrixPanel) && (
         <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
@@ -2793,7 +2242,7 @@ export const VisualEngineStudio: React.FC = () => {
             moduleMeta={
               timedWords.length > 0
                 ? `WHISPER SYNC (${timedWords.length} MOTS)`
-                : "LRC HORODATÉ · #SECTION · C++"
+                : "LRC HORODATÉ · #SECTION · 3D HUD"
             }
             activeIndicator={lyricsEnabled}
           >
@@ -2917,8 +2366,7 @@ export const VisualEngineStudio: React.FC = () => {
               <div className="p-3 rounded-lg bg-brand-pearl border-l-4 border-brand-red font-mono text-[11px] text-neutral-600">
                 Supporte les timecodes LRC (<code>[00:08.50]</code>), les sections
                 scénario (<code>#INTRO</code>, <code>#DROP</code>,{" "}
-                <code>#REFRAIN</code>) transmises au runtime C++ (
-                <code>ctx.lyricWord</code>, <code>ctx.lyricSection</code>), et
+                <code>#REFRAIN</code>) incrustées dans le moteur 3D en bitmap 5×5, et
                 l&apos;alignement mot-à-mot via <strong>Whisper</strong>.
               </div>
             </div>

@@ -137,9 +137,15 @@ const MILESTONES = [
   },
   {
     id: "M22",
-    commit: "ACTUEL",
+    commit: "9f1a1fd",
     title: "Unification du Moteur 3D & Presets 3D Programmables (JS Natif & C++)",
-    details: "Fusion des panneaux en un système unique de Presets 3D piloté par le BPM (2 ou 4 mesures), suppression complète des anciens presets 2D filaires génériques au profit des Presets 3D 'PS2 // Enter the Dragon (5 Scènes 3D)' et 'Psy-Acid 145 BPM (5 Scènes 3D)' + générateur 3D procédural, et exposition sur ctx des primitives 3D PS2/Low-Poly (setCamera, setFog, setAmbientLight, setDirectionalLight, drawTerrain3D, drawBox3D, drawCharacter3D, drawParticles3D) avec surcouches HUD 2D & Post-FX à 60 FPS sans fuite mémoire.",
+    details: "Fusion des panneaux en un système unique de Presets 3D piloté par le BPM (2 ou 4 mesures), suppression complète des anciens presets 2D filaires génériques au profit des Presets 3D 'PS2 // Enter the Dragon (5 Scènes 3D)' et 'Psy-Acid 145 BPM (5 Scènes 3D)'.",
+  },
+  {
+    id: "M23",
+    commit: "ACTUEL",
+    title: "Suppression totale du système 2D JS/C++ parallèle & Personnalisation/Export des vraies Scènes 3D profondes",
+    details: "Suppression définitive de la page '/anarchy-visual-design/editeur', du transpileur C++→JS, du moteur Canvas 2D filaire et du panneau AnarchyPresetPanel. Exposition sur le vrai moteur 3D profond ('PACK DE SCÈNES // ENCHAÎNEMENT BPM') de l'objet 'config3d' (géométries 3D, terrain, caméra perspective, éclairage/brouillard, couleurs, réactivité audio) et du hook 60 FPS 'customizeScene3D(scene3d, audio, t)', avec modale Exporter/Importer Pack 3D (JSON), Doc & Prompt IA 3D et isolation stricte des 10 faders et du BPM.",
   },
 ];
 

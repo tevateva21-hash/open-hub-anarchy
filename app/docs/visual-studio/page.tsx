@@ -5,67 +5,44 @@ import Link from "next/link";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import {
-  CPP_SHADER_AI_PROMPT,
-  JS_SHADER_AI_PROMPT,
-} from "@/lib/visual-engine/cpp-runtime";
-import { AI_SCENE_PACK_PROMPT } from "@/lib/visual-engine/scene-packs";
+  AI_SCENE_PACK_PROMPT,
+  DEFAULT_SCENE_PACKS,
+  exportScenePackAsJson,
+} from "@/lib/visual-engine/scene-packs";
 
 const LRC_SCENARIO_PROMPT = `Transforme ces paroles en scénario LRC horodaté pour Anarchy Visual Studio (140 BPM, extrait 0.0s → 30.0s) :
 Format exact par ligne : [mm:ss.xx] #SECTION TEXTE COURT
 Sections disponibles : #INTRO, #COUPLET, #PRE_DROP, #DROP, #REFRAIN, #OUTRO.
 Garde 3 à 6 mots max par ligne pour un rendu TikTok / 9:16 lisible.`;
 
-const CPP_EXAMPLE_FULL = `// Exemple 3D complet compatible 9:16 TikTok et 16:9 YouTube
-// @param float speed = 3.8 [0.5, 10.0]
-// @color neonColor = "#00E5FF"
-// @color katanaColor = "#FF1B24"
-// @toggle enableGlitch = true
-#include <cmath>
-
-void renderAnarchyFrame(AnarchyCtx& ctx) {
-  ctx.setCamera(sinf(ctx.t * 0.65f) * 0.9f, 1.8f + ctx.bass * 0.35f, -5.6f, 0.0f, 1.0f, 12.0f, 62.0f);
-  ctx.setFog("#090C16", 3.5f, 22.0f);
-  ctx.setAmbientLight("#1A2238", 0.38f + ctx.rms * 0.25f);
-  ctx.setDirectionalLight(-0.4f, 1.0f, -0.5f, neonColor, 0.9f + ctx.treble * 0.45f);
-
-  ctx.drawTerrain3D(speed * (1.0f + ctx.bass * 0.4f), 1.1f + ctx.bass * 0.6f, "#101628", neonColor, "canyon");
-
-  for (int i = 0; i < 4; i++) {
-    float z = fmodf(i * 4.0f - ctx.t * speed * 2.0f + 20.0f, 16.0f) + 2.0f;
-    ctx.drawBox3D(-2.5f, 1.3f, z, 0.65f, 2.6f + ctx.bass * 0.8f, 0.65f, 0.0f, 0.0f, 0.0f, "#1C2438", neonColor, false);
-    ctx.drawBox3D( 2.5f, 1.3f, z, 0.65f, 2.6f + ctx.bass * 0.8f, 0.65f, 0.0f, 0.0f, 0.0f, "#1C2438", katanaColor, false);
+const JS_3D_EXAMPLE_FULL = `// Hook 3D temps réel exécuté à 60 FPS dans le moteur 3D profond (Low-Poly PS1/PS2)
+function customizeScene3D(scene3d, audio, t) {
+  // 1. Piliers 3D verticaux audio-réactifs sur le kick (audio.bass)
+  for (let i = 0; i < 4; i++) {
+    const z = ((i * 1.4 - t * 2.2) % 5.6 + 5.6) % 5.6 - 2.2;
+    const h = 0.65 + audio.bass * 0.95;
+    scene3d.addBox(-1.6, 0, z, 0.24, h, 0.24, 0, t * 0.4, 0, "#FF1B24", 0.55 + audio.bass * 0.4);
+    scene3d.addBox( 1.6, 0, z, 0.24, h, 0.24, 0, -t * 0.4, 0, "#00E5FF", 0.55 + audio.treble * 0.4);
   }
 
-  ctx.drawCharacter3D(0.0f, 0.0f, 3.6f, ctx.t * speed * 2.2f, "katana", "#E4E8F2", katanaColor);
-  ctx.drawParticles3D(42, 12.0f, speed * 1.4f, neonColor, 2.2f);
+  // 2. Anneau octaédrique 3D central en rotation rapide sur les transitoires (audio.flux)
+  scene3d.addRing(0, 0.1, 0.2, 1.05 + audio.bass * 0.35, 0.08, t * 1.1, t * 1.7, "#00E5FF", 0.85);
 
-  if (enableGlitch && ctx.flux > 0.30f) {
-    ctx.glitchSlices(ctx.flux * 0.65f);
-  }
-
-  // Mot Whisper / LRC courant en anaglyphe 3D par-dessus la scène 3D
-  if (!ctx.lyricWord.empty()) {
-    float cx = ctx.width * 0.5f;
-    float x = clamp(cx - ctx.lyricWord.length * 4.2f, 8.0f, ctx.width - 36.0f);
-    float y = ctx.height * 0.72f;
-    ctx.text(ctx.lyricWord, x - 1, y, katanaColor, 12);
-    ctx.text(ctx.lyricWord, x + 1, y, neonColor, 12);
-    ctx.text(ctx.lyricWord, x, y, "#FFFFFF", 12);
-  }
-  ctx.scanlines(0.18f);
+  // 3. Pyramide 3D suspendue au-dessus du dojo
+  scene3d.addPyramid(0, 0.55 + audio.treble * 0.3, 0.1, 0.45, 0.65, -t * 1.4, "#FF1B24", 0.9);
 }`;
 
 const FADERS_DOC = [
-  { bank: "01 // Dynamique", name: "Gain Basses", desc: "Amplifie la réaction aux kicks et basses fréquences (zoom, onde, flash)." },
-  { bank: "01 // Dynamique", name: "Gain Aigus / Clap", desc: "Amplifie les hautes fréquences (claps, charleys, transitoires)." },
-  { bank: "01 // Dynamique", name: "Master Int.", desc: "Intensité énergétique globale de la scène (0% à 100%)." },
+  { bank: "01 // Dynamique", name: "Bass Punch", desc: "Amplifie la réaction aux kicks et basses fréquences (scale 3D, rebond caméra, flash)." },
+  { bank: "01 // Dynamique", name: "Aigus / Clap", desc: "Amplifie les hautes fréquences (claps, charleys, transitoires)." },
+  { bank: "01 // Dynamique", name: "Master Int.", desc: "Intensité énergétique globale de la scène 3D (0% à 100%)." },
   { bank: "02 // FX", name: "Strobe Aigu", desc: "Déclenche un flash clair d'arrière-plan lorsque les aigus ou claps frappent." },
   { bank: "02 // FX", name: "Kick Blackout", desc: "Coupe ou assombrit brièvement l'image sur les gros kicks." },
-  { bank: "02 // FX", name: "Psychédélie", desc: "Ajoute kaléidoscope, symétries et déformation psychédélique." },
+  { bank: "02 // FX", name: "Psychédélie", desc: "Ajoute kaléidoscope, symétries et déformation psychédélique sur le rendu 3D." },
   { bank: "02 // FX", name: "Morph Couleur", desc: "Fait glisser la Palette Principale vers la palette Cible Color Morph." },
   { bank: "02 // FX", name: "Anaglyph 3D", desc: "Séparation Rouge / Cyan 3D réactive à l'audio." },
-  { bank: "03 // Caméra", name: "Zoom Cam", desc: "Zoom unifié des scènes 2D pixel et 3D low-poly (50% à 220%)." },
-  { bank: "03 // Caméra", name: "Pendule Cam", desc: "Balancement pendulaire de la caméra calé sur le tempo." },
+  { bank: "03 // Caméra", name: "Zoom Cam", desc: "Zoom unifié de la caméra perspective 3D (50% à 220%)." },
+  { bank: "03 // Caméra", name: "Pendule Cam", desc: "Balancement pendulaire de la caméra 3D calé sur le tempo." },
 ];
 
 const FORMATS_DOC = [
@@ -88,20 +65,22 @@ export default function VisualStudioDocsPage() {
     }
   };
 
+  const samplePackJson = exportScenePackAsJson(DEFAULT_SCENE_PACKS[0]);
+
   return (
     <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
       {/* En-tête Documentation */}
       <div className="flex flex-wrap items-center justify-between gap-4 border-b-2 border-black pb-4">
         <div>
           <span className="inline-block px-2 py-0.5 rounded bg-brand-red text-white font-mono text-[10px] font-bold uppercase mb-2">
-            DOCUMENTATION OFFICIELLE // ANARCHY VISUAL STUDIO
+            DOCUMENTATION OFFICIELLE // ANARCHY VISUAL STUDIO 3D
           </span>
           <h1 className="font-mono text-2xl sm:text-3xl font-bold text-brand-black">
-            Guide Complet : Studio, C++, Whisper &amp; Prompts IA
+            Guide Complet : Packs de Scènes 3D, Faders, Whisper &amp; Prompts IA
           </h1>
           <p className="font-sans text-sm text-neutral-600 mt-1">
-            Tout comprendre pour importer un son (jusqu&apos;à 70 Mio), piloter les 10 faders,
-            injecter du C++ live et exporter en 9:16 TikTok ou 16:9 YouTube avec son.
+            Tout comprendre pour importer un son (jusqu&apos;à 70 Mio), personnaliser les vraies scènes 3D profondes (JSON / JS 3D),
+            piloter les 10 faders et exporter en 9:16 TikTok ou 16:9 YouTube avec son.
           </p>
         </div>
 
@@ -109,11 +88,6 @@ export default function VisualStudioDocsPage() {
           <Link href="/docs/retroplanning">
             <Button variant="clinical" size="sm">
               📋 RÉTROPLANNING
-            </Button>
-          </Link>
-          <Link href="/anarchy-visual-design/editeur">
-            <Button variant="comic" size="sm">
-              💻 ÉDITEUR C++
             </Button>
           </Link>
           <Link href="/anarchy-visual-design">
@@ -125,16 +99,16 @@ export default function VisualStudioDocsPage() {
       </div>
 
       {/* Sommaire rapide */}
-      <Card moduleTitle="SOMMAIRE_RAPIDE // ACCÈS_DIRECT" moduleMeta="9 SECTIONS">
+      <Card moduleTitle="SOMMAIRE_RAPIDE // ACCÈS_DIRECT" moduleMeta="7 SECTIONS">
         <div className="flex flex-wrap gap-2 font-mono text-xs">
           {[
             ["#audio-lab", "1. Audio Lab (70 Mio) & Calage BPM"],
-            ["#packs-couleurs", "2. Packs 5 Scènes & Variations"],
-            ["#faders", "3. Console 10 Faders"],
+            ["#packs-couleurs", "2. Packs de Scènes 3D & Enchaînement BPM"],
+            ["#faders", "3. Console 10 Faders (Isolation Stricte)"],
             ["#formats-export", "4. Formats TikTok/Insta & Export MP4"],
             ["#whisper-lrc", "5. Whisper & Scénario LRC"],
-            ["#cpp-runtime", "6. Runtime C++ Live (AnarchyCtx)"],
-            ["#prompts-ia", "7. Système de Prompts IA (Copier)"],
+            ["#config-3d", "6. Personnalisation 3D (JSON / JS 3D) & Import/Export"],
+            ["#prompts-ia", "7. Système de Prompts IA 3D (Copier)"],
           ].map(([href, label]) => (
             <a
               key={href}
@@ -183,12 +157,12 @@ export default function VisualStudioDocsPage() {
                   pour choisir la zone écoutée et exportée dans le MP4.
                 </li>
                 <li>
-                  <strong>Calage 1er temps (`beatOffset`)</strong> : verrouillé à{" "}
+                  <strong>Calage 1er temps (<code>beatOffset</code>)</strong> : verrouillé à{" "}
                   <code>0.00s</code> par défaut, ajustable au centième ou via{" "}
                   <code>⚡ CALER 1ER TEMPS ICI</code>.
                 </li>
                 <li>
-                  <strong>Pause Globale (`⏸ PAUSE`)</strong> : coupe immédiatement toute lecture sur le site.
+                  <strong>Pause Globale (<code>⏸ PAUSE</code>)</strong> : coupe immédiatement toute lecture sur le site.
                 </li>
               </ul>
             </div>
@@ -196,24 +170,25 @@ export default function VisualStudioDocsPage() {
         </Card>
       </div>
 
-      {/* 2. Packs & Couleurs */}
+      {/* 2. Packs 3D & Couleurs */}
       <div id="packs-couleurs">
         <Card
-          moduleTitle="02 // PACKS DE 5 SCÈNES & COULEURS / VARIATIONS"
-          moduleMeta="ENTER THE DRAGON · SEED · 4 VARIATIONS"
+          moduleTitle="02 // PACKS DE SCÈNES 3D PROFONDES & ENCHAÎNEMENT BPM"
+          moduleMeta="PS2 ENTER THE DRAGON · PSY-ACID 145 BPM · CADENCE 2/4 MESURES"
         >
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-sans text-xs sm:text-sm text-neutral-700 leading-relaxed">
             <div className="space-y-2">
               <h3 className="font-mono font-bold text-brand-black text-sm">
-                Système Unifié de Presets 3D Multi-Scènes
+                Moteur de Rendu 3D Profond Unique (Low-Poly PS1/PS2)
               </h3>
               <p>
-                Le moteur 3D PS2/Low-Poly est l&apos;unique moteur graphique du Studio, piloté par des{" "}
-                <strong>Presets 3D multi-scènes</strong> qui s&apos;enchaînent automatiquement au BPM (toutes les{" "}
-                <strong>2 ou 4 mesures</strong>). Les packs 3D officiels{" "}
-                <strong>PS2 // Enter the Dragon (5 Scènes 3D)</strong> et{" "}
-                <strong>Psy-Acid 145 BPM (5 Scènes 3D)</strong> sont directement éditables en JS natif ou C++, et le bouton{" "}
-                <code>🎲 Générer un Pack 3D</code> crée de nouveaux Presets 3D complets sans jamais toucher aux faders ni au BPM.
+                Le moteur 3D Low-Poly / PS2 est l&apos;unique moteur graphique du Studio. Dans{" "}
+                <strong>PACK DE SCÈNES // ENCHAÎNEMENT BPM</strong>, chaque pack (comme{" "}
+                <strong>PS2 // Enter the Dragon (5 Scènes)</strong> avec <code>01. Dojo Néon</code>,{" "}
+                <code>02. Enter the Dragon</code>, <code>03. Katana Rush</code>, <code>04. Shogun Boss</code>,{" "}
+                <code>05. Digital Void</code>) contient un nombre libre de scènes 3D profondes (1, 3, 5, 8+) qui
+                s&apos;enchaînent automatiquement toutes les <strong>2 mesures (8T)</strong> ou{" "}
+                <strong>4 mesures (16T)</strong> selon le BPM.
               </p>
             </div>
             <div className="space-y-2">
@@ -234,28 +209,36 @@ export default function VisualStudioDocsPage() {
       {/* 3. Console 10 Faders */}
       <div id="faders">
         <Card
-          moduleTitle="03 // CONSOLE DES 10 FADERS LIVE"
-          moduleMeta="TEMPS RÉEL 60 FPS · LOCK PAR PARAMÈTRE"
+          moduleTitle="03 // CONSOLE DES 10 FADERS LIVE (ISOLATION STRICTE)"
+          moduleMeta="TEMPS RÉEL 60 FPS · JAMAIS ÉCRASÉS PAR LES PACKS 3D"
         >
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse font-mono text-xs">
-              <thead>
-                <tr className="bg-brand-pearl border-b-2 border-black text-left">
-                  <th className="p-2">Banque</th>
-                  <th className="p-2">Fader</th>
-                  <th className="p-2">Effet réel sur la vidéo</th>
-                </tr>
-              </thead>
-              <tbody>
-                {FADERS_DOC.map((f) => (
-                  <tr key={f.name} className="border-b border-neutral-200">
-                    <td className="p-2 text-neutral-500 whitespace-nowrap">{f.bank}</td>
-                    <td className="p-2 font-bold text-brand-black whitespace-nowrap">{f.name}</td>
-                    <td className="p-2 font-sans text-neutral-700">{f.desc}</td>
+          <div className="space-y-3">
+            <div className="p-3 rounded-lg bg-brand-pearl border-l-4 border-[#00E5FF] font-sans text-xs text-neutral-700">
+              <strong>Isolation stricte des Faders &amp; du BPM :</strong> changer de Pack 3D, importer un
+              nouveau Pack JSON ou laisser les scènes 3D s&apos;enchaîner toutes les 2 ou 4 mesures{" "}
+              <strong>ne réinitialise jamais aucun des 10 faders ni le BPM</strong>. Les faders modulent
+              toujours le rendu 3D en temps réel par-dessus la scène active.
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse font-mono text-xs">
+                <thead>
+                  <tr className="bg-brand-pearl border-b-2 border-black text-left">
+                    <th className="p-2">Banque</th>
+                    <th className="p-2">Fader</th>
+                    <th className="p-2">Effet réel sur la scène 3D</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {FADERS_DOC.map((f) => (
+                    <tr key={f.name} className="border-b border-neutral-200">
+                      <td className="p-2 text-neutral-500 whitespace-nowrap">{f.bank}</td>
+                      <td className="p-2 font-bold text-brand-black whitespace-nowrap">{f.name}</td>
+                      <td className="p-2 font-sans text-neutral-700">{f.desc}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         </Card>
       </div>
@@ -292,7 +275,7 @@ export default function VisualStudioDocsPage() {
             <div className="p-3 rounded-lg bg-brand-pearl border-l-4 border-brand-red font-sans text-xs sm:text-sm text-neutral-700">
               <strong>Cohérence Audio / Vidéo / Export :</strong> le bouton{" "}
               <code>🎬 EXPORTER MP4</code> lance la lecture de votre zone d&apos;extrait prévisualisée,
-              enregistre la vidéo au format choisi avec le son (et vos fondus entrée/sortie),
+              enregistre la vidéo 3D au format choisi avec le son (et vos fondus entrée/sortie),
               puis arrête et télécharge automatiquement le fichier à la fin de l&apos;extrait.
               En <code>9:16</code> et <code>4:5</code>, activez la <strong>Safe Zone</strong> pour
               éviter les boutons TikTok/Reels.
@@ -312,8 +295,8 @@ export default function VisualStudioDocsPage() {
             <p>
               Le panneau <strong>Paroles &amp; Micro</strong> accepte les timecodes LRC standards{" "}
               (<code>[00:08.50]</code>) ainsi que des balises de scénario (<code>#INTRO</code>,{" "}
-              <code>#PRE_DROP</code>, <code>#DROP</code>, <code>#REFRAIN</code>) transmises en
-              direct au moteur vidéo et au code C++.
+              <code>#PRE_DROP</code>, <code>#DROP</code>, <code>#REFRAIN</code>) incrustées en
+              direct par-dessus le rendu 3D en bitmap 5×5.
             </p>
             <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1.5">
               <div className="font-mono text-xs font-bold text-brand-black">
@@ -329,7 +312,7 @@ export default function VisualStudioDocsPage() {
                   <strong>OpenAI (<code>whisper-1</code>)</strong> selon la clé API configurée sur le serveur (<code>GROQ_API_KEY</code> ou <code>OPENAI_API_KEY</code>).
                 </li>
                 <li>
-                  Les paroles horodatées et chaque mot individuel (<code>ctx.lyricWord</code>) se calent automatiquement sur la musique !
+                  Les paroles horodatées et chaque mot individuel se calent automatiquement sur la musique !
                 </li>
               </ol>
             </div>
@@ -337,96 +320,86 @@ export default function VisualStudioDocsPage() {
         </Card>
       </div>
 
-      {/* 6. Runtime 3D JS & C++ Live */}
-      <div id="cpp-runtime">
+      {/* 6. Personnalisation 3D Profonde (JSON / JS 3D) & Import/Export */}
+      <div id="config-3d">
         <Card
-          moduleTitle="06 // MOTEUR 3D UNIFIÉ & PRESETS JS NATIF (.JS) / C++ (.CPP)"
-          moduleMeta="FAST-PATH V8 60 FPS · PRIMITIVES 3D PS2 · @PARAM · PADS VJ"
+          moduleTitle="06 // PERSONNALISATION DES SCÈNES 3D (JSON / JS 3D) & EXPORT PACK 3D"
+          moduleMeta="CONFIG3D · CUSTOMIZESCENE3D 60 FPS · IMPORT/EXPORT JSON"
           activeIndicator
         >
           <div className="space-y-4">
             <p className="font-sans text-xs sm:text-sm text-neutral-700">
-              Dans le panneau <strong>Presets 3D</strong> du Studio ou dans{" "}
-              <Link href="/anarchy-visual-design/editeur" className="font-bold text-brand-red underline">/anarchy-visual-design/editeur</Link>,
-              vous pilotez directement le <strong>moteur 3D PS2/Low-Poly</strong> (caméra, brouillard, éclairage, terrains 3D, volumes 3D, personnages articulés et particules 3D) en{" "}
-              <strong>JavaScript Natif (<code>.js</code>)</strong> ou en <strong>C++ (<code>.cpp</code>)</strong>.
+              Dans le panneau <strong>PACK DE SCÈNES // ENCHAÎNEMENT BPM</strong> du Studio, cliquez sur{" "}
+              <code>🎛 ÉDITER SCÈNE 3D (JSON / JS 3D)</code> pour personnaliser en direct à 60 FPS la scène 3D active,
+              ou sur <code>⇄ EXPORTER / IMPORTER PACK 3D (JSON)</code> pour partager un pack complet de scènes 3D.
             </p>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-sans text-xs text-neutral-700">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 font-sans text-xs text-neutral-700">
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">1. Mode JS Natif (Fast-Path V8) &amp; Détection Auto</div>
+                <div className="font-mono font-bold text-brand-black">1. Onglet Paramètres 3D &amp; Audio</div>
                 <p>
-                  Dès qu&apos;un script commence par <code>function renderAnarchyFrame(ctx)</code> (ou utilise{" "}
-                  <code>const</code>/<code>let</code>/<code>=&gt;</code> sans signature <code>AnarchyCtx</code>),
-                  l&apos;éditeur bascule en <strong>JS Natif</strong> avec coloration syntaxique adaptée, exposition de{" "}
-                  <code>Math.*</code> et conservation de vos variables d&apos;état entre les frames.
+                  Réglez le moteur 3D de base (<code>ps1-bolide</code>, <code>lowpoly-tunnel</code>,{" "}
+                  <code>lowpoly-vortex</code>), les géométries 3D additionnelles (<code>katana-blades</code>,{" "}
+                  <code>floating-monoliths</code>, <code>octo-rings</code>, <code>cyber-pyramids</code>), la caméra
+                  perspective (FOV, distance, pitch, yaw, orbite), le brouillard et les multiplicateurs audio.
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">2. Transpileur C++ &amp; Documents 3D Multi-Fichiers</div>
+                <div className="font-mono font-bold text-brand-black">2. Onglet Script 3D Live (JS 60 FPS)</div>
                 <p>
-                  En mode C++, le transpileur accepte <code>#include</code>, <code>std::*</code>, tableaux{" "}
-                  <code>arr[N]</code> et lambdas <code>[&amp;]()</code>. Les 5 scènes 3D de{" "}
-                  <code>PS2 // Enter the Dragon</code> (<code>01_dojo_neon_3d.js</code> à <code>05_digital_void_3d.cpp</code>) sont préchargées.
+                  Injectez des volumes 3D low-poly directement dans le pipeline Z-buffer/Lambert via{" "}
+                  <code>customizeScene3D(scene3d, audio, t)</code> : boîtes 3D, pyramides 3D, anneaux octaédriques
+                  et rubans 3D éclairés et projetés en perspective avec la scène principale.
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">3. Isolation Stricte des Faders &amp; Horloge BPM</div>
+                <div className="font-mono font-bold text-brand-black">3. Onglet Config JSON 3D &amp; Export Pack</div>
                 <p>
-                  Changer ou importer un Preset 3D ne réinitialise jamais les 10 faders ni le BPM : l&apos;horloge musicale fait tourner les scènes 3D toutes les 2 ou 4 mesures.
-                </p>
-              </div>
-              <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">4. Uniforms UI &amp; Presets par Document</div>
-                <p>
-                  Déclarez <code>{"// @param float speed = 3.8 [0.5, 12.0]"}</code>,{" "}
-                  <code>{'// @color neonColor = "#00F0FF"'}</code> ou{" "}
-                  <code>{"// @toggle wireframePillars = false"}</code> : l&apos;Inspector génère sliders, color pickers
-                  et toggles injectés à 60 FPS sans recompiler.
+                  Éditez l&apos;objet <code>config3d</code> complet d&apos;une scène ou exportez/importez un{" "}
+                  <strong>Pack 3D JSON</strong> entier (1, 3, 5, 8 scènes ou plus) en un clic ou via un fichier{" "}
+                  <code>.json</code>.
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-[11px]">
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1.5">
-                <div className="font-bold text-brand-red">VARIABLES DISPONIBLES (ctx.*)</div>
+                <div className="font-bold text-brand-red">API JS 3D LIVE (scene3d.* dans customizeScene3D)</div>
                 <ul className="space-y-1 text-neutral-800">
-                  <li><code>ctx.t, ctx.bpm, ctx.beat, ctx.beatPhase</code> — Temps &amp; rythme (0..1)</li>
-                  <li><code>ctx.bass, ctx.mid, ctx.treble, ctx.rms, ctx.flux</code> — Audio live (0..1)</li>
-                  <li><code>ctx.width, ctx.height, ctx.sceneIndex</code> — Résolution dynamique &amp; scène active</li>
-                  <li><code>ctx.lyricLine, ctx.lyricWord, ctx.lyricSection</code> — Paroles Whisper/LRC (#DROP...)</li>
-                  <li><code>ctx.intensity, ctx.strobe, ctx.kickBlackout, ctx.psychedelic, ctx.colorMorph, ctx.anaglyph, ctx.cameraZoom, ctx.pendulumSwing</code> — 10 faders live</li>
+                  <li><code>scene3d.addBox(x, y, z, w, h, d, rx, ry, rz, colorHex, emissive)</code> — Volume 3D plein</li>
+                  <li><code>scene3d.addPyramid(x, y, z, radius, height, ry, colorHex, emissive)</code> — Pyramide 3D</li>
+                  <li><code>scene3d.addRing(x, y, z, radius, thickness, rx, ry, colorHex, emissive)</code> — Anneau 3D</li>
+                  <li><code>scene3d.addRibbon(x1, y1, z1, x2, y2, z2, width, colorHex, emissive)</code> — Lame / Ruban 3D</li>
                 </ul>
               </div>
 
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1.5">
-                <div className="font-bold text-brand-black">MÉTHODES 3D PS2/LOW-POLY &amp; POST-FX (ctx.*)</div>
+                <div className="font-bold text-brand-black">VARIABLES AUDIO &amp; TEMPS (audio.*, t)</div>
                 <ul className="space-y-1 text-neutral-800">
-                  <li><code>ctx.setCamera(x, y, z, tx, ty, tz, fov)</code> &amp; <code>ctx.setFog(color, near, far)</code></li>
-                  <li><code>ctx.setAmbientLight(color, intensity)</code> &amp; <code>ctx.setDirectionalLight(x, y, z, color, intensity)</code></li>
-                  <li><code>ctx.drawTerrain3D(speed, amp, color, gridColor, style)</code> (<code>canyon|mountains|waves|dungeon|corridor</code>)</li>
-                  <li><code>ctx.drawBox3D(x, y, z, w, h, d, rx, ry, rz, color, emissive, wireframe)</code></li>
-                  <li><code>ctx.drawCharacter3D(x, y, z, animPhase, style, primary, accent)</code> (<code>katana|runner|cyborg</code>)</li>
-                  <li><code>ctx.drawParticles3D(count, spread, speed, color, size)</code></li>
-                  <li>HUD &amp; Post-FX : <code>ctx.text(...)</code>, <code>ctx.glitchSlices(amt)</code>, <code>ctx.scanlines(alpha)</code>, <code>ctx.invert(amt)</code>, <code>ctx.zoom(scale)</code></li>
+                  <li><code>audio.bass</code> (0..1) — Kicks &amp; basses fréquences</li>
+                  <li><code>audio.mid</code> (0..1) — Médiums &amp; synthés</li>
+                  <li><code>audio.treble</code> (0..1) — Aigus &amp; charleys</li>
+                  <li><code>audio.rms</code> (0..1) — Volume énergétique global</li>
+                  <li><code>audio.flux</code> (0..1) — Transitoires rapides / claps</li>
+                  <li><code>t</code> (secondes) — Horloge continue à 60 FPS</li>
                 </ul>
               </div>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5 font-mono text-xs">
-                <span className="font-bold text-brand-black">EXEMPLE C++ 3D COMPLET (CAMÉRA + TERRAIN 3D + PERSONNAGE + PAROLES)</span>
+                <span className="font-bold text-brand-black">EXEMPLE DE SCRIPT JS 3D LIVE (PILIERS, ANNEAU &amp; PYRAMIDE 3D AUDIO-RÉACTIFS)</span>
                 <Button
                   type="button"
                   variant="clinical"
                   size="sm"
-                  onClick={() => void copyText("cpp-ex", CPP_EXAMPLE_FULL)}
+                  onClick={() => void copyText("js3d-ex", JS_3D_EXAMPLE_FULL)}
                 >
-                  {copiedId === "cpp-ex" ? "✅ COPIÉ !" : "📋 COPIER EXEMPLE"}
+                  {copiedId === "js3d-ex" ? "✅ COPIÉ !" : "📋 COPIER SCRIPT 3D"}
                 </Button>
               </div>
               <pre className="p-3 rounded-lg border-2 border-black bg-[#101216] text-[#00E5FF] font-mono text-[11px] overflow-x-auto leading-relaxed">
-                {CPP_EXAMPLE_FULL}
+                {JS_3D_EXAMPLE_FULL}
               </pre>
             </div>
           </div>
@@ -436,22 +409,22 @@ export default function VisualStudioDocsPage() {
       {/* 7. Système de Prompts IA */}
       <div id="prompts-ia">
         <Card
-          moduleTitle="07 // SYSTÈME DE PROMPTS IA (PRÊTS À COPIER)"
-          moduleMeta="PACK 5 SCÈNES · SHADER C++ · SCÉNARIO LRC"
+          moduleTitle="07 // SYSTÈME DE PROMPTS IA 3D (PRÊTS À COPIER)"
+          moduleMeta="PACK 3D MULTI-SCÈNES (JSON + JS 3D) · SCÉNARIO LRC"
           activeIndicator
         >
           <div className="space-y-5">
             <p className="font-sans text-xs sm:text-sm text-neutral-700">
-              Copiez l&apos;un de ces 3 prompts système dans votre IA (ChatGPT, Claude, Gemini...),
-              ajoutez votre thème musical ou vos paroles, puis collez directement le résultat dans
-              le Studio ou l&apos;Éditeur C++ !
+              Copiez l&apos;un de ces prompts système dans votre IA (ChatGPT, Claude, Gemini...),
+              ajoutez votre ambiance ou vos paroles, puis collez directement le JSON généré dans{" "}
+              <code>⇄ EXPORTER / IMPORTER PACK 3D (JSON)</code> !
             </p>
 
-            {/* Prompt 1 */}
+            {/* Prompt 1 : Pack 3D */}
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-mono text-xs font-bold text-brand-black uppercase">
-                  1. Prompt IA — Générer un Pack de 5 Scènes (C++ .hpp / JSON)
+                  1. Prompt IA — Générer un Pack de Scènes 3D Profondes (JSON + Script 3D Live)
                 </h3>
                 <Button
                   type="button"
@@ -459,55 +432,35 @@ export default function VisualStudioDocsPage() {
                   size="sm"
                   onClick={() => void copyText("p1", AI_SCENE_PACK_PROMPT)}
                 >
-                  {copiedId === "p1" ? "✅ PROMPT 1 COPIÉ !" : "📋 COPIER PROMPT PACK"}
+                  {copiedId === "p1" ? "✅ PROMPT 3D COPIÉ !" : "📋 COPIER PROMPT PACK 3D"}
                 </Button>
               </div>
-              <pre className="p-3 rounded-lg border border-black bg-brand-pearl font-mono text-[11px] text-brand-black whitespace-pre-wrap">
+              <pre className="p-3 rounded-lg border border-black bg-[#101216] font-mono text-[11px] text-[#00E5FF] whitespace-pre-wrap">
                 {AI_SCENE_PACK_PROMPT}
               </pre>
             </div>
 
-            {/* Prompt 2 */}
+            {/* Exemple JSON Pack 3D */}
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-mono text-xs font-bold text-brand-red uppercase">
-                  2. Prompt IA — Générer un Shader C++ Live (Paroles &amp; Formats 9:16 / 16:9)
+                  2. Exemple Complet — Pack 3D Officiel &quot;PS2 // Enter the Dragon (5 Scènes)&quot; (JSON)
                 </h3>
                 <Button
                   type="button"
                   variant="primary"
                   size="sm"
-                  onClick={() => void copyText("p2", CPP_SHADER_AI_PROMPT)}
+                  onClick={() => void copyText("p2json", samplePackJson)}
                 >
-                  {copiedId === "p2" ? "✅ PROMPT 2 COPIÉ !" : "📋 COPIER PROMPT C++"}
+                  {copiedId === "p2json" ? "✅ JSON COPIÉ !" : "📋 COPIER PACK JSON"}
                 </Button>
               </div>
-              <pre className="p-3 rounded-lg border border-black bg-[#101216] font-mono text-[11px] text-[#00E5FF] whitespace-pre-wrap">
-                {CPP_SHADER_AI_PROMPT}
+              <pre className="p-3 rounded-lg border border-black bg-brand-pearl font-mono text-[10px] text-brand-black max-h-64 overflow-y-auto whitespace-pre-wrap">
+                {samplePackJson}
               </pre>
             </div>
 
-            {/* Prompt 2bis : JS Natif */}
-            <div className="space-y-1.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h3 className="font-mono text-xs font-bold text-amber-700 uppercase">
-                  2b. Prompt IA — Générer un Script JavaScript Natif 60 FPS (3D Low-Poly / Creative Coding)
-                </h3>
-                <Button
-                  type="button"
-                  variant="comic"
-                  size="sm"
-                  onClick={() => void copyText("p2js", JS_SHADER_AI_PROMPT)}
-                >
-                  {copiedId === "p2js" ? "✅ PROMPT JS COPIÉ !" : "📋 COPIER PROMPT JS"}
-                </Button>
-              </div>
-              <pre className="p-3 rounded-lg border border-black bg-[#0D1016] font-mono text-[11px] text-amber-300 whitespace-pre-wrap">
-                {JS_SHADER_AI_PROMPT}
-              </pre>
-            </div>
-
-            {/* Prompt 3 */}
+            {/* Prompt 3 : LRC */}
             <div className="space-y-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="font-mono text-xs font-bold text-brand-black uppercase">
@@ -519,7 +472,7 @@ export default function VisualStudioDocsPage() {
                   size="sm"
                   onClick={() => void copyText("p3", LRC_SCENARIO_PROMPT)}
                 >
-                  {copiedId === "p3" ? "✅ PROMPT 3 COPIÉ !" : "📋 COPIER PROMPT LRC"}
+                  {copiedId === "p3" ? "✅ PROMPT LRC COPIÉ !" : "📋 COPIER PROMPT LRC"}
                 </Button>
               </div>
               <pre className="p-3 rounded-lg border border-black bg-brand-pearl font-mono text-[11px] text-brand-black whitespace-pre-wrap">

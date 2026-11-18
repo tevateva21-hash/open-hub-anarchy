@@ -5,6 +5,7 @@ import type {
   PaletteId,
   RetroEffects,
   RetroPresetConfig,
+  Scene3DConfig,
   SceneAudioState,
   SceneDescriptor,
   SceneFrameInput,
@@ -1627,6 +1628,344 @@ const BLACKOUT_PALETTE: StudyPalette = {
   reflection: "#000000",
 };
 
+export interface CustomScene3DApi {
+  addBox3D: (
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    h: number,
+    d: number,
+    tone?: number,
+    wireRim?: boolean,
+    checker?: boolean,
+    rotY?: number
+  ) => void;
+  addPyramid3D: (
+    x: number,
+    y: number,
+    z: number,
+    radius: number,
+    height: number,
+    tone?: number,
+    wireRim?: boolean,
+    inverted?: boolean,
+    rotY?: number
+  ) => void;
+  addRing3D: (
+    z: number,
+    radius: number,
+    depth: number,
+    segments?: number,
+    spinRad?: number,
+    tone?: number,
+    wireRim?: boolean
+  ) => void;
+}
+
+type CompiledScript3DFn = (
+  scene3d: CustomScene3DApi,
+  audio: { bass: number; mid: number; treble: number; rms: number; flux: number },
+  t: number
+) => void;
+
+const script3DCache = new Map<
+  string,
+  { ok: boolean; fn?: CompiledScript3DFn; error?: string }
+>();
+
+export function validateScript3D(code?: string): {
+  ok: boolean;
+  error?: string;
+} {
+  if (!code || !code.trim()) return { ok: true };
+  const cached = script3DCache.get(code);
+  if (cached) return { ok: cached.ok, error: cached.error };
+  try {
+    const wrapped = `"use strict";\n${code}\nif (typeof customizeScene3D === "function") { return customizeScene3D(__scene3d, __audio, __t); }`;
+    const rawFn = new Function("__scene3d", "__audio", "__t", wrapped) as CompiledScript3DFn;
+    if (script3DCache.size > 40) script3DCache.clear();
+    script3DCache.set(code, { ok: true, fn: rawFn });
+    return { ok: true };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : "Erreur syntaxe Script 3D";
+    if (script3DCache.size > 40) script3DCache.clear();
+    script3DCache.set(code, { ok: false, error: msg });
+    return { ok: false, error: msg };
+  }
+}
+
+function buildCustom3DPolygons(
+  cfg: Scene3DConfig | undefined,
+  script3d: string | undefined,
+  timeSeconds: number,
+  audio: SceneAudioState
+): Poly3D[] {
+  const polygons: Poly3D[] = [];
+  const ambientBoost = cfg?.lighting.ambientBoost ?? 0;
+  const defaultWire = cfg?.geometries.wireframeRim ?? true;
+  const defaultChecker = cfg?.geometries.checkerTexture ?? true;
+
+  const rotYPoint = (
+    lx: number,
+    ly: number,
+    lz: number,
+    cx: number,
+    cy: number,
+    cz: number,
+    angle: number
+  ): Vec3 => {
+    const c = Math.cos(angle);
+    const s = Math.sin(angle);
+    return {
+      x: cx + lx * c - lz * s,
+      y: cy + ly,
+      z: cz + lx * s + lz * c,
+    };
+  };
+
+  const api: CustomScene3DApi = {
+    addBox3D: (
+      x,
+      y,
+      z,
+      w,
+      h,
+      d,
+      tone = 0.72,
+      wireRim = defaultWire,
+      checker = defaultChecker,
+      rotY = 0
+    ) => {
+      if (polygons.length > 96) return;
+      const hw = Math.max(0.1, w * 0.5);
+      const hh = Math.max(0.1, h * 0.5);
+      const hd = Math.max(0.1, d * 0.5);
+      const baseTone = clamp01(tone + ambientBoost);
+      // Face avant + Faces latérales + Dessus
+      polygons.push(
+        {
+          vertices: [
+            rotYPoint(-hw, -hh, -hd, x, y, z, rotY),
+            rotYPoint(hw, -hh, -hd, x, y, z, rotY),
+            rotYPoint(hw, hh, -hd, x, y, z, rotY),
+            rotYPoint(-hw, hh, -hd, x, y, z, rotY),
+          ],
+          tone: baseTone,
+          checker,
+          wireRim,
+        },
+        {
+          vertices: [
+            rotYPoint(hw, -hh, -hd, x, y, z, rotY),
+            rotYPoint(hw, -hh, hd, x, y, z, rotY),
+            rotYPoint(hw, hh, hd, x, y, z, rotY),
+            rotYPoint(hw, hh, -hd, x, y, z, rotY),
+          ],
+          tone: clamp01(baseTone * 0.78),
+          checker: false,
+          wireRim,
+        },
+        {
+          vertices: [
+            rotYPoint(-hw, -hh, hd, x, y, z, rotY),
+            rotYPoint(-hw, -hh, -hd, x, y, z, rotY),
+            rotYPoint(-hw, hh, -hd, x, y, z, rotY),
+            rotYPoint(-hw, hh, hd, x, y, z, rotY),
+          ],
+          tone: clamp01(baseTone * 0.68),
+          checker: false,
+          wireRim: false,
+        },
+        {
+          vertices: [
+            rotYPoint(-hw, hh, -hd, x, y, z, rotY),
+            rotYPoint(hw, hh, -hd, x, y, z, rotY),
+            rotYPoint(hw, hh, hd, x, y, z, rotY),
+            rotYPoint(-hw, hh, hd, x, y, z, rotY),
+          ],
+          tone: clamp01(baseTone * 1.12),
+          checker,
+          wireRim,
+        }
+      );
+    },
+    addPyramid3D: (
+      x,
+      y,
+      z,
+      radius,
+      height,
+      tone = 0.82,
+      wireRim = defaultWire,
+      inverted = false,
+      rotY = 0
+    ) => {
+      if (polygons.length > 96) return;
+      const r = Math.max(0.15, radius);
+      const h = Math.max(0.2, height);
+      const tipY = inverted ? y - h * 0.5 : y + h * 0.5;
+      const baseY = inverted ? y + h * 0.5 : y - h * 0.5;
+      const apex = { x, y: tipY, z };
+      const corners = [
+        rotYPoint(-r, baseY - y, -r, x, y, z, rotY),
+        rotYPoint(r, baseY - y, -r, x, y, z, rotY),
+        rotYPoint(r, baseY - y, r, x, y, z, rotY),
+        rotYPoint(-r, baseY - y, r, x, y, z, rotY),
+      ];
+      const baseTone = clamp01(tone + ambientBoost);
+      for (let i = 0; i < 4; i++) {
+        const next = (i + 1) % 4;
+        polygons.push({
+          vertices: [apex, corners[i], corners[next]],
+          tone: clamp01(baseTone * (1 - i * 0.1)),
+          checker: i % 2 === 0 && defaultChecker,
+          wireRim,
+        });
+      }
+    },
+    addRing3D: (
+      z,
+      radius,
+      depth,
+      segments = 8,
+      spinRad = 0,
+      tone = 0.78,
+      wireRim = defaultWire
+    ) => {
+      if (polygons.length > 96) return;
+      const segs = Math.max(4, Math.min(12, Math.round(segments)));
+      const baseTone = clamp01(tone + ambientBoost);
+      for (let s = 0; s < segs; s++) {
+        const a0 = spinRad + (s * Math.PI * 2) / segs;
+        const a1 = spinRad + ((s + 1) * Math.PI * 2) / segs;
+        const x0 = Math.cos(a0) * radius;
+        const y0 = Math.sin(a0) * radius;
+        const x1 = Math.cos(a1) * radius;
+        const y1 = Math.sin(a1) * radius;
+        polygons.push({
+          vertices: [
+            { x: x0, y: y0, z },
+            { x: x1, y: y1, z },
+            { x: x1, y: y1, z: z + depth },
+            { x: x0, y: y0, z: z + depth },
+          ],
+          tone: s % 2 === 0 ? baseTone : clamp01(baseTone * 0.65),
+          checker: s % 2 === 0 && defaultChecker,
+          wireRim: wireRim && s % 2 === 0,
+        });
+      }
+    },
+  };
+
+  // 1. Géométries 3D issues de config3d.geometries
+  if (cfg && cfg.geometries.extraObjects !== "none" && cfg.geometries.extraCount > 0) {
+    const count = Math.min(10, cfg.geometries.extraCount);
+    const scaleM = cfg.geometries.monolithScale;
+    const scaleC = cfg.geometries.coreScale;
+    const pulse = 1 + audio.bassEnvelope * 0.55;
+    const rimNow = cfg.geometries.wireframeRim || audio.transientPulse > 0.28;
+
+    switch (cfg.geometries.extraObjects) {
+      case "katana-blades": {
+        for (let i = 0; i < count; i++) {
+          const side = i % 2 === 0 ? -1 : 1;
+          const zPos = 4.2 + i * 1.4 - ((timeSeconds * 2.2) % 2.8);
+          api.addBox3D(
+            side * (2.6 - (i % 2) * 0.35),
+            0.1 + Math.sin(timeSeconds * 2 + i) * 0.25,
+            zPos,
+            0.22 * scaleM,
+            (2.2 + audio.bassEnvelope * 1.2) * scaleM,
+            0.35,
+            0.78 + (i % 2) * 0.12,
+            rimNow,
+            cfg.geometries.checkerTexture,
+            side * 0.35 + timeSeconds * 0.4
+          );
+        }
+        break;
+      }
+      case "floating-monoliths": {
+        for (let i = 0; i < count; i++) {
+          const angle = timeSeconds * 0.55 + (i * Math.PI * 2) / count;
+          const rad = 2.9 * scaleC;
+          api.addBox3D(
+            Math.cos(angle) * rad,
+            -0.2 + Math.sin(timeSeconds * 1.8 + i) * 0.4,
+            5.8 + Math.sin(angle) * 1.6,
+            0.55 * scaleM,
+            1.7 * scaleM * pulse,
+            0.55 * scaleM,
+            0.68 + audio.midEnvelope * 0.22,
+            rimNow,
+            cfg.geometries.checkerTexture,
+            angle
+          );
+        }
+        break;
+      }
+      case "octo-rings": {
+        const ringTotal = Math.min(4, Math.max(1, Math.ceil(count / 2)));
+        for (let r = 0; r < ringTotal; r++) {
+          api.addRing3D(
+            3.8 + r * 2.1,
+            (1.5 + r * 0.35) * scaleC * pulse,
+            0.55,
+            8,
+            timeSeconds * (r % 2 === 0 ? 0.9 : -0.9),
+            0.76 + audio.bassEnvelope * 0.18,
+            rimNow
+          );
+        }
+        break;
+      }
+      case "cyber-pyramids": {
+        for (let i = 0; i < count; i++) {
+          const angle = timeSeconds * 0.65 + (i * Math.PI * 2) / count;
+          api.addPyramid3D(
+            Math.cos(angle) * 2.5,
+            0.35 + Math.sin(timeSeconds * 2.1 + i) * 0.35,
+            5.6 + Math.sin(angle) * 1.5,
+            0.62 * scaleC * pulse,
+            1.35 * scaleM,
+            0.8 + (i % 2) * 0.1,
+            rimNow,
+            i % 2 === 1,
+            timeSeconds + i
+          );
+        }
+        break;
+      }
+    }
+  }
+
+  // 2. Exécution du Script 3D live optionnel
+  if (script3d && script3d.trim()) {
+    validateScript3D(script3d);
+    const cached = script3DCache.get(script3d);
+    if (cached?.ok && cached.fn) {
+      try {
+        cached.fn(
+          api,
+          {
+            bass: audio.bassEnvelope,
+            mid: audio.midEnvelope,
+            treble: audio.trebleEnvelope,
+            rms: audio.rmsEnvelope,
+            flux: audio.transientPulse,
+          },
+          timeSeconds
+        );
+      } catch {
+        // Ignorer une erreur runtime ponctuelle pour maintenir 60 FPS
+      }
+    }
+  }
+
+  return polygons;
+}
+
 export function renderSceneFrame(
   ctx: CanvasRenderingContext2D,
   input: SceneFrameInput
@@ -1687,6 +2026,16 @@ export function renderSceneFrame(
 
   const descriptor = getSceneDescriptor(effectiveSceneId);
   const basePalette = getStudyPalette(input.paletteId);
+
+  const cfg3d: Scene3DConfig | undefined = input.scene3dConfig;
+  if (cfg3d) {
+    const ar = cfg3d.audioReactive;
+    audio.bassEnvelope = clamp01(audio.bassEnvelope * ar.bassPulse);
+    audio.midEnvelope = clamp01(audio.midEnvelope * ar.midMorph);
+    audio.trebleEnvelope = clamp01(audio.trebleEnvelope * ar.trebleStrobe);
+    audio.transientPulse = clamp01(audio.transientPulse * ar.fluxJolt);
+  }
+
   const colorTransition = clamp01(input.effects?.colorTransition ?? 0);
   const targetPalette = input.effects?.targetPaletteId
     ? getStudyPalette(input.effects.targetPaletteId)
@@ -1695,6 +2044,18 @@ export function renderSceneFrame(
           STUDY_PALETTES.length
       ];
   let palette = blendStudyPalettes(basePalette, targetPalette, colorTransition);
+
+  if (cfg3d?.colors) {
+    palette = {
+      ...palette,
+      sky: cfg3d.colors.sky || palette.sky,
+      haze: cfg3d.colors.haze || palette.haze,
+      structure: cfg3d.colors.structure || palette.structure,
+      face: cfg3d.colors.face || palette.face,
+      light: cfg3d.colors.light || palette.light,
+      glow: cfg3d.colors.glow || palette.glow,
+    };
+  }
 
   const kickBlackoutStrength = clamp01(input.effects?.kickBlackout ?? 0);
   if (kickBlackoutStrength > 0.005 || transitionBlackout > 0.005) {
@@ -1715,12 +2076,24 @@ export function renderSceneFrame(
   }
 
   const effects: RetroEffects = {
-    dither: clamp01(input.effects?.dither ?? DEFAULT_RETRO_EFFECTS.dither),
-    fog: clamp01(input.effects?.fog ?? DEFAULT_RETRO_EFFECTS.fog),
+    dither: clamp01(
+      cfg3d
+        ? (input.effects?.dither ?? DEFAULT_RETRO_EFFECTS.dither) * 0.5 +
+            cfg3d.lighting.ditherStrength * 0.5
+        : input.effects?.dither ?? DEFAULT_RETRO_EFFECTS.dither
+    ),
+    fog: clamp01(
+      cfg3d
+        ? (input.effects?.fog ?? DEFAULT_RETRO_EFFECTS.fog) * 0.5 +
+            cfg3d.lighting.fogDensity * 0.5
+        : input.effects?.fog ?? DEFAULT_RETRO_EFFECTS.fog
+    ),
     grain: clamp01(input.effects?.grain ?? DEFAULT_RETRO_EFFECTS.grain),
     vertexSnap: input.effects?.vertexSnap ?? DEFAULT_RETRO_EFFECTS.vertexSnap,
     affineTextures:
-      input.effects?.affineTextures ?? DEFAULT_RETRO_EFFECTS.affineTextures,
+      cfg3d?.geometries.checkerTexture ??
+      input.effects?.affineTextures ??
+      DEFAULT_RETRO_EFFECTS.affineTextures,
     psychedelic: clamp01(input.effects?.psychedelic ?? 0),
     colorTransition,
     targetPaletteId: input.effects?.targetPaletteId,
@@ -1748,10 +2121,13 @@ export function renderSceneFrame(
     };
   }
 
-  // Paramètres caméra unifiés (fonctionnent sur pixel-16 ET lowpoly-32 même pendant les switchs de pack)
+  // Paramètres caméra unifiés (faders + config3d.camera)
   const pendulumAmt = reducedMotion ? 0 : effects.pendulumSwing ?? 0;
+  const orbitSpeed = cfg3d?.camera.orbitSpeed ?? 0.85;
   const pendulumYaw =
-    Math.sin(input.timeSeconds * 0.85) * 0.22 * pendulumAmt;
+    Math.sin(input.timeSeconds * Math.max(0.2, orbitSpeed)) *
+    0.22 *
+    pendulumAmt;
   const orthoCam =
     input.camera?.kind === "orthographic" ? input.camera : undefined;
   const perspCam =
@@ -1763,34 +2139,54 @@ export function renderSceneFrame(
     ? Math.max(0.5, Math.min(2.2, 1 / Math.max(0.45, perspCam.distance)))
     : 1;
 
+  const cfgYawRad = ((cfg3d?.camera.yawDegrees ?? 0) * Math.PI) / 180;
+  const cfgPitchRad = ((cfg3d?.camera.pitchDegrees ?? 0) * Math.PI) / 180;
+  const cfgDistFactor = cfg3d ? cfg3d.camera.distance / 7.5 : 1;
+  const cfgFovFactor = cfg3d ? cfg3d.camera.fovDegrees / 74 : 1;
+
   const camOff: PerspectiveOffsets = {
-    yawRad: ((perspCam?.yawDegrees ?? 0) * Math.PI) / 180 + pendulumYaw,
-    pitchRad: ((perspCam?.pitchDegrees ?? 0) * Math.PI) / 180,
+    yawRad:
+      ((perspCam?.yawDegrees ?? 0) * Math.PI) / 180 + pendulumYaw + cfgYawRad,
+    pitchRad: ((perspCam?.pitchDegrees ?? 0) * Math.PI) / 180 + cfgPitchRad,
     distMul: perspCam
-      ? Math.max(0.42, Math.min(2.2, perspCam.distance / (1 + bassPump * 1.3)))
-      : Math.max(0.42, Math.min(2.2, 1 / (unifiedZoom * (1 + bassPump * 1.3)))),
+      ? Math.max(
+          0.38,
+          Math.min(2.4, (perspCam.distance * cfgDistFactor) / (1 + bassPump * 1.3))
+        )
+      : Math.max(
+          0.38,
+          Math.min(2.4, cfgDistFactor / (unifiedZoom * (1 + bassPump * 1.3)))
+        ),
     fovMul: perspCam
-      ? Math.max(0.55, Math.min(1.6, (perspCam.fovDegrees / 70) * (1 + bassPump)))
-      : 1 + bassPump,
+      ? Math.max(
+          0.55,
+          Math.min(
+            1.7,
+            (perspCam.fovDegrees / 70) * cfgFovFactor * (1 + bassPump)
+          )
+        )
+      : cfgFovFactor * (1 + bassPump),
   };
 
-let cachedStageOffscreen: HTMLCanvasElement | null = null;
-function getStageOffscreenContext(): {
-  canvas: HTMLCanvasElement;
-  ctx: CanvasRenderingContext2D;
-} | null {
-  if (typeof document === "undefined") return null;
-  if (!cachedStageOffscreen) {
-    cachedStageOffscreen = document.createElement("canvas");
-    cachedStageOffscreen.width = STUDY_SIZE.width;
-    cachedStageOffscreen.height = STUDY_SIZE.height;
+  let cachedStageOffscreen: HTMLCanvasElement | null = null;
+  function getStageOffscreenContext(): {
+    canvas: HTMLCanvasElement;
+    ctx: CanvasRenderingContext2D;
+  } | null {
+    if (typeof document === "undefined") return null;
+    if (!cachedStageOffscreen) {
+      cachedStageOffscreen = document.createElement("canvas");
+      cachedStageOffscreen.width = STUDY_SIZE.width;
+      cachedStageOffscreen.height = STUDY_SIZE.height;
+    }
+    const octx = cachedStageOffscreen.getContext("2d");
+    if (!octx) return null;
+    return { canvas: cachedStageOffscreen, ctx: octx };
   }
-  const octx = cachedStageOffscreen.getContext("2d");
-  if (!octx) return null;
-  return { canvas: cachedStageOffscreen, ctx: octx };
-}
 
-  const frameIndex = Math.round(input.timeSeconds * STUDY_FPS);
+  const speedMul = cfg3d ? cfg3d.environment.tunnelSpeed / 1.5 : 1;
+  const effectiveTime = input.timeSeconds * speedMul;
+  const frameIndex = Math.round(effectiveTime * STUDY_FPS);
   const seed = (input.seed ?? 1) >>> 0;
   const aspectSpec = VIDEO_ASPECT_FORMATS[input.aspectRatio ?? "16:9"];
   const targetW = aspectSpec.width;
@@ -1808,10 +2204,13 @@ function getStageOffscreenContext(): {
 
   if (descriptor.style === "pixel-16") {
     const pendulumPanX =
-      Math.sin(input.timeSeconds * 0.85) * 10 * pendulumAmt;
-    const zoom = Math.max(0.5, Math.min(2.5, unifiedZoom * (1 + bassPump)));
+      Math.sin(effectiveTime * 0.85) * 10 * pendulumAmt;
+    const zoom = Math.max(
+      0.5,
+      Math.min(2.5, (unifiedZoom / Math.max(0.5, cfgDistFactor)) * (1 + bassPump))
+    );
     const camX = orthoCam?.x ?? 0;
-    const camY = orthoCam?.y ?? 0;
+    const camY = (orthoCam?.y ?? 0) - (cfg3d?.environment.horizonOffset ?? 0);
     if (zoom !== 1 || camX !== 0 || camY !== 0 || pendulumPanX !== 0) {
       sceneCtx.fillStyle = palette.shadow;
       sceneCtx.fillRect(0, 0, STUDY_SIZE.width, STUDY_SIZE.height);
@@ -1844,7 +2243,7 @@ function getStageOffscreenContext(): {
       const counts = drawPs1NightmareScene(
         sceneTools,
         palette,
-        input.timeSeconds,
+        effectiveTime,
         audio,
         effects,
         reducedMotion,
@@ -1858,7 +2257,7 @@ function getStageOffscreenContext(): {
       const counts = drawRaveDungeonScene(
         sceneTools,
         palette,
-        input.timeSeconds,
+        effectiveTime,
         audio,
         effects,
         reducedMotion,
@@ -1872,7 +2271,7 @@ function getStageOffscreenContext(): {
       const counts = drawTechnoTherapyScene(
         sceneTools,
         palette,
-        input.timeSeconds,
+        effectiveTime,
         audio,
         effects,
         reducedMotion,
@@ -1881,6 +2280,38 @@ function getStageOffscreenContext(): {
       vertexCount = counts.vertexCount;
       triangleCount = counts.triangleCount;
       break;
+    }
+  }
+
+  // Géométries 3D personnalisées (config3d.geometries.extraObjects + script3d live)
+  if (
+    (cfg3d &&
+      cfg3d.geometries.extraObjects !== "none" &&
+      cfg3d.geometries.extraCount > 0) ||
+    (input.script3d && input.script3d.trim().length > 0)
+  ) {
+    const customPolys = buildCustom3DPolygons(
+      cfg3d,
+      input.script3d,
+      effectiveTime,
+      audio
+    );
+    if (customPolys.length > 0) {
+      const customCounts = renderLowPolyMesh(
+        sceneTools,
+        palette,
+        customPolys,
+        {
+          yawRad: camOff.yawRad,
+          pitchRad: 0.08 + camOff.pitchRad,
+          distance: Math.max(2.6, 6.8 * camOff.distMul),
+          fovScale: Math.round(188 * camOff.fovMul),
+          targetY: 0,
+        },
+        effects
+      );
+      vertexCount += customCounts.vertexCount;
+      triangleCount += customCounts.triangleCount;
     }
   }
 
@@ -1975,94 +2406,6 @@ function getStageOffscreenContext(): {
     vertexCount,
     triangleCount,
   };
-}
-
-/**
- * Applique les effets des 10 faders (Psychédélie, Color Morph / Palette, Paroles LRC/Whisper,
- * Strobe Aigu, Kick Blackout, Anaglyphe 3D & Scanlines) par-dessus le rendu 3D d'un Preset JS/C++.
- */
-export function applyStudioPostFxAndLyrics(
-  ctx: CanvasRenderingContext2D,
-  options: {
-    width: number;
-    height: number;
-    timeSeconds: number;
-    paletteId: PaletteId;
-    applyPaletteTint?: boolean;
-    audio: SceneAudioState;
-    effects: Partial<RetroEffects>;
-    lyrics?: SceneFrameInput["lyrics"];
-    reducedMotion?: boolean;
-  }
-): void {
-  const { width, height, timeSeconds, audio, lyrics, reducedMotion = false } = options;
-  const effects: RetroEffects = {
-    ...DEFAULT_RETRO_EFFECTS,
-    ...options.effects,
-  };
-  const basePalette = getStudyPalette(options.paletteId);
-  const paletteIndex = STUDY_PALETTES.findIndex((p) => p.id === basePalette.id);
-  const nextPalette =
-    STUDY_PALETTES[(Math.max(0, paletteIndex) + 1) % STUDY_PALETTES.length] ??
-    basePalette;
-  const colorTransition = effects.colorTransition ?? 0;
-  const morphCycle =
-    colorTransition > 0
-      ? (Math.sin(
-          timeSeconds * (0.4 + colorTransition * 1.4) +
-            audio.bassEnvelope * 0.8
-        ) +
-          1) *
-        0.5 *
-        colorTransition
-      : 0;
-  const palette = blendStudyPalettes(basePalette, nextPalette, morphCycle);
-
-  ctx.save();
-  const tools = createRasterTools(ctx);
-
-  if (options.applyPaletteTint || colorTransition > 0.02) {
-    const tintAlpha = Math.min(
-      0.28,
-      (options.applyPaletteTint ? 0.14 : 0) + colorTransition * 0.18
-    );
-    ctx.save();
-    ctx.globalCompositeOperation = "screen";
-    ctx.globalAlpha = tintAlpha;
-    ctx.fillStyle = palette.light;
-    ctx.fillRect(0, 0, width, height);
-    ctx.restore();
-  }
-
-  if ((effects.psychedelic ?? 0) > 0.02) {
-    applyPsychedelicPass(
-      tools,
-      palette,
-      timeSeconds,
-      audio,
-      effects.psychedelic ?? 0,
-      reducedMotion
-    );
-  }
-
-  tools.rect(0, 0, width, 5, palette.shadow);
-  tools.rect(0, height - 5, width, 5, palette.shadow);
-
-  if (lyrics?.enabled && lyrics.text.trim().length > 0) {
-    drawLyricsOverlay(
-      tools,
-      palette,
-      timeSeconds,
-      audio,
-      lyrics,
-      reducedMotion,
-      width,
-      height
-    );
-  }
-
-  applyOpenHubPostFx(ctx, effects, audio, timeSeconds, width, height);
-  ctx.restore();
 }
 
 

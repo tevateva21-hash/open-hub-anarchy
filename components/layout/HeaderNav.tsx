@@ -16,7 +16,6 @@ interface NavItem {
 
 const STUDIO_NAV_ITEMS: NavItem[] = [
   { id: "nav-visual-design", href: "/anarchy-visual-design", label: "🎨 VISUAL STUDIO" },
-  { id: "nav-visual-editeur", href: "/anarchy-visual-design/editeur", label: "💻 ÉDITEUR C++" },
   { id: "nav-visual-docs", href: "/docs/visual-studio", label: "📖 DOCUMENTATION" },
 ];
 
