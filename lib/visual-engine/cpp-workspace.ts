@@ -10,7 +10,7 @@ import {
   type ScriptLanguage,
 } from "@/lib/visual-engine/cpp-runtime";
 
-export const CPP_WORKSPACE_STORAGE_KEY = "openhub_cpp_workspace_v1";
+export const CPP_WORKSPACE_STORAGE_KEY = "openhub_cpp_workspace_v2";
 export const CPP_WORKSPACE_EVENT = "openhub:cpp-workspace-updated";
 
 export interface CppDocumentPreset {
@@ -57,296 +57,358 @@ export interface CppWorkspaceState {
 
 export const DEFAULT_CPP_DOCUMENTS: CppDocument[] = [
   {
-    id: "doc-sceno-openhub",
-    name: "sceno_openhub_ps2.cpp",
+    id: "doc-dojo-neon-3d",
+    name: "01_dojo_neon_3d.js",
+    language: "js",
+    updatedAt: "2026-11-18T00:00:00Z",
+    activePresetId: "preset-dojo-cyan",
+    code: DEFAULT_JS_SHADER_CODE,
+    presets: [
+      {
+        id: "preset-dojo-cyan",
+        name: "Dojo Cyan & Katana",
+        values: {
+          runSpeed: 3.8,
+          fov: 62.0,
+          neonColor: "#00F0FF",
+          katanaColor: "#FF1B24",
+          fogColor: "#0A0D18",
+          wireframePillars: false,
+        },
+      },
+      {
+        id: "preset-dojo-blood",
+        name: "Dojo Blood Moon",
+        values: {
+          runSpeed: 5.4,
+          fov: 68.0,
+          neonColor: "#FF1B24",
+          katanaColor: "#D4FF33",
+          fogColor: "#16070B",
+          wireframePillars: true,
+        },
+      },
+    ],
+  },
+  {
+    id: "doc-enter-dragon-3d",
+    name: "02_enter_the_dragon_3d.js",
+    language: "js",
+    updatedAt: "2026-11-18T00:00:00Z",
+    activePresetId: "preset-dragon-gold",
+    code: `// PS2 // Enter the Dragon — Temple Souterrain & Arches 3D
+// @param float templeSpeed = 3.6 [0.5, 10.0]
+// @param int archCount = 5 [3, 8]
+// @color fogColor = "#0C0914"
+// @color goldNeon = "#FFB800"
+// @color crimsonNeon = "#FF1B24"
+
+let dragonSpin = 0;
+
+function renderAnarchyFrame(ctx) {
+  dragonSpin += 0.024 * (1 + ctx.bass * 0.9);
+
+  ctx.setCamera(
+    Math.sin(ctx.t * 0.65) * 0.9,
+    1.7 + ctx.bass * 0.35,
+    -5.5,
+    0,
+    1.0,
+    12,
+    60
+  );
+  ctx.setFog(fogColor, 3.5, 22);
+  ctx.setAmbientLight("#1E1528", 0.36 + ctx.rms * 0.25);
+  ctx.setDirectionalLight(-0.5, 1.0, -0.4, goldNeon, 0.85 + ctx.treble * 0.45);
+
+  ctx.drawTerrain3D(
+    templeSpeed * (1 + ctx.bass * 0.4),
+    1.1 + ctx.bass * 0.65,
+    "#140E1E",
+    crimsonNeon,
+    "dungeon"
+  );
+
+  for (let i = 0; i < archCount; i++) {
+    const z = ((i * 3.8 - (ctx.t * templeSpeed * 2.2) % (archCount * 3.8)) + archCount * 3.8) % (archCount * 3.8) + 1.5;
+    const col = i % 2 === 0 ? goldNeon : crimsonNeon;
+    ctx.drawBox3D(-2.7, 1.4, z, 0.5, 2.8 + ctx.bass * 0.7, 0.5, 0, 0, 0, "#1E162B", col, false);
+    ctx.drawBox3D( 2.7, 1.4, z, 0.5, 2.8 + ctx.bass * 0.7, 0.5, 0, 0, 0, "#1E162B", col, false);
+    ctx.drawBox3D( 0.0, 2.9 + ctx.bass * 0.35, z, 6.0, 0.38, 0.5, 0, 0, 0, "#281C38", goldNeon, false);
+  }
+
+  // Relique Dragon en lévitation au fond du sanctuaire
+  ctx.drawBox3D(0, 1.85 + Math.sin(ctx.t * 2.5) * 0.25, 8.2, 1.25, 1.25, 1.25, dragonSpin, dragonSpin * 1.3, 0, "#24162E", goldNeon, false);
+
+  // Guerrier Low-Poly en course
+  ctx.drawCharacter3D(0, 0, 3.6, ctx.t * templeSpeed * 2.4, "katana", "#E4E6F0", crimsonNeon);
+  ctx.drawParticles3D(42, 12, templeSpeed * 1.3, goldNeon, 2.2);
+
+  if (ctx.lyricWord) {
+    ctx.text(ctx.lyricWord, 12, ctx.height - 16, "#FFFFFF", 12);
+  }
+  ctx.scanlines(0.18);
+}`,
+    presets: [
+      {
+        id: "preset-dragon-gold",
+        name: "Sanctuaire Or & Sang",
+        values: {
+          templeSpeed: 3.6,
+          archCount: 5,
+          fogColor: "#0C0914",
+          goldNeon: "#FFB800",
+          crimsonNeon: "#FF1B24",
+        },
+      },
+      {
+        id: "preset-dragon-jade",
+        name: "Dragon Jade Nocturne",
+        values: {
+          templeSpeed: 5.0,
+          archCount: 6,
+          fogColor: "#071412",
+          goldNeon: "#00F5A0",
+          crimsonNeon: "#00E5FF",
+        },
+      },
+    ],
+  },
+  {
+    id: "doc-katana-overdrive-3d",
+    name: "03_katana_overdrive_3d.js",
+    language: "js",
+    updatedAt: "2026-11-18T00:00:00Z",
+    activePresetId: "preset-katana-vortex",
+    code: `// PS2 // Katana Overdrive — Couloir Infini & Anneaux 3D en Rotation
+// @param float tunnelSpeed = 4.6 [1.0, 12.0]
+// @color mainNeon = "#FF1B24"
+// @color cyanNeon = "#00F0FF"
+// @toggle wireframeGates = false
+
+let gateSpin = 0;
+
+function renderAnarchyFrame(ctx) {
+  gateSpin += 0.03 * (1 + ctx.bass);
+
+  ctx.setCamera(
+    Math.sin(ctx.t * 1.1) * 0.55,
+    1.55,
+    -5.2,
+    0,
+    1.1,
+    14,
+    66
+  );
+  ctx.setFog("#080912", 3.0, 22);
+  ctx.setAmbientLight("#16192B", 0.35);
+  ctx.setDirectionalLight(0.3, 1.0, -0.5, cyanNeon, 0.9 + ctx.treble * 0.5);
+
+  ctx.drawTerrain3D(
+    tunnelSpeed * (1 + ctx.bass * 0.5),
+    0.95 + ctx.bass * 0.5,
+    "#0E1220",
+    mainNeon,
+    "corridor"
+  );
+
+  for (let i = 0; i < 6; i++) {
+    const z = ((i * 3.2 - (ctx.t * tunnelSpeed * 2.5) % 19.2) + 19.2) % 19.2 + 1.8;
+    const rot = gateSpin + i * 0.45;
+    const col = i % 2 === 0 ? mainNeon : cyanNeon;
+    ctx.drawBox3D(0, 1.5, z, 2.8 + ctx.bass * 0.8, 0.28, 0.28, 0, 0, rot, "#1A2034", col, wireframeGates);
+    ctx.drawBox3D(0, 1.5, z, 0.28, 2.8 + ctx.bass * 0.8, 0.28, 0, 0, rot, "#1A2034", col, wireframeGates);
+  }
+
+  ctx.drawCharacter3D(
+    Math.sin(ctx.t * 2.2) * 0.45,
+    0,
+    3.5,
+    ctx.t * tunnelSpeed * 2.2,
+    "katana",
+    "#F4F6FA",
+    mainNeon
+  );
+  ctx.drawParticles3D(50, 11, tunnelSpeed * 1.6, cyanNeon, 2.2);
+
+  if (ctx.flux > 0.3) {
+    ctx.glitchSlices(ctx.flux * 0.7);
+  }
+  ctx.scanlines(0.2);
+}`,
+    presets: [
+      {
+        id: "preset-katana-vortex",
+        name: "Katana Overdrive",
+        values: {
+          tunnelSpeed: 4.6,
+          mainNeon: "#FF1B24",
+          cyanNeon: "#00F0FF",
+          wireframeGates: false,
+        },
+      },
+      {
+        id: "preset-katana-wire",
+        name: "Hyper Wireframe 3D",
+        values: {
+          tunnelSpeed: 6.8,
+          mainNeon: "#D4FF33",
+          cyanNeon: "#FF1B24",
+          wireframeGates: true,
+        },
+      },
+    ],
+  },
+  {
+    id: "doc-ps2-nightmare-3d",
+    name: "04_ps2_nightmare_3d.cpp",
     language: "cpp",
-    updatedAt: "2026-11-16T00:00:00Z",
-    activePresetId: "preset-anarchy-3d",
-    code: `// Scénographie Open Hub PS1/PS2 préservée + surcouche C++ temps réel
-// @param float gridSpeed = 40.0 [0.0, 120.0]
-// @param float ringPulse = 1.0 [0.3, 2.5]
-// @param float glitchThresh = 0.32 [0.1, 0.95]
-// @color primaryColor = "#00E5FF"
-// @color accentColor = "#FF1B24"
-// @toggle pureCppMode = false
+    updatedAt: "2026-11-18T00:00:00Z",
+    activePresetId: "preset-nightmare-courtyard",
+    code: `// PS2 // Nightmare Courtyard — Cour Brutaliste, 4 Piliers & Obélisque 3D (C++)
+// @param float orbitSpeed = 0.65 [0.1, 3.0]
+// @param float obeliskHeight = 2.6 [1.2, 4.5]
+// @color fogColor = "#090C14"
+// @color obeliskColor = "#FF1B24"
+// @color gridNeon = "#00E5FF"
 #include <cmath>
 
 void renderAnarchyFrame(AnarchyCtx& ctx) {
-  if (pureCppMode) {
-    ctx.clear("#090B10");
+  float camAngle = ctx.t * orbitSpeed;
+  ctx.setCamera(
+    sinf(camAngle) * 2.4f,
+    2.1f + ctx.bass * 0.4f,
+    -5.6f,
+    0.0f,
+    1.1f,
+    5.5f,
+    60.0f
+  );
+  ctx.setFog(fogColor, 3.5f, 22.0f);
+  ctx.setAmbientLight("#1A2234", 0.38f + ctx.rms * 0.25f);
+  ctx.setDirectionalLight(-0.4f, 1.0f, -0.5f, "#FFFFFF", 0.9f + ctx.treble * 0.4f);
+
+  ctx.drawTerrain3D(2.2f, 0.7f + ctx.bass * 0.5f, "#101624", gridNeon, "waves");
+
+  // 4 Piliers de la cour brutaliste PS2
+  for (int i = 0; i < 4; i++) {
+    float a = i * 1.57079f + ctx.t * 0.25f;
+    float px = cosf(a) * 3.1f;
+    float pz = 5.5f + sinf(a) * 2.4f;
+    ctx.drawBox3D(px, 1.4f, pz, 0.65f, 2.8f + ctx.bass * 0.8f, 0.65f, 0.0f, a, 0.0f, "#1C2436", gridNeon, false);
   }
 
-  float pulse = 1.0f + ctx.bass * 0.14f;
-  ctx.zoom(pulse);
-  ctx.grid(22, primaryColor, gridSpeed);
+  // Obélisque central en lévitation
+  ctx.drawBox3D(
+    0.0f,
+    1.6f + sinf(ctx.t * 2.2f) * 0.3f,
+    5.5f,
+    1.1f,
+    obeliskHeight,
+    1.1f,
+    ctx.t * 0.7f,
+    ctx.t * 1.1f,
+    0.3f,
+    "#2A1420",
+    obeliskColor,
+    false
+  );
 
-  float cx = ctx.width * 0.5f;
-  float cy = ctx.height * 0.5f;
-  float r = (18.0f + ctx.bass * 42.0f) * ringPulse;
-  ctx.ring(cx, cy, r, 2.0f, accentColor);
-  ctx.ring(cx, cy, r * 0.65f, 1.5f, primaryColor);
+  ctx.drawCharacter3D(0.0f, 0.0f, 3.4f, ctx.t * 5.0f, "runner", "#D8DEE9", obeliskColor);
+  ctx.drawParticles3D(38, 11.0f, 1.8f, gridNeon, 2.0f);
+  ctx.scanlines(0.18f);
+}`,
+    presets: [
+      {
+        id: "preset-nightmare-courtyard",
+        name: "Cour Brutaliste PS2",
+        values: {
+          orbitSpeed: 0.65,
+          obeliskHeight: 2.6,
+          fogColor: "#090C14",
+          obeliskColor: "#FF1B24",
+          gridNeon: "#00E5FF",
+        },
+      },
+      {
+        id: "preset-nightmare-acid",
+        name: "Obélisque Acide",
+        values: {
+          orbitSpeed: 1.35,
+          obeliskHeight: 3.4,
+          fogColor: "#08120C",
+          obeliskColor: "#D4FF33",
+          gridNeon: "#00F5A0",
+        },
+      },
+    ],
+  },
+  {
+    id: "doc-digital-void-3d",
+    name: "05_digital_void_3d.cpp",
+    language: "cpp",
+    updatedAt: "2026-11-18T00:00:00Z",
+    activePresetId: "preset-void-monoliths",
+    code: `// PS2 // Digital Void — Mégapole Serveurs & Monolithes 3D Audio-Réactifs (C++)
+// @param int pairs = 5 [2, 8]
+// @param float speed = 3.8 [0.5, 10.0]
+// @color towerBase = "#161C2E"
+// @color neonAccent = "#00F0FF"
+// @toggle wireframeTowers = false
+#include <cmath>
 
-  if (ctx.flux > glitchThresh) {
-    ctx.glitchSlices(ctx.flux * 0.65f);
+void renderAnarchyFrame(AnarchyCtx& ctx) {
+  ctx.setCamera(
+    sinf(ctx.t * 0.55f) * 0.8f,
+    1.9f,
+    -5.8f,
+    0.0f,
+    1.1f,
+    12.0f,
+    64.0f
+  );
+  ctx.setFog("#080B14", 3.5f, 24.0f);
+  ctx.setAmbientLight("#1A2238", 0.35f);
+  ctx.setDirectionalLight(0.3f, 1.0f, -0.6f, neonAccent, 0.9f);
+
+  ctx.drawTerrain3D(speed, 1.1f + ctx.bass * 0.6f, "#0E1322", neonAccent, "canyon");
+
+  for (int i = 0; i < pairs; i++) {
+    float z = fmodf(i * 3.6f - ctx.t * speed * 1.8f + 24.0f, 18.0f) + 1.5f;
+    float h = 1.6f + (i % 3) * 0.7f + ctx.bass * 1.8f;
+    ctx.drawBox3D(-2.6f, h * 0.5f, z, 0.75f, h, 0.75f, 0.0f, 0.0f, 0.0f, towerBase, neonAccent, wireframeTowers);
+    ctx.drawBox3D( 2.6f, h * 0.5f, z, 0.75f, h, 0.75f, 0.0f, 0.0f, 0.0f, towerBase, "#FF1B24", wireframeTowers);
+  }
+
+  ctx.drawCharacter3D(0.0f, 0.0f, 3.6f, ctx.t * speed * 2.0f, "cyborg", "#E2E8F0", "#FF1B24");
+  ctx.drawParticles3D(44, 12.0f, speed * 1.4f, neonAccent, 2.2f);
+
+  if (ctx.lyricWord.length > 0) {
+    ctx.text(ctx.lyricWord, 12, ctx.height - 16, "#FFFFFF", 12);
   }
   ctx.scanlines(0.18f);
 }`,
     presets: [
       {
-        id: "preset-anarchy-3d",
-        name: "Anarchy 3D",
+        id: "preset-void-monoliths",
+        name: "Monolithes Cyan",
         values: {
-          gridSpeed: 40,
-          ringPulse: 1.0,
-          glitchThresh: 0.32,
-          primaryColor: "#00E5FF",
-          accentColor: "#FF1B24",
-          pureCppMode: false,
+          pairs: 5,
+          speed: 3.8,
+          towerBase: "#161C2E",
+          neonAccent: "#00F0FF",
+          wireframeTowers: false,
         },
       },
       {
-        id: "preset-ps2-dragon",
-        name: "PS2 Enter the Dragon",
+        id: "preset-void-matrix",
+        name: "Wireframe Matrix 3D",
         values: {
-          gridSpeed: 78,
-          ringPulse: 1.65,
-          glitchThresh: 0.22,
-          primaryColor: "#D4FF33",
-          accentColor: "#FF1424",
-          pureCppMode: false,
-        },
-      },
-    ],
-  },
-  {
-    id: "doc-brutalist-grid",
-    name: "brutalist_grid.cpp",
-    language: "cpp",
-    updatedAt: "2026-11-16T00:00:00Z",
-    activePresetId: "preset-bunker",
-    code: `// Architecture brutaliste & onde oscilloscope réactive aux kicks
-// @param int cols = 8 [3, 16]
-// @param float swayAmp = 24.0 [0.0, 60.0]
-// @color strokeColor = "#ADC6CE"
-// @color bgColor = "#0B0E14"
-// @toggle invertOnKick = true
-#include <cmath>
-
-float calcWave(float t, float idx, float amp) {
-  return std::sin(t * 2.4f + idx * 0.7f) * amp;
-}
-
-void renderAnarchyFrame(const AnarchyCtx& ctx) {
-  ctx.clear(bgColor);
-  ctx.grid(28, "rgba(173, 198, 206, 0.18)", 12.0f);
-
-  float cx = ctx.width * 0.5f;
-  float cy = ctx.height * 0.5f;
-
-  for (int i = 0; i < cols; i++) {
-    float x = (ctx.width / (float)cols) * (i + 0.5f);
-    float yOff = calcWave(ctx.t, (float)i, swayAmp * (0.4f + ctx.mid));
-    ctx.line(x, 12.0f, x, ctx.height - 12.0f, 1.5f, strokeColor);
-    ctx.rect(x - 6.0f, cy + yOff - 4.0f, 12.0f, 8.0f, "#FF1B24");
-  }
-
-  ctx.line(0, cy, ctx.width, cy, 2.0f, strokeColor);
-  ctx.ring(cx, cy, 16.0f + ctx.bass * 54.0f, 2.5f, strokeColor);
-
-  if (invertOnKick && ctx.beatPhase < 0.12f && ctx.bass > 0.55f) {
-    ctx.invert(0.75f);
-  }
-  ctx.scanlines(0.24f);
-}`,
-    presets: [
-      {
-        id: "preset-bunker",
-        name: "Bunker Brutaliste",
-        values: {
-          cols: 8,
-          swayAmp: 24,
-          strokeColor: "#ADC6CE",
-          bgColor: "#0B0E14",
-          invertOnKick: true,
-        },
-      },
-      {
-        id: "preset-acid-concrete",
-        name: "Acide Toxique",
-        values: {
-          cols: 12,
-          swayAmp: 42,
-          strokeColor: "#B9C87A",
-          bgColor: "#09100C",
-          invertOnKick: true,
-        },
-      },
-    ],
-  },
-  {
-    id: "doc-cyber-katana",
-    name: "cyber_katana_drop.cpp",
-    language: "cpp",
-    updatedAt: "2026-11-16T00:00:00Z",
-    activePresetId: "preset-neon-cyber",
-    code: `// Tunnel cyber & anneaux katana (démontre tableaux, lambdas & fmodf)
-// @param float speed = 4.0 [0.5, 16.0]
-// @param int spokes = 10 [4, 20]
-// @color primaryColor = "#00F0FF"
-// @color secondaryColor = "#FF1B24"
-// @toggle kaleidoscopeFx = true
-#include <cmath>
-using namespace std;
-
-void renderAnarchyFrame(AnarchyCtx& ctx) {
-  ctx.clear("#07080F");
-  float cx = ctx.width * 0.5f;
-  float cy = ctx.height * 0.5f;
-
-  float radii[4] = {18.0f, 36.0f, 58.0f, 82.0f};
-  auto drawBlade = [&](float angle, float radius, const char* col) {
-    float x2 = cx + cosf(angle) * radius;
-    float y2 = cy + sinf(angle) * radius;
-    ctx.line(cx, cy, x2, y2, 2.0f, col);
-    ctx.circle(x2, y2, 2.5f + ctx.treble * 4.5f, "#FFFFFF", true);
-  };
-
-  for (int i = 0; i < spokes; i++) {
-    float a = ctx.t * speed * 0.35f + i * (6.28318f / spokes);
-    float len = radii[i % 4] * (0.75f + ctx.bass * 0.85f);
-    drawBlade(a, len, i % 2 == 0 ? primaryColor : secondaryColor);
-  }
-
-  for (int r = 0; r < 4; r++) {
-    float p = fmodf(ctx.t * speed * 0.3f + r * 0.25f, 1.0f);
-    ctx.ring(cx, cy, 10.0f + p * min(ctx.width, ctx.height) * 0.48f, 1.8f, primaryColor);
-  }
-
-  if (kaleidoscopeFx) {
-    ctx.kaleidoscope(6, 0.8f + ctx.mid);
-  }
-  if (ctx.flux > 0.25f) {
-    ctx.glitchSlices(ctx.flux * 0.8f);
-  }
-  ctx.scanlines(0.20f);
-}`,
-    presets: [
-      {
-        id: "preset-neon-cyber",
-        name: "Néon Cyber",
-        values: {
-          speed: 4.0,
-          spokes: 10,
-          primaryColor: "#00F0FF",
-          secondaryColor: "#FF1B24",
-          kaleidoscopeFx: true,
-        },
-      },
-      {
-        id: "preset-blood-overdrive",
-        name: "Blood Overdrive",
-        values: {
-          speed: 9.5,
-          spokes: 16,
-          primaryColor: "#FF3940",
-          secondaryColor: "#FFFFFF",
-          kaleidoscopeFx: true,
-        },
-      },
-    ],
-  },
-  {
-    id: "doc-tiktok-karaoke",
-    name: "tiktok_karaoke_hud.cpp",
-    language: "cpp",
-    updatedAt: "2026-11-16T00:00:00Z",
-    activePresetId: "preset-tiktok-anaglyph",
-    code: `// Overlay Paroles Whisper/LRC adaptatif 9:16 TikTok & 16:9 YouTube
-// @param float fontSize = 13.0 [8.0, 22.0]
-// @param float yPosRatio = 0.70 [0.15, 0.90]
-// @color cyanLayer = "#00E5FF"
-// @color redLayer = "#FF1B24"
-// @toggle showProgressBar = true
-void renderAnarchyFrame(AnarchyCtx& ctx) {
-  float cx = ctx.width * 0.5f;
-  float cy = ctx.height * yPosRatio;
-
-  ctx.zoom(1.0f + ctx.bass * 0.10f);
-
-  if (showProgressBar) {
-    float barW = (ctx.width - 20.0f) * ctx.lyricProgress;
-    ctx.rect(10, ctx.height - 16, ctx.width - 20, 4, "#15161A");
-    ctx.rect(10, ctx.height - 16, barW, 4, redLayer);
-  }
-
-  ctx.text(ctx.lyricSection, 10, 20, cyanLayer, 10);
-
-  if (!ctx.lyricWord.empty()) {
-    float estW = ctx.lyricWord.length * (fontSize * 0.62f);
-    float x = clamp(cx - estW * 0.5f, 8.0f, ctx.width - 32.0f);
-    ctx.rect(x - 6, cy - fontSize, estW + 12, fontSize + 8, "#000000");
-    ctx.text(ctx.lyricWord, x - 1.5f, cy, redLayer, (int)fontSize);
-    ctx.text(ctx.lyricWord, x + 1.5f, cy, cyanLayer, (int)fontSize);
-    ctx.text(ctx.lyricWord, x, cy, "#FFFFFF", (int)fontSize);
-  }
-
-  if (ctx.lyricLine.length > 0) {
-    ctx.text(ctx.lyricLine, 10, ctx.height - 26, "#D4D4D8", 9);
-  }
-}`,
-    presets: [
-      {
-        id: "preset-tiktok-anaglyph",
-        name: "TikTok Anaglyph",
-        values: {
-          fontSize: 13.0,
-          yPosRatio: 0.70,
-          cyanLayer: "#00E5FF",
-          redLayer: "#FF1B24",
-          showProgressBar: true,
-        },
-      },
-      {
-        id: "preset-clean-hud",
-        name: "Subtitles Clean",
-        values: {
-          fontSize: 11.0,
-          yPosRatio: 0.80,
-          cyanLayer: "#FFFFFF",
-          redLayer: "#00E5FF",
-          showProgressBar: false,
-        },
-      },
-    ],
-  },
-  {
-    id: "doc-lowpoly-3d-js",
-    name: "lowpoly_3d_js.js",
-    language: "js",
-    updatedAt: "2026-11-16T00:00:00Z",
-    activePresetId: "preset-cyber-wireframe",
-    code: DEFAULT_JS_SHADER_CODE,
-    presets: [
-      {
-        id: "preset-cyber-wireframe",
-        name: "Cyber Wireframe",
-        values: {
-          rotSpeed: 1.4,
-          fov: 175.0,
-          edgeColor: "#00F0FF",
-          accentColor: "#FF1B24",
-          wireframeGlow: true,
-        },
-      },
-      {
-        id: "preset-blood-lowpoly",
-        name: "Blood Low-Poly",
-        values: {
-          rotSpeed: 3.2,
-          fov: 215.0,
-          edgeColor: "#FF3940",
-          accentColor: "#D4FF33",
-          wireframeGlow: true,
+          pairs: 6,
+          speed: 5.5,
+          towerBase: "#121A16",
+          neonAccent: "#D4FF33",
+          wireframeTowers: true,
         },
       },
     ],
@@ -355,10 +417,10 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
 
 export const DEFAULT_CPP_SCENES: CppSceneRule[] = [
   {
-    id: "scene-intro",
-    label: "INTRO // Bunker",
-    documentId: "doc-brutalist-grid",
-    presetId: "preset-bunker",
+    id: "scene-intro-dojo-3d",
+    label: "INTRO // Dojo Néon 3D",
+    documentId: "doc-dojo-neon-3d",
+    presetId: "preset-dojo-cyan",
     routingMode: "section",
     sectionTag: "INTRO",
     baseSceneId: "industrial-city",
@@ -366,10 +428,10 @@ export const DEFAULT_CPP_SCENES: CppSceneRule[] = [
     transitionDuration: 0.45,
   },
   {
-    id: "scene-main",
-    label: "MAIN // Scéno PS2",
-    documentId: "doc-sceno-openhub",
-    presetId: "preset-anarchy-3d",
+    id: "scene-main-dragon-3d",
+    label: "MAIN // Enter the Dragon 3D",
+    documentId: "doc-enter-dragon-3d",
+    presetId: "preset-dragon-gold",
     routingMode: "section",
     sectionTag: "MAIN",
     baseSceneId: "ps1-nightmare",
@@ -377,10 +439,10 @@ export const DEFAULT_CPP_SCENES: CppSceneRule[] = [
     transitionDuration: 0.25,
   },
   {
-    id: "scene-drop",
-    label: "DROP // Katana",
-    documentId: "doc-cyber-katana",
-    presetId: "preset-neon-cyber",
+    id: "scene-drop-katana-3d",
+    label: "DROP // Katana Overdrive 3D",
+    documentId: "doc-katana-overdrive-3d",
+    presetId: "preset-katana-vortex",
     routingMode: "section",
     sectionTag: "DROP",
     baseSceneId: "techno-therapy",
@@ -388,10 +450,10 @@ export const DEFAULT_CPP_SCENES: CppSceneRule[] = [
     transitionDuration: 0.4,
   },
   {
-    id: "scene-refrain",
-    label: "REFRAIN // Karaoké",
-    documentId: "doc-tiktok-karaoke",
-    presetId: "preset-tiktok-anaglyph",
+    id: "scene-refrain-nightmare-3d",
+    label: "REFRAIN // PS2 Nightmare 3D",
+    documentId: "doc-ps2-nightmare-3d",
+    presetId: "preset-nightmare-courtyard",
     routingMode: "section",
     sectionTag: "REFRAIN",
     baseSceneId: "rave-dungeon",
@@ -399,10 +461,10 @@ export const DEFAULT_CPP_SCENES: CppSceneRule[] = [
     transitionDuration: 0.35,
   },
   {
-    id: "scene-outro-js",
-    label: "OUTRO // 3D JS",
-    documentId: "doc-lowpoly-3d-js",
-    presetId: "preset-cyber-wireframe",
+    id: "scene-outro-void-3d",
+    label: "OUTRO // Digital Void 3D",
+    documentId: "doc-digital-void-3d",
+    presetId: "preset-void-monoliths",
     routingMode: "section",
     sectionTag: "OUTRO",
     baseSceneId: "digital-void",
@@ -414,12 +476,12 @@ export const DEFAULT_CPP_SCENES: CppSceneRule[] = [
 export function createDefaultCppWorkspace(): CppWorkspaceState {
   return {
     version: 1,
-    enabled: false,
+    enabled: true,
     activeDocumentId: DEFAULT_CPP_DOCUMENTS[0].id,
     manualSceneId: null,
     documents: DEFAULT_CPP_DOCUMENTS.map((d) => ({
       ...d,
-      language: d.language ?? "cpp",
+      language: d.language ?? "js",
       presets: d.presets.map((p) => ({ ...p, values: { ...p.values } })),
     })),
     scenes: DEFAULT_CPP_SCENES.map((s) => ({ ...s })),

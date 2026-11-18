@@ -110,54 +110,58 @@ Le module **Paroles & Micro** permet de synchroniser du texte et des sections de
 
 ---
 
-## 8. Architecture Modulaire JS Natif (`.js`) & C++ (`.cpp`) (`/anarchy-visual-design/editeur`)
+## 8. Moteur 3D Unifié & Presets JS Natif (`.js`) / C++ (`.cpp`) (`/anarchy-visual-design/editeur`)
 
-Le moteur temps réel (60 FPS) coexiste en **JavaScript Natif (`.js`)** et **C++ (`.cpp`)** autour de **4 briques interconnectées** :
+Le moteur graphique 3D PS2/Low-Poly (caméra perspective LookAt, éclairage Lambert directionnel + ambiant, brouillard de profondeur, dithering Bayer 4×4 et ombres portées) est désormais **l'unique moteur graphique du Studio**, programmable directement en **JavaScript Natif (`.js`)** et en **C++ (`.cpp`)** à 60 FPS :
 
-1. **Mode JavaScript Natif (`language: 'js'`) — Fast-Path V8** : contourne intégralement le transpileur C++ dès que `JS NATIF` est sélectionné (ou détecté automatiquement lors du collage d'un script `function renderAnarchyFrame(ctx)` / `const` / `let` / `=>`). Compile une seule fois par édition, expose `Math.*`, conserve les variables d'état déclarées hors `renderAnarchyFrame(ctx)` entre les frames, et inclut un starter 3D low-poly (`lowpoly_3d_js.js`).
-2. **Transpileur C++ → JS blindé** : supporte `#include <cmath>`, `using namespace std;`, `AnarchyCtx& ctx` / `const AnarchyCtx& ctx` / `AnarchyCtx ctx`, `0.5f`, casts `(float)` / `static_cast<...>`, tableaux `float radii[4] = {...};`, lambdas `[&](...) { ... }`, fonctions utilitaires, `std::sin/cos/min/max/abs/pow/fmod` et `sinf/cosf/fabsf/fmodf/powf`, avec signalement d'erreur à la ligne exacte sans crasher `requestAnimationFrame`.
-3. **Gestionnaire de Documents `.js` & `.cpp` + Scènes Mixtes** : créez, renommez, dupliquez, importez et exportez plusieurs fichiers `.js` et `.cpp` (`sceno_openhub_ps2.cpp`, `brutalist_grid.cpp`, `cyber_katana_drop.cpp`, `tiktok_karaoke_hud.cpp`, `lowpoly_3d_js.js`) et routez-les librement par section LRC/Whisper, créneau temporel ou pad VJ avec transitions (`Cut`, `Fondu`, `Glitch`).
-4. **Uniforms UI (`@param` / `@color` / `@toggle`) & Presets** : annotez vos variables dans le code JS ou C++ pour générer automatiquement sliders, color pickers et toggles injectés en live à 60 FPS via `ctx.params` et variables locales sans recompiler, et enregistrez des presets nommés par document.
+1. **Panneau Unifié de Presets 3D Multi-Scènes** : remplace l'ancienne double interface et supprime tous les presets 2D filaires génériques au profit des Presets 3D officiels **`PS2 // Enter the Dragon (5 Scènes 3D)`** (`01_dojo_neon_3d.js`, `02_enter_the_dragon_3d.js`, `03_katana_overdrive_3d.js`, `04_ps2_nightmare_3d.cpp`, `05_digital_void_3d.cpp`) et **`Psy-Acid 145 BPM (5 Scènes 3D)`**, ainsi que du générateur **`🎲 Générer un Pack 3D (5 Scènes)`**.
+2. **Mode JavaScript Natif (`language: 'js'`) — Fast-Path V8** : contourne intégralement le transpileur C++ dès que `JS NATIF` est sélectionné (ou détecté automatiquement lors du collage d'un script `function renderAnarchyFrame(ctx)`). Compile une seule fois par édition et conserve les variables d'état hors `renderAnarchyFrame(ctx)` entre les frames sans fuite mémoire.
+3. **Transpileur C++ → JS blindé** : supporte `#include <cmath>`, `using namespace std;`, `AnarchyCtx& ctx`, `0.5f`, casts `(float)`, tableaux `float radii[4] = {...};`, lambdas `[&](...) { ... }`, `std::sin/cos/min/max/abs/pow/fmod` et `sinf/cosf/fabsf/fmodf/powf`, avec signalement d'erreur à la ligne exacte sans crasher `requestAnimationFrame`.
+4. **Uniforms UI (`@param` / `@color` / `@toggle`) & Isolation des 10 Faders** : le chargement ou l'import d'un Preset 3D ne réinitialise jamais les 10 faders ni l'horloge BPM (rotation toutes les 2 ou 4 mesures).
 
-```cpp
-// @param float speed = 4.0 [0.0, 20.0]
-// @color primaryColor = "#00F0FF"
-// @toggle enableGlitch = true
-#include <cmath>
+```js
+// @param float runSpeed = 3.8 [0.5, 12.0]
+// @color neonColor = "#00F0FF"
+// @color katanaColor = "#FF1B24"
 
-void renderAnarchyFrame(AnarchyCtx& ctx) {
-  float pulse = 1.0f + ctx.bass * 0.25f;
-  ctx.zoom(pulse);
-  ctx.grid(20, primaryColor, speed * 10.0f);
+let spin = 0;
 
-  if (ctx.lyricSection == "DROP") {
-    ctx.ring(ctx.width * 0.5f, ctx.height * 0.5f, 20.0f + ctx.bass * 55.0f, 2.5f, "#FF1B24");
-  }
-  if (enableGlitch && ctx.flux > 0.30f) {
-    ctx.glitchSlices(ctx.flux * 0.7f);
-  }
-  ctx.scanlines(0.20f);
+function renderAnarchyFrame(ctx) {
+  spin += 0.025 * (1 + ctx.bass);
+  ctx.setCamera(Math.sin(ctx.t * 0.7) * 0.85, 1.8, -5.6, 0, 1.0, 12, 62);
+  ctx.setFog("#0A0D18", 3.5, 22);
+  ctx.setAmbientLight("#1A2238", 0.38 + ctx.rms * 0.25);
+  ctx.setDirectionalLight(-0.4, 1.0, -0.5, neonColor, 0.9 + ctx.treble * 0.45);
+
+  ctx.drawTerrain3D(runSpeed * (1 + ctx.bass * 0.4), 1.1 + ctx.bass * 0.6, "#101628", neonColor, "canyon");
+  ctx.drawCharacter3D(0, 0, 3.6, ctx.t * runSpeed * 2.2, "katana", "#E4E8F2", katanaColor);
+  ctx.drawParticles3D(42, 12, runSpeed * 1.4, neonColor, 2.2);
+  ctx.scanlines(0.18);
 }
 ```
 
-> **Astuce Mode C++ Pur** : appelez `ctx.clear("#08090C");` (ou utilisez le toggle `pureCppMode`) au début de `renderAnarchyFrame` pour masquer la scène PS1/PS2 de base et dessiner à 100% depuis votre code C++.
-
 ### Variables disponibles sur `ctx`
-- **Temps & Rythme** : `ctx.t` (secondes), `ctx.bpm`, `ctx.beat` (index entier), `ctx.beatPhase` (`0.0` → `1.0`), `ctx.sceneIndex` (`0` → `4`).
+- **Temps & Rythme** : `ctx.t` (secondes), `ctx.bpm`, `ctx.beat` (index entier), `ctx.beatPhase` (`0.0` → `1.0`), `ctx.sceneIndex`.
 - **Audio Temps Réel (`0.0` → `1.0`)** : `ctx.bass`, `ctx.mid`, `ctx.treble`, `ctx.rms`, `ctx.flux` (transitoires / claps).
-- **Dimensions Dynamiques** : `ctx.width`, `ctx.height` (`320×180` en `16:9`, `180×320` en `9:16`, `240×300` en `4:5`, `240×240` en `1:1`). Utilisez toujours `ctx.width` et `ctx.height` pour rester compatible TikTok & YouTube !
-- **Scénario & Paroles** : `ctx.lyricLine` (ligne active), `ctx.lyricWord` (mot actif), `ctx.lyricProgress` (`0.0` → `1.0`), `ctx.lyricSection` (ex: `"MAIN"`, `"INTRO"`, `"DROP"`, `"REFRAIN"`).
-- **Faders Live (Isolation stricte)** : `ctx.intensity`, `ctx.strobe`, `ctx.kickBlackout`, `ctx.psychedelic`, `ctx.colorMorph`, `ctx.anaglyph`, `ctx.cameraZoom`, `ctx.pendulumSwing`. Le chargement ou l'import d'un `AnarchyPreset` (nombre libre de scènes `.js` ou `.cpp`, ex: `"Default — Anarchy Pack"`) ne réinitialise jamais les 10 faders ni l'horloge BPM (rotation automatique toutes les 2 ou 4 mesures).
-- **Uniforms UI** : chaque variable déclarée via `// @param`, `// @color` ou `// @toggle` est directement accessible par son nom dans le code C++/JS et via `ctx.params`.
+- **Dimensions Dynamiques** : `ctx.width`, `ctx.height` (`320×180` en `16:9`, `180×320` en `9:16`, `240×300` en `4:5`, `240×240` en `1:1`).
+- **Scénario & Paroles** : `ctx.lyricLine`, `ctx.lyricWord`, `ctx.lyricProgress` (`0.0` → `1.0`), `ctx.lyricSection` (`"INTRO"`, `"DROP"`, `"REFRAIN"`...).
+- **10 Faders Live (Isolation stricte)** : `ctx.intensity`, `ctx.strobe`, `ctx.kickBlackout`, `ctx.psychedelic`, `ctx.colorMorph`, `ctx.anaglyph`, `ctx.cameraZoom`, `ctx.pendulumSwing`.
+- **Uniforms UI** : chaque variable déclarée via `// @param`, `// @color` ou `// @toggle` est accessible directement par son nom et via `ctx.params`.
 
-### Fonctions graphiques sur `ctx`
-- `ctx.clear(color)` / `ctx.background(r, g, b, alpha)` / `ctx.tint(color, alpha)`
-- `ctx.rgb(r, g, b)` / `ctx.rgba(r, g, b, a)`
-- `ctx.circle(x, y, radius, color, fill)` / `ctx.ring(x, y, radius, lineWidth, color)`
-- `ctx.line(x1, y1, x2, y2, lineWidth, color)` / `ctx.rect(x, y, w, h, color)`
-- `ctx.grid(spacing, color, scrollSpeed)`
-- `ctx.kaleidoscope(segments, speed)` / `ctx.glitchSlices(amount)` / `ctx.scanlines(alpha)` / `ctx.invert(amount)` / `ctx.zoom(scale)`
-- `ctx.text(str, x, y, color, size)`
+### Primitives 3D PS2/Low-Poly & Surcouches 2D sur `ctx`
+- **Caméra & Environnement 3D** :
+  - `ctx.setCamera(x, y, z, targetX, targetY, targetZ, fov)`
+  - `ctx.setFog(color, near, far)`
+  - `ctx.setAmbientLight(color, intensity)`
+  - `ctx.setDirectionalLight(x, y, z, color, intensity)`
+- **Objets, Terrains, Personnages & Particules 3D** :
+  - `ctx.drawTerrain3D(speed, amplitude, color, gridColor, style)` (`"canyon" | "mountains" | "waves" | "dungeon" | "corridor"`)
+  - `ctx.drawBox3D(x, y, z, w, h, d, rotX, rotY, rotZ, color, emissiveColor, wireframe)`
+  - `ctx.drawCharacter3D(x, y, z, animPhase, style, primaryColor, accentColor)` (`"katana" | "runner" | "cyborg"`)
+  - `ctx.drawParticles3D(count, spread, speed, color, size)`
+- **Surcouches HUD 2D & Post-FX (appliqués par-dessus la 3D)** :
+  - `ctx.text(str, x, y, color, size)` / `ctx.glitchSlices(amount)` / `ctx.scanlines(alpha)` / `ctx.invert(amount)` / `ctx.zoom(scale)` / `ctx.tint(color, alpha)`
+  - `ctx.circle(x, y, radius, color, fill)` / `ctx.ring(x, y, radius, lineWidth, color)` / `ctx.line(x1, y1, x2, y2, lineWidth, color)` / `ctx.rect(x, y, w, h, color)` / `ctx.grid(spacing, color, scrollSpeed)` / `ctx.kaleidoscope(segments, speed)`
 - Fonctions math C++ standard disponibles : `sin`, `cos`, `tan`, `abs`, `min`, `max`, `pow`, `sqrt`, `floor`, `ceil`, `round`, `clamp`, `fmod`, `sinf`, `cosf`, `fabsf`, `fmodf`, `powf`, `PI`.
 
 > Le code C++ est transpilé localement dans un bac à sable sécurisé (les identifiants DOM/réseau tels que `window`, `document`, `fetch`, `localStorage`, etc. sont bloqués) et synchronisé entre `/anarchy-visual-design/editeur` et `/anarchy-visual-design`.

@@ -9,7 +9,8 @@ import {
   DEFAULT_ANARCHY_PRESETS,
   DEFAULT_NEW_CPP_SCENE_CODE,
   DEFAULT_NEW_JS_SCENE_CODE,
-  JS_CYBER_TRIO_PACK,
+  PSY_ACID_145_3D_PACK,
+  generateProcedural3DPreset,
   parseAnarchyPresetFromCode,
   type AnarchyPreset,
   type AnarchyScene,
@@ -25,11 +26,9 @@ interface AnarchyPresetPanelProps {
   activePreset: AnarchyPreset;
   activeSceneIndex: number;
   manualSceneLock: boolean;
-  presetEnabled: boolean;
   bpm: number;
   autoSceneSwitchBeats: number;
   runtimeError: string;
-  onTogglePresetEnabled: (enabled: boolean) => void;
   onSelectPreset: (presetId: string) => void;
   onSelectSceneIndex: (index: number, lockManual: boolean) => void;
   onChangeCadenceBeats: (beats: number) => void;
@@ -43,11 +42,9 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
   activePreset,
   activeSceneIndex,
   manualSceneLock,
-  presetEnabled,
   bpm,
   autoSceneSwitchBeats,
   runtimeError,
-  onTogglePresetEnabled,
   onSelectPreset,
   onSelectSceneIndex,
   onChangeCadenceBeats,
@@ -68,6 +65,7 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
   const [importError, setImportError] = useState<string>("");
   const [feedback, setFeedback] = useState<string>("");
   const manualForceCppRef = useRef<boolean>(false);
+  const genSeedCounterRef = useRef<number>(701);
 
   const safeSceneIdx =
     activePreset.scenes.length > 0
@@ -111,7 +109,7 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
     const ext = lang === "js" ? "js" : "cpp";
     const newScene: AnarchyScene = {
       id: `scene-${Date.now()}-${nextIdx}`,
-      name: `${String(nextIdx).padStart(2, "0")}_scene_${lang}.${ext}`,
+      name: `${String(nextIdx).padStart(2, "0")}_scene_3d_${lang}.${ext}`,
       language: lang,
       code:
         lang === "js" ? DEFAULT_NEW_JS_SCENE_CODE : DEFAULT_NEW_CPP_SCENE_CODE,
@@ -123,7 +121,7 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
     onSelectSceneIndex(activePreset.scenes.length, true);
     setShowSceneEditor(true);
     setFeedback(
-      `Scène "${newScene.name}" ajoutée au Preset (${activePreset.scenes.length + 1} scènes).`
+      `Scène 3D "${newScene.name}" ajoutée au Preset (${activePreset.scenes.length + 1} scènes).`
     );
   };
 
@@ -143,7 +141,7 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
       return { ...curr, scenes: next };
     });
     onSelectSceneIndex(safeSceneIdx + 1, true);
-    setFeedback(`Scène dupliquée : "${dup.name}".`);
+    setFeedback(`Scène 3D dupliquée : "${dup.name}".`);
   };
 
   const handleMoveScene = (delta: -1 | 1) => {
@@ -186,6 +184,16 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
     }));
   };
 
+  const handleGenerateNew3DPresetPack = () => {
+    genSeedCounterRef.current += 37;
+    const seed = (Date.now() + genSeedCounterRef.current) % 10000;
+    const generated = generateProcedural3DPreset(seed);
+    onInstallPreset(generated);
+    setFeedback(
+      `🎲 Pack 3D "${generated.name}" généré (5 scènes 3D éditables) — Faders & BPM (${bpm} BPM) intacts !`
+    );
+  };
+
   const handleValidateAndImportPreset = () => {
     setImportError("");
     const { preset, error } = parseAnarchyPresetFromCode(
@@ -203,39 +211,31 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
     setImportPresetAuthor("");
     setShowImportExportModal(false);
     setFeedback(
-      `✅ Preset "${preset.name}" installé (${preset.scenes.length} scène${preset.scenes.length > 1 ? "s" : ""}) — Faders & BPM (${bpm} BPM) conservés intacts !`
+      `✅ Preset 3D "${preset.name}" installé (${preset.scenes.length} scène${preset.scenes.length > 1 ? "s" : ""}) — Faders & BPM (${bpm} BPM) conservés intacts !`
     );
   };
 
   return (
     <>
       <Card
-        moduleTitle="ANARCHY_PRESETS // PACKS DYNAMIQUES JS NATIF & C++ (MULTI-SCÈNES)"
-        moduleMeta={`${activePreset.name} · ${activePreset.scenes.length} SCÈNE${activePreset.scenes.length > 1 ? "S" : ""} · ${bpm} BPM (FADERS ISOLÉS)`}
-        activeIndicator={presetEnabled}
+        moduleTitle="PRESETS 3D // PACKS DYNAMIQUES MULTI-SCÈNES (JS NATIF & C++)"
+        moduleMeta={`${activePreset.name} · ${activePreset.scenes.length} SCÈNE${activePreset.scenes.length > 1 ? "S" : ""} 3D · ${bpm} BPM (FADERS ISOLÉS)`}
+        activeIndicator
       >
         <div className="space-y-3 font-mono text-xs">
-          {/* Barre supérieure : Sélecteur de Preset + Cadence 2/4 mesures + Boutons Modales */}
+          {/* Barre supérieure unifiée : Sélecteur de Preset 3D + Générateur 3D + Cadence 2/4 mesures + Modales */}
           <div className="flex flex-wrap items-center justify-between gap-2">
             <div className="flex flex-wrap items-center gap-2">
-              <Button
-                type="button"
-                id="btn-toggle-anarchy-preset-engine"
-                variant={presetEnabled ? "comic" : "primary"}
-                size="sm"
-                onClick={() => onTogglePresetEnabled(!presetEnabled)}
-              >
-                {presetEnabled
-                  ? "🟢 PRESET JS/C++ ACTIF"
-                  : "▶ ACTIVER PRESET JS/C++"}
-              </Button>
+              <span className="px-2.5 py-1.5 rounded border-2 border-black bg-brand-red text-white font-bold text-[11px] shadow-comic-sm">
+                🟢 MOTEUR 3D UNIFIÉ
+              </span>
 
               <label htmlFor="anarchy-preset-select" className="sr-only">
-                Sélectionner un Preset de scènes
+                Sélectionner un Preset 3D de scènes
               </label>
               <select
                 id="anarchy-preset-select"
-                aria-label="Sélectionner un Preset de scènes"
+                aria-label="Sélectionner un Preset 3D de scènes"
                 value={activePreset.id}
                 onChange={(e) => onSelectPreset(e.target.value)}
                 className="px-2.5 py-1.5 rounded border-2 border-black bg-brand-white font-mono text-xs font-bold"
@@ -246,6 +246,16 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
                   </option>
                 ))}
               </select>
+
+              <Button
+                type="button"
+                id="btn-generate-3d-preset-pack"
+                variant="comic"
+                size="sm"
+                onClick={handleGenerateNew3DPresetPack}
+              >
+                🎲 Générer un Pack 3D (5 Scènes)
+              </Button>
 
               {!defaultIds.has(activePreset.id) && (
                 <button
@@ -674,19 +684,19 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
                   <div>
                     <div className="flex items-center justify-between mb-1">
                       <label className="text-[10px] font-bold uppercase text-neutral-600">
-                        Bloc JSON du Preset (scenes.length &gt;= 1) ou Script
-                        JS/C++
+                        Bloc JSON du Preset 3D (scenes.length &gt;= 1) ou Script
+                        3D JS/C++
                       </label>
                       <button
                         type="button"
                         onClick={() =>
                           setImportCodeText(
-                            JSON.stringify(JS_CYBER_TRIO_PACK, null, 2)
+                            JSON.stringify(PSY_ACID_145_3D_PACK, null, 2)
                           )
                         }
                         className="text-[10px] font-bold text-brand-red underline"
                       >
-                        Charger un exemple 3 scènes JS
+                        Charger un exemple 5 scènes 3D
                       </button>
                     </div>
                     <textarea
@@ -694,7 +704,7 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
                       rows={11}
                       value={importCodeText}
                       onChange={(e) => setImportCodeText(e.target.value)}
-                      placeholder={'{\n  "name": "Mon Pack Custom",\n  "scenes": [\n    {\n      "id": "s1",\n      "name": "01_tunnel.js",\n      "language": "js",\n      "code": "function renderAnarchyFrame(ctx) { ... }"\n    }\n  ]\n}'}
+                      placeholder={'{\n  "name": "Mon Pack 3D Custom",\n  "scenes": [\n    {\n      "id": "s1",\n      "name": "01_dojo_3d.js",\n      "language": "js",\n      "code": "function renderAnarchyFrame(ctx) { ctx.drawTerrain3D(3.8, 1.1, \'#101628\', \'#00F0FF\', \'canyon\'); }"\n    }\n  ]\n}'}
                       className="w-full p-3 rounded-lg border-2 border-black bg-[#0B0D13] text-amber-200 font-mono text-[11px]"
                     />
                   </div>
@@ -746,10 +756,10 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
             <div className="px-4 py-3 bg-brand-black text-white flex items-center justify-between border-b-2 border-black">
               <div className="flex items-center gap-2">
                 <span className="px-2 py-0.5 rounded bg-amber-300 text-black font-bold text-[10px]">
-                  DOC CRÉATEURS // JS NATIF &amp; C++
+                  DOC CRÉATEURS 3D // JS NATIF &amp; C++
                 </span>
                 <span className="font-bold text-sm">
-                  CRÉER UN PRESET MULTI-SCÈNES POUR OPEN HUB
+                  CRÉER UN PRESET 3D MULTI-SCÈNES POUR OPEN HUB
                 </span>
               </div>
               <button
@@ -765,35 +775,33 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
               {/* 1. Architecture & Isolation Faders / Horloge BPM */}
               <div className="p-3 rounded-lg bg-brand-pearl border-2 border-black space-y-1.5 font-sans text-xs text-neutral-800">
                 <div className="font-mono font-bold text-brand-black uppercase">
-                  1. Isolation des Faders, Boucle 2 / 4 Mesures &amp; Règle
-                  Multi-Ratio
+                  1. Moteur 3D Unifié, Isolation des Faders &amp; Boucle 2 / 4
+                  Mesures
                 </div>
                 <p>
                   Un <strong>AnarchyPreset</strong> contient un nombre libre de
-                  scènes (<code>scenes.length &gt;= 1</code>, en{" "}
+                  scènes 3D (<code>scenes.length &gt;= 1</code>, en{" "}
                   <code>&quot;js&quot;</code> natif Fast-Path V8 ou{" "}
                   <code>&quot;cpp&quot;</code>). Le chargement d&apos;un Preset{" "}
-                  <strong>ne réinitialise jamais les faders ni le BPM</strong> :
+                  <strong>ne réinitialise jamais les 10 faders ni le BPM</strong> :
                   l&apos;horloge musicale fait tourner automatiquement toutes
-                  les scènes du Preset toutes les{" "}
+                  les scènes 3D du Preset toutes les{" "}
                   <strong>2 mesures (8 temps)</strong> ou{" "}
                   <strong>4 mesures (16 temps)</strong>.
                 </p>
                 <p>
                   <strong>Adaptation Multi-Ratio (16:9, 9:16, 4:5, 1:1) :</strong>{" "}
-                  calculez toujours vos positions à partir de{" "}
-                  <code>ctx.width</code> et <code>ctx.height</code> (ex:{" "}
-                  <code>const cx = ctx.width * 0.5; const cy = ctx.height * 0.5;</code>
-                  ) pour que chaque scène s&apos;adapte instantanément aux
-                  formats TikTok/Reels, Instagram et YouTube.
+                  la caméra 3D (<code>ctx.setCamera</code>) et les HUD 2D (
+                  <code>ctx.width</code>, <code>ctx.height</code>) s&apos;adaptent
+                  automatiquement aux formats TikTok/Reels, Instagram et YouTube.
                 </p>
               </div>
 
-              {/* 2. Propriétés de ctx & Méthodes de rendu */}
+              {/* 2. Propriétés de ctx & Méthodes du Moteur 3D */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1.5">
                   <div className="font-bold text-brand-red">
-                    PROPRIÉTÉS TEMPS RÉEL DE ctx
+                    PROPRIÉTÉS TEMPS RÉEL DE ctx (AUDIO &amp; 10 FADERS)
                   </div>
                   <ul className="space-y-1 text-[11px] text-neutral-800">
                     <li>
@@ -828,49 +836,65 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
 
                 <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1.5">
                   <div className="font-bold text-brand-black">
-                    MÉTHODES DE RENDU &amp; POST-FX (ctx.*)
+                    MÉTHODES 3D PS2/LOW-POLY &amp; POST-FX (ctx.*)
                   </div>
                   <ul className="space-y-1 text-[11px] text-neutral-800">
                     <li>
-                      <code>ctx.clear(color)</code> — Efface le fond (ou omettre
-                      pour dessiner en surcouche du moteur 3D)
+                      <code>ctx.setCamera(x, y, z, tx, ty, tz, fov)</code> &amp;{" "}
+                      <code>ctx.setFog(color, near, far)</code>
                     </li>
                     <li>
-                      <code>ctx.tint(color, alpha)</code> /{" "}
-                      <code>ctx.zoom(scale)</code>
+                      <code>ctx.setAmbientLight(color, intensity)</code> &amp;{" "}
+                      <code>ctx.setDirectionalLight(x, y, z, color, intensity)</code>
                     </li>
                     <li>
-                      <code>ctx.circle(x, y, r, color, fill)</code> /{" "}
-                      <code>ctx.ring(x, y, r, lw, color)</code>
+                      <code>
+                        ctx.drawTerrain3D(speed, amp, color, gridColor, style)
+                      </code>{" "}
+                      (<code>&quot;canyon&quot;</code>,{" "}
+                      <code>&quot;mountains&quot;</code>,{" "}
+                      <code>&quot;waves&quot;</code>,{" "}
+                      <code>&quot;dungeon&quot;</code>,{" "}
+                      <code>&quot;corridor&quot;</code>)
                     </li>
                     <li>
-                      <code>ctx.line(x1, y1, x2, y2, lw, color)</code> /{" "}
-                      <code>ctx.rect(x, y, w, h, color)</code>
+                      <code>
+                        ctx.drawBox3D(x, y, z, w, h, d, rx, ry, rz, color,
+                        emissive, wireframe)
+                      </code>
                     </li>
                     <li>
-                      <code>ctx.grid(spacing, color, scrollSpeed)</code> /{" "}
-                      <code>ctx.text(str, x, y, color, size)</code>
+                      <code>
+                        ctx.drawCharacter3D(x, y, z, animPhase, style, primary,
+                        accent)
+                      </code>{" "}
+                      (<code>&quot;katana&quot;</code>,{" "}
+                      <code>&quot;runner&quot;</code>,{" "}
+                      <code>&quot;cyborg&quot;</code>)
                     </li>
                     <li>
-                      <code>ctx.kaleidoscope(segments, speed)</code> /{" "}
-                      <code>ctx.glitchSlices(amount)</code>
+                      <code>
+                        ctx.drawParticles3D(count, spread, speed, color, size)
+                      </code>
                     </li>
                     <li>
-                      <code>ctx.scanlines(alpha)</code> /{" "}
-                      <code>ctx.invert(amount)</code> /{" "}
-                      <code>ctx.rgb(r,g,b)</code> /{" "}
-                      <code>ctx.rgba(r,g,b,a)</code>
+                      HUD &amp; Post-FX : <code>ctx.text(...)</code>,{" "}
+                      <code>ctx.glitchSlices(amt)</code>,{" "}
+                      <code>ctx.scanlines(alpha)</code>,{" "}
+                      <code>ctx.invert(amt)</code>,{" "}
+                      <code>ctx.zoom(scale)</code>,{" "}
+                      <code>ctx.tint(color, alpha)</code>
                     </li>
                   </ul>
                 </div>
               </div>
 
-              {/* 3. Prompt IA prêt à copier */}
+              {/* 3. Prompt IA 3D prêt à copier */}
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-bold text-brand-black uppercase">
-                    🤖 PROMPT IA PRÊT À COPIER (GÉNÉRER UN PRESET MULTI-SCÈNES EN
-                    JS NATIF)
+                    🤖 PROMPT IA 3D PRÊT À COPIER (GÉNÉRER UN PRESET 3D
+                    MULTI-SCÈNES EN JS NATIF)
                   </span>
                   <Button
                     type="button"
@@ -881,13 +905,13 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
                         ?.writeText(AI_ANARCHY_PRESET_PROMPT)
                         .then(() =>
                           setFeedback(
-                            "📋 Prompt IA Preset copié ! Colle-le dans ChatGPT / Claude puis importe le JSON généré."
+                            "📋 Prompt IA Preset 3D copié ! Colle-le dans ChatGPT / Claude puis importe le JSON généré."
                           )
                         )
                         .catch(() => {});
                     }}
                   >
-                    📋 COPIER LE PROMPT IA
+                    📋 COPIER LE PROMPT IA 3D
                   </Button>
                 </div>
                 <pre className="p-3 rounded-lg border-2 border-black bg-[#0B0D13] text-amber-200 text-[11px] overflow-x-auto whitespace-pre-wrap max-h-48">
@@ -895,11 +919,11 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
                 </pre>
               </div>
 
-              {/* 4. Exemple de Preset JSON complet */}
+              {/* 4. Exemple de Preset 3D JSON complet */}
               <div className="space-y-1.5">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <span className="font-bold text-brand-black uppercase">
-                    📦 EXEMPLE DE PRESET JSON COMPLET (3 SCÈNES JS NATIF)
+                    📦 EXEMPLE DE PRESET 3D JSON COMPLET (5 SCÈNES 3D)
                   </span>
                   <Button
                     type="button"
@@ -907,18 +931,20 @@ export const AnarchyPresetPanel: React.FC<AnarchyPresetPanelProps> = ({
                     size="sm"
                     onClick={() => {
                       navigator.clipboard
-                        ?.writeText(JSON.stringify(JS_CYBER_TRIO_PACK, null, 2))
+                        ?.writeText(
+                          JSON.stringify(PSY_ACID_145_3D_PACK, null, 2)
+                        )
                         .then(() =>
-                          setFeedback("📋 Exemple de Preset JSON copié !")
+                          setFeedback("📋 Exemple de Preset 3D JSON copié !")
                         )
                         .catch(() => {});
                     }}
                   >
-                    📋 COPIER L&apos;EXEMPLE JSON
+                    📋 COPIER L&apos;EXEMPLE JSON 3D
                   </Button>
                 </div>
                 <pre className="p-3 rounded-lg border-2 border-black bg-[#0B0D13] text-emerald-300 text-[11px] overflow-x-auto max-h-52">
-                  {JSON.stringify(JS_CYBER_TRIO_PACK, null, 2)}
+                  {JSON.stringify(PSY_ACID_145_3D_PACK, null, 2)}
                 </pre>
               </div>
             </div>

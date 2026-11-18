@@ -131,9 +131,15 @@ const MILESTONES = [
   },
   {
     id: "M21",
-    commit: "ACTUEL",
+    commit: "86a3869",
     title: "Architecture Modulaire AnarchyPreset Multi-Scènes & Isolation Faders/BPM",
-    details: "Séparation stricte entre la couche de contrôle live (10 Faders + Horloge BPM 2 ou 4 mesures jamais écrasés au changement de Preset) et la couche graphique (AnarchyPreset / AnarchyScene à nombre libre de scènes .js et .cpp), migration officielle 'Default — Anarchy Pack', gestion dynamique des scènes (+ Ajouter, Dupliquer, Réordonner, Supprimer), modale 'Importer / Exporter un Preset' et modale 'Doc / Créer un Preset' avec Prompt IA.",
+    details: "Séparation stricte entre la couche de contrôle live (10 Faders + Horloge BPM 2 ou 4 mesures jamais écrasés au changement de Preset) et la couche graphique (AnarchyPreset / AnarchyScene à nombre libre de scènes .js et .cpp), gestion dynamique des scènes (+ Ajouter, Dupliquer, Réordonner, Supprimer), modale 'Importer / Exporter un Preset' et modale 'Doc / Créer un Preset' avec Prompt IA.",
+  },
+  {
+    id: "M22",
+    commit: "ACTUEL",
+    title: "Unification du Moteur 3D & Presets 3D Programmables (JS Natif & C++)",
+    details: "Fusion des panneaux en un système unique de Presets 3D piloté par le BPM (2 ou 4 mesures), suppression complète des anciens presets 2D filaires génériques au profit des Presets 3D 'PS2 // Enter the Dragon (5 Scènes 3D)' et 'Psy-Acid 145 BPM (5 Scènes 3D)' + générateur 3D procédural, et exposition sur ctx des primitives 3D PS2/Low-Poly (setCamera, setFog, setAmbientLight, setDirectionalLight, drawTerrain3D, drawBox3D, drawCharacter3D, drawParticles3D) avec surcouches HUD 2D & Post-FX à 60 FPS sans fuite mémoire.",
   },
 ];
 

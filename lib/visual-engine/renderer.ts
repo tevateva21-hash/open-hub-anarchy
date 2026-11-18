@@ -1977,6 +1977,95 @@ function getStageOffscreenContext(): {
   };
 }
 
+/**
+ * Applique les effets des 10 faders (Psychédélie, Color Morph / Palette, Paroles LRC/Whisper,
+ * Strobe Aigu, Kick Blackout, Anaglyphe 3D & Scanlines) par-dessus le rendu 3D d'un Preset JS/C++.
+ */
+export function applyStudioPostFxAndLyrics(
+  ctx: CanvasRenderingContext2D,
+  options: {
+    width: number;
+    height: number;
+    timeSeconds: number;
+    paletteId: PaletteId;
+    applyPaletteTint?: boolean;
+    audio: SceneAudioState;
+    effects: Partial<RetroEffects>;
+    lyrics?: SceneFrameInput["lyrics"];
+    reducedMotion?: boolean;
+  }
+): void {
+  const { width, height, timeSeconds, audio, lyrics, reducedMotion = false } = options;
+  const effects: RetroEffects = {
+    ...DEFAULT_RETRO_EFFECTS,
+    ...options.effects,
+  };
+  const basePalette = getStudyPalette(options.paletteId);
+  const paletteIndex = STUDY_PALETTES.findIndex((p) => p.id === basePalette.id);
+  const nextPalette =
+    STUDY_PALETTES[(Math.max(0, paletteIndex) + 1) % STUDY_PALETTES.length] ??
+    basePalette;
+  const colorTransition = effects.colorTransition ?? 0;
+  const morphCycle =
+    colorTransition > 0
+      ? (Math.sin(
+          timeSeconds * (0.4 + colorTransition * 1.4) +
+            audio.bassEnvelope * 0.8
+        ) +
+          1) *
+        0.5 *
+        colorTransition
+      : 0;
+  const palette = blendStudyPalettes(basePalette, nextPalette, morphCycle);
+
+  ctx.save();
+  const tools = createRasterTools(ctx);
+
+  if (options.applyPaletteTint || colorTransition > 0.02) {
+    const tintAlpha = Math.min(
+      0.28,
+      (options.applyPaletteTint ? 0.14 : 0) + colorTransition * 0.18
+    );
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = tintAlpha;
+    ctx.fillStyle = palette.light;
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  }
+
+  if ((effects.psychedelic ?? 0) > 0.02) {
+    applyPsychedelicPass(
+      tools,
+      palette,
+      timeSeconds,
+      audio,
+      effects.psychedelic ?? 0,
+      reducedMotion
+    );
+  }
+
+  tools.rect(0, 0, width, 5, palette.shadow);
+  tools.rect(0, height - 5, width, 5, palette.shadow);
+
+  if (lyrics?.enabled && lyrics.text.trim().length > 0) {
+    drawLyricsOverlay(
+      tools,
+      palette,
+      timeSeconds,
+      audio,
+      lyrics,
+      reducedMotion,
+      width,
+      height
+    );
+  }
+
+  applyOpenHubPostFx(ctx, effects, audio, timeSeconds, width, height);
+  ctx.restore();
+}
+
+
 export function renderPresetFrame(
   ctx: CanvasRenderingContext2D,
   preset: RetroPresetConfig,

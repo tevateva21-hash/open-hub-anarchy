@@ -8,7 +8,6 @@ import { AvatarBD } from "@/components/ui/AvatarBD";
 import { useAudioPlayer } from "@/components/audio/AudioPlayerContext";
 import { ConsoleFader } from "@/components/visual-engine/ConsoleFader";
 import { AnarchyPresetPanel } from "@/components/visual-engine/AnarchyPresetPanel";
-import { ScenePackManager } from "@/components/visual-engine/ScenePackManager";
 import {
   ANARCHY_PRESETS_EVENT,
   DEFAULT_ANARCHY_PACK,
@@ -75,6 +74,7 @@ import {
 import {
   STUDY_FPS,
   STUDY_PALETTES,
+  applyStudioPostFxAndLyrics,
   getSceneDescriptor,
   renderSceneFrame,
   type SceneRenderReport,
@@ -144,7 +144,7 @@ export const VisualEngineStudio: React.FC = () => {
   const [autoSceneSwitchBeats, setAutoSceneSwitchBeats] = useState<number>(16);
   const kickBlackoutMode = "duck-on-kick" as const;
   const activePackRef = useRef<ScenePack>(DEFAULT_SCENE_PACKS[0]);
-  const [livePackSlotIndex, setLivePackSlotIndex] = useState<number>(0);
+  const [, setLivePackSlotIndex] = useState<number>(0);
   const livePackSlotIndexRef = useRef<number>(0);
   const [useCustomPalette, setUseCustomPalette] = useState<boolean>(false);
   const useCustomPaletteRef = useRef<boolean>(false);
@@ -221,8 +221,6 @@ export const VisualEngineStudio: React.FC = () => {
   const [activeAnarchyPresetId, setActiveAnarchyPresetId] = useState<string>(
     DEFAULT_ANARCHY_PACK.id
   );
-  const [anarchyPresetEnabled, setAnarchyPresetEnabled] =
-    useState<boolean>(true);
   const [anarchySceneIndex, setAnarchySceneIndex] = useState<number>(0);
   const [anarchyManualLock, setAnarchyManualLock] = useState<boolean>(false);
   const [anarchyRuntimeError, setAnarchyRuntimeError] = useState<string>("");
@@ -233,8 +231,6 @@ export const VisualEngineStudio: React.FC = () => {
     DEFAULT_ANARCHY_PACK;
   const activeAnarchyPresetRef = useRef<AnarchyPreset>(activeAnarchyPreset);
   activeAnarchyPresetRef.current = activeAnarchyPreset;
-  const anarchyPresetEnabledRef = useRef<boolean>(anarchyPresetEnabled);
-  anarchyPresetEnabledRef.current = anarchyPresetEnabled;
   const anarchySceneIndexRef = useRef<number>(anarchySceneIndex);
   anarchySceneIndexRef.current = anarchySceneIndex;
   const anarchyManualLockRef = useRef<boolean>(anarchyManualLock);
@@ -604,9 +600,10 @@ export const VisualEngineStudio: React.FC = () => {
           timedWords
         );
         const ws = cppWorkspaceRef.current;
-        const resolvedCpp = ws.enabled
-          ? resolveActiveCppScene(ws, timeSeconds, lyricEval.section)
-          : null;
+        const resolvedCpp =
+          ws.enabled && ws.manualSceneId !== null
+            ? resolveActiveCppScene(ws, timeSeconds, lyricEval.section)
+            : null;
 
         const nextReport = renderSceneFrame(ctx, {
           sceneId:
@@ -746,6 +743,24 @@ export const VisualEngineStudio: React.FC = () => {
                 }
               }
 
+              applyStudioPostFxAndLyrics(ctx, {
+                width: aspectSpec.width,
+                height: aspectSpec.height,
+                timeSeconds,
+                paletteId: effectivePreset.paletteId,
+                applyPaletteTint: useCustomPaletteRef.current,
+                audio: nextReport.audio,
+                effects: effectivePreset.effects,
+                lyrics: {
+                  enabled: lyricsEnabled,
+                  text: lyricsText,
+                  style: lyricsStyle,
+                  autoVocalSync: true,
+                  timedWords,
+                },
+                reducedMotion: project.reducedMotion,
+              });
+
               if (cppLastErrRef.current !== "") {
                 cppLastErrRef.current = "";
                 setCppRuntimeError("");
@@ -764,10 +779,7 @@ export const VisualEngineStudio: React.FC = () => {
               setCppRuntimeError(compiled.error);
             }
           }
-        } else if (
-          anarchyPresetEnabledRef.current &&
-          activeAnarchyPresetRef.current.scenes.length > 0
-        ) {
+        } else if (activeAnarchyPresetRef.current.scenes.length > 0) {
           const activeAnarchy = activeAnarchyPresetRef.current;
           const sceneCount = activeAnarchy.scenes.length;
           const beatFloat = Math.max(
@@ -820,6 +832,25 @@ export const VisualEngineStudio: React.FC = () => {
                   }
                 );
                 compiled.fn(sceneCtx);
+
+                applyStudioPostFxAndLyrics(ctx, {
+                  width: aspectSpec.width,
+                  height: aspectSpec.height,
+                  timeSeconds,
+                  paletteId: effectivePreset.paletteId,
+                  applyPaletteTint: useCustomPaletteRef.current,
+                  audio: nextReport.audio,
+                  effects: effectivePreset.effects,
+                  lyrics: {
+                    enabled: lyricsEnabled,
+                    text: lyricsText,
+                    style: lyricsStyle,
+                    autoVocalSync: true,
+                    timedWords,
+                  },
+                  reducedMotion: project.reducedMotion,
+                });
+
                 if (anarchyLastErrRef.current !== "") {
                   anarchyLastErrRef.current = "";
                   setAnarchyRuntimeError("");
@@ -1785,14 +1816,9 @@ export const VisualEngineStudio: React.FC = () => {
         activePreset={activeAnarchyPreset}
         activeSceneIndex={anarchySceneIndex}
         manualSceneLock={anarchyManualLock}
-        presetEnabled={anarchyPresetEnabled}
         bpm={bpm}
         autoSceneSwitchBeats={autoSceneSwitchBeats}
         runtimeError={anarchyRuntimeError}
-        onTogglePresetEnabled={(enabled) => {
-          anarchyPresetEnabledRef.current = enabled;
-          setAnarchyPresetEnabled(enabled);
-        }}
         onSelectPreset={(presetId) => {
           // ISOLATION STRICTE : aucun fader ni le BPM ne sont touchés lors d'un changement de Preset
           setActiveAnarchyPresetId(presetId);
@@ -1831,8 +1857,6 @@ export const VisualEngineStudio: React.FC = () => {
           setActiveAnarchyPresetId(newPreset.id);
           anarchySceneIndexRef.current = 0;
           setAnarchySceneIndex(0);
-          anarchyPresetEnabledRef.current = true;
-          setAnarchyPresetEnabled(true);
         }}
         onDeletePreset={(presetId) => {
           setAnarchyPresets((curr) => {
@@ -1842,32 +1866,6 @@ export const VisualEngineStudio: React.FC = () => {
             saveAnarchyPresets(next, fallbackId);
             return next;
           });
-        }}
-      />
-
-      <ScenePackManager
-        authorName="Anarchy Community"
-        liveSlotIndex={livePackSlotIndex}
-        bpm={bpm}
-        beatsPerScene={autoSceneSwitchBeats}
-        onPackChange={(pack: ScenePack) => {
-          // ISOLATION STRICTE : ne jamais écraser le BPM ni la cadence de l'horloge musicale
-          activePackRef.current = pack;
-        }}
-        onSelectSlot={(idx: number, slot: ScenePackSlot, pack: ScenePack) => {
-          // ISOLATION STRICTE : change uniquement la géométrie 3D / palette / seed sans toucher aux 10 faders ni au BPM
-          activePackRef.current = pack;
-          livePackSlotIndexRef.current = idx;
-          setLivePackSlotIndex(idx);
-          useCustomPaletteRef.current = false;
-          setUseCustomPalette(false);
-          setActiveVariationIdx(null);
-          updatePreset((curr) => ({
-            ...curr,
-            sceneId: slot.sceneId,
-            paletteId: slot.paletteId,
-            seed: slot.seed ?? curr.seed,
-          }));
         }}
       />
 

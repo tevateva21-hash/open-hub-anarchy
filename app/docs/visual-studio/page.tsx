@@ -15,38 +15,41 @@ Format exact par ligne : [mm:ss.xx] #SECTION TEXTE COURT
 Sections disponibles : #INTRO, #COUPLET, #PRE_DROP, #DROP, #REFRAIN, #OUTRO.
 Garde 3 à 6 mots max par ligne pour un rendu TikTok / 9:16 lisible.`;
 
-const CPP_EXAMPLE_FULL = `// Exemple complet compatible 9:16 TikTok et 16:9 YouTube
-// @param float pulseGain = 0.22 [0.05, 0.80]
-// @param float ringRadius = 24.0 [10.0, 60.0]
-// @color primaryColor = "#00E5FF"
+const CPP_EXAMPLE_FULL = `// Exemple 3D complet compatible 9:16 TikTok et 16:9 YouTube
+// @param float speed = 3.8 [0.5, 10.0]
+// @color neonColor = "#00E5FF"
+// @color katanaColor = "#FF1B24"
 // @toggle enableGlitch = true
 #include <cmath>
 
 void renderAnarchyFrame(AnarchyCtx& ctx) {
-  float pulse = 1.0f + ctx.bass * pulseGain;
-  ctx.zoom(pulse);
-  ctx.grid(20, primaryColor, 40.0f);
+  ctx.setCamera(sinf(ctx.t * 0.65f) * 0.9f, 1.8f + ctx.bass * 0.35f, -5.6f, 0.0f, 1.0f, 12.0f, 62.0f);
+  ctx.setFog("#090C16", 3.5f, 22.0f);
+  ctx.setAmbientLight("#1A2238", 0.38f + ctx.rms * 0.25f);
+  ctx.setDirectionalLight(-0.4f, 1.0f, -0.5f, neonColor, 0.9f + ctx.treble * 0.45f);
 
-  float cx = ctx.width * 0.5f;
-  float cy = ctx.height * 0.48f;
+  ctx.drawTerrain3D(speed * (1.0f + ctx.bass * 0.4f), 1.1f + ctx.bass * 0.6f, "#101628", neonColor, "canyon");
 
-  // Réagit automatiquement aux sections #DROP / #REFRAIN du scénario LRC
-  if (ctx.lyricSection == "DROP" || ctx.lyricSection == "REFRAIN") {
-    ctx.ring(cx, cy, ringRadius + ctx.bass * 52.0f, 2.5f, "#FF1B24");
-    ctx.ring(cx, cy, ringRadius * 0.65f + ctx.treble * 36.0f, 1.5f, primaryColor);
+  for (int i = 0; i < 4; i++) {
+    float z = fmodf(i * 4.0f - ctx.t * speed * 2.0f + 20.0f, 16.0f) + 2.0f;
+    ctx.drawBox3D(-2.5f, 1.3f, z, 0.65f, 2.6f + ctx.bass * 0.8f, 0.65f, 0.0f, 0.0f, 0.0f, "#1C2438", neonColor, false);
+    ctx.drawBox3D( 2.5f, 1.3f, z, 0.65f, 2.6f + ctx.bass * 0.8f, 0.65f, 0.0f, 0.0f, 0.0f, "#1C2438", katanaColor, false);
   }
 
-  // Glitch sur les claps / transitoires
+  ctx.drawCharacter3D(0.0f, 0.0f, 3.6f, ctx.t * speed * 2.2f, "katana", "#E4E8F2", katanaColor);
+  ctx.drawParticles3D(42, 12.0f, speed * 1.4f, neonColor, 2.2f);
+
   if (enableGlitch && ctx.flux > 0.30f) {
     ctx.glitchSlices(ctx.flux * 0.65f);
   }
 
-  // Mot Whisper / LRC courant en anaglyphe 3D
+  // Mot Whisper / LRC courant en anaglyphe 3D par-dessus la scène 3D
   if (!ctx.lyricWord.empty()) {
+    float cx = ctx.width * 0.5f;
     float x = clamp(cx - ctx.lyricWord.length * 4.2f, 8.0f, ctx.width - 36.0f);
     float y = ctx.height * 0.72f;
-    ctx.text(ctx.lyricWord, x - 1, y, "#FF1B24", 12);
-    ctx.text(ctx.lyricWord, x + 1, y, primaryColor, 12);
+    ctx.text(ctx.lyricWord, x - 1, y, katanaColor, 12);
+    ctx.text(ctx.lyricWord, x + 1, y, neonColor, 12);
     ctx.text(ctx.lyricWord, x, y, "#FFFFFF", 12);
   }
   ctx.scanlines(0.18f);
@@ -202,16 +205,15 @@ export default function VisualStudioDocsPage() {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-sans text-xs sm:text-sm text-neutral-700 leading-relaxed">
             <div className="space-y-2">
               <h3 className="font-mono font-bold text-brand-black text-sm">
-                Système de Packs de 5 Scènes
+                Système Unifié de Presets 3D Multi-Scènes
               </h3>
               <p>
-                Au lieu d&apos;une scène statique, le studio enchaîne automatiquement{" "}
-                <strong>5 scènes au BPM</strong> (par défaut toutes les 16 mesures). Le pack
-                original <strong>PS2 // Enter the Dragon</strong> est fourni de base, et le bouton{" "}
-                <code>🎲 GÉNÉRER UN PACK</code> crée à l&apos;infini de nouveaux packs uniques par seed.
-              </p>
-              <p className="text-neutral-500 font-mono text-xs">
-                Les packs peuvent aussi être importés/exportés en C++ (<code>ANARCHY_PACK[5]</code>) ou JSON dans l&apos;Éditeur C++.
+                Le moteur 3D PS2/Low-Poly est l&apos;unique moteur graphique du Studio, piloté par des{" "}
+                <strong>Presets 3D multi-scènes</strong> qui s&apos;enchaînent automatiquement au BPM (toutes les{" "}
+                <strong>2 ou 4 mesures</strong>). Les packs 3D officiels{" "}
+                <strong>PS2 // Enter the Dragon (5 Scènes 3D)</strong> et{" "}
+                <strong>Psy-Acid 145 BPM (5 Scènes 3D)</strong> sont directement éditables en JS natif ou C++, et le bouton{" "}
+                <code>🎲 Générer un Pack 3D</code> crée de nouveaux Presets 3D complets sans jamais toucher aux faders ni au BPM.
               </p>
             </div>
             <div className="space-y-2">
@@ -335,17 +337,19 @@ export default function VisualStudioDocsPage() {
         </Card>
       </div>
 
-      {/* 6. Runtime JS & C++ Live */}
+      {/* 6. Runtime 3D JS & C++ Live */}
       <div id="cpp-runtime">
         <Card
-          moduleTitle="06 // RUNTIME MODULAIRE JS NATIF (.JS) & C++ (.CPP)"
-          moduleMeta="FAST-PATH V8 60 FPS · MULTI-FICHIERS · @PARAM · PADS VJ"
+          moduleTitle="06 // MOTEUR 3D UNIFIÉ & PRESETS JS NATIF (.JS) / C++ (.CPP)"
+          moduleMeta="FAST-PATH V8 60 FPS · PRIMITIVES 3D PS2 · @PARAM · PADS VJ"
           activeIndicator
         >
           <div className="space-y-4">
             <p className="font-sans text-xs sm:text-sm text-neutral-700">
-              Dans <Link href="/anarchy-visual-design/editeur" className="font-bold text-brand-red underline">/anarchy-visual-design/editeur</Link>,
-              vous pouvez coder soit en <strong>JavaScript Natif (<code>.js</code>)</strong> — qui court-circuite le transpileur C++ pour une exécution V8 directe à 60 FPS avec état persistant hors boucle — soit en <strong>C++ (<code>.cpp</code>)</strong>, et mixer librement vos scènes (<code>sceno_openhub_ps2.cpp</code>, <code>lowpoly_3d_js.js</code>...).
+              Dans le panneau <strong>Presets 3D</strong> du Studio ou dans{" "}
+              <Link href="/anarchy-visual-design/editeur" className="font-bold text-brand-red underline">/anarchy-visual-design/editeur</Link>,
+              vous pilotez directement le <strong>moteur 3D PS2/Low-Poly</strong> (caméra, brouillard, éclairage, terrains 3D, volumes 3D, personnages articulés et particules 3D) en{" "}
+              <strong>JavaScript Natif (<code>.js</code>)</strong> ou en <strong>C++ (<code>.cpp</code>)</strong>.
             </p>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 font-sans text-xs text-neutral-700">
@@ -359,28 +363,26 @@ export default function VisualStudioDocsPage() {
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">2. Transpileur C++ &amp; Documents Multi-Fichiers</div>
+                <div className="font-mono font-bold text-brand-black">2. Transpileur C++ &amp; Documents 3D Multi-Fichiers</div>
                 <p>
                   En mode C++, le transpileur accepte <code>#include</code>, <code>std::*</code>, tableaux{" "}
-                  <code>arr[N]</code> et lambdas <code>[&amp;]()</code>. Créez, renommez, dupliquez, importez ou
-                  exportez vos scripts <code>.js</code> et <code>.cpp</code>.
+                  <code>arr[N]</code> et lambdas <code>[&amp;]()</code>. Les 5 scènes 3D de{" "}
+                  <code>PS2 // Enter the Dragon</code> (<code>01_dojo_neon_3d.js</code> à <code>05_digital_void_3d.cpp</code>) sont préchargées.
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
-                <div className="font-mono font-bold text-brand-black">3. Scènes Mixtes (.js / .cpp) &amp; Pads VJ</div>
+                <div className="font-mono font-bold text-brand-black">3. Isolation Stricte des Faders &amp; Horloge BPM</div>
                 <p>
-                  Assignez n&apos;importe quel document <code>.js</code> ou <code>.cpp</code> + un preset à une section LRC/Whisper (<code>INTRO</code>,{" "}
-                  <code>MAIN</code>, <code>DROP</code>, <code>REFRAIN</code>, <code>OUTRO</code>), un créneau temporel
-                  ou un pad VJ manuel avec transitions (<code>Cut</code>, <code>Fondu</code>, <code>Glitch</code>).
+                  Changer ou importer un Preset 3D ne réinitialise jamais les 10 faders ni le BPM : l&apos;horloge musicale fait tourner les scènes 3D toutes les 2 ou 4 mesures.
                 </p>
               </div>
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1">
                 <div className="font-mono font-bold text-brand-black">4. Uniforms UI &amp; Presets par Document</div>
                 <p>
-                  Déclarez <code>{"// @param float speed = 4.0 [0.0, 20.0]"}</code>,{" "}
-                  <code>{'// @color primaryColor = "#00F0FF"'}</code> ou{" "}
-                  <code>{"// @toggle enableGlitch = true"}</code> : identique en <strong>JS</strong> et en <strong>C++</strong>, l&apos;Inspector génère sliders, color pickers
-                  et toggles injectés à 60 FPS via <code>ctx.params</code> et variables locales sans recompiler.
+                  Déclarez <code>{"// @param float speed = 3.8 [0.5, 12.0]"}</code>,{" "}
+                  <code>{'// @color neonColor = "#00F0FF"'}</code> ou{" "}
+                  <code>{"// @toggle wireframePillars = false"}</code> : l&apos;Inspector génère sliders, color pickers
+                  et toggles injectés à 60 FPS sans recompiler.
                 </p>
               </div>
             </div>
@@ -391,30 +393,29 @@ export default function VisualStudioDocsPage() {
                 <ul className="space-y-1 text-neutral-800">
                   <li><code>ctx.t, ctx.bpm, ctx.beat, ctx.beatPhase</code> — Temps &amp; rythme (0..1)</li>
                   <li><code>ctx.bass, ctx.mid, ctx.treble, ctx.rms, ctx.flux</code> — Audio live (0..1)</li>
-                  <li><code>ctx.width, ctx.height</code> — Résolution dynamique selon le format (9:16, 16:9...)</li>
-                  <li><code>ctx.sceneIndex</code> — Index de la scène active (0..4)</li>
-                  <li><code>ctx.lyricLine, ctx.lyricWord</code> — Ligne et mot Whisper/LRC actif</li>
-                  <li><code>ctx.lyricProgress, ctx.lyricSection</code> — Progression (0..1) &amp; section (#DROP...)</li>
-                  <li><code>ctx.params</code> &amp; variables <code>@param/@color/@toggle</code> — Uniforms live</li>
+                  <li><code>ctx.width, ctx.height, ctx.sceneIndex</code> — Résolution dynamique &amp; scène active</li>
+                  <li><code>ctx.lyricLine, ctx.lyricWord, ctx.lyricSection</code> — Paroles Whisper/LRC (#DROP...)</li>
+                  <li><code>ctx.intensity, ctx.strobe, ctx.kickBlackout, ctx.psychedelic, ctx.colorMorph, ctx.anaglyph, ctx.cameraZoom, ctx.pendulumSwing</code> — 10 faders live</li>
                 </ul>
               </div>
 
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1.5">
-                <div className="font-bold text-brand-black">FONCTIONS DE DESSIN &amp; FX (ctx.*)</div>
+                <div className="font-bold text-brand-black">MÉTHODES 3D PS2/LOW-POLY &amp; POST-FX (ctx.*)</div>
                 <ul className="space-y-1 text-neutral-800">
-                  <li><code>ctx.clear(color)</code> — Efface la scène de base (Mode C++ Pur)</li>
-                  <li><code>ctx.tint(color, alpha)</code> / <code>ctx.zoom(scale)</code></li>
-                  <li><code>ctx.circle(...)</code> / <code>ctx.ring(...)</code> / <code>ctx.line(...)</code> / <code>ctx.rect(...)</code></li>
-                  <li><code>ctx.grid(spacing, color, speed)</code> / <code>ctx.text(str, x, y, color, size)</code></li>
-                  <li><code>ctx.kaleidoscope(segs, speed)</code> / <code>ctx.glitchSlices(amount)</code></li>
-                  <li><code>ctx.scanlines(alpha)</code> / <code>ctx.invert(amount)</code> / <code>rgba(r,g,b,a)</code></li>
+                  <li><code>ctx.setCamera(x, y, z, tx, ty, tz, fov)</code> &amp; <code>ctx.setFog(color, near, far)</code></li>
+                  <li><code>ctx.setAmbientLight(color, intensity)</code> &amp; <code>ctx.setDirectionalLight(x, y, z, color, intensity)</code></li>
+                  <li><code>ctx.drawTerrain3D(speed, amp, color, gridColor, style)</code> (<code>canyon|mountains|waves|dungeon|corridor</code>)</li>
+                  <li><code>ctx.drawBox3D(x, y, z, w, h, d, rx, ry, rz, color, emissive, wireframe)</code></li>
+                  <li><code>ctx.drawCharacter3D(x, y, z, animPhase, style, primary, accent)</code> (<code>katana|runner|cyborg</code>)</li>
+                  <li><code>ctx.drawParticles3D(count, spread, speed, color, size)</code></li>
+                  <li>HUD &amp; Post-FX : <code>ctx.text(...)</code>, <code>ctx.glitchSlices(amt)</code>, <code>ctx.scanlines(alpha)</code>, <code>ctx.invert(amt)</code>, <code>ctx.zoom(scale)</code></li>
                 </ul>
               </div>
             </div>
 
             <div>
               <div className="flex items-center justify-between mb-1.5 font-mono text-xs">
-                <span className="font-bold text-brand-black">EXEMPLE C++ COMPLET (UNIFORMS + PAROLES + RESPONSIVE 9:16)</span>
+                <span className="font-bold text-brand-black">EXEMPLE C++ 3D COMPLET (CAMÉRA + TERRAIN 3D + PERSONNAGE + PAROLES)</span>
                 <Button
                   type="button"
                   variant="clinical"
