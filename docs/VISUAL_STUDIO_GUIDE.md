@@ -147,7 +147,8 @@ void renderAnarchyFrame(AnarchyCtx& ctx) {
 - **Audio Temps Réel (`0.0` → `1.0`)** : `ctx.bass`, `ctx.mid`, `ctx.treble`, `ctx.rms`, `ctx.flux` (transitoires / claps).
 - **Dimensions Dynamiques** : `ctx.width`, `ctx.height` (`320×180` en `16:9`, `180×320` en `9:16`, `240×300` en `4:5`, `240×240` en `1:1`). Utilisez toujours `ctx.width` et `ctx.height` pour rester compatible TikTok & YouTube !
 - **Scénario & Paroles** : `ctx.lyricLine` (ligne active), `ctx.lyricWord` (mot actif), `ctx.lyricProgress` (`0.0` → `1.0`), `ctx.lyricSection` (ex: `"MAIN"`, `"INTRO"`, `"DROP"`, `"REFRAIN"`).
-- **Uniforms UI** : chaque variable déclarée via `// @param`, `// @color` ou `// @toggle` est directement accessible par son nom dans le code C++ et via `ctx.params`.
+- **Faders Live (Isolation stricte)** : `ctx.intensity`, `ctx.strobe`, `ctx.kickBlackout`, `ctx.psychedelic`, `ctx.colorMorph`, `ctx.anaglyph`, `ctx.cameraZoom`, `ctx.pendulumSwing`. Le chargement ou l'import d'un `AnarchyPreset` (nombre libre de scènes `.js` ou `.cpp`, ex: `"Default — Anarchy Pack"`) ne réinitialise jamais les 10 faders ni l'horloge BPM (rotation automatique toutes les 2 ou 4 mesures).
+- **Uniforms UI** : chaque variable déclarée via `// @param`, `// @color` ou `// @toggle` est directement accessible par son nom dans le code C++/JS et via `ctx.params`.
 
 ### Fonctions graphiques sur `ctx`
 - `ctx.clear(color)` / `ctx.background(r, g, b, alpha)` / `ctx.tint(color, alpha)`

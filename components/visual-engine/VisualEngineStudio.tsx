@@ -7,7 +7,16 @@ import { Button } from "@/components/ui/Button";
 import { AvatarBD } from "@/components/ui/AvatarBD";
 import { useAudioPlayer } from "@/components/audio/AudioPlayerContext";
 import { ConsoleFader } from "@/components/visual-engine/ConsoleFader";
+import { AnarchyPresetPanel } from "@/components/visual-engine/AnarchyPresetPanel";
 import { ScenePackManager } from "@/components/visual-engine/ScenePackManager";
+import {
+  ANARCHY_PRESETS_EVENT,
+  DEFAULT_ANARCHY_PACK,
+  DEFAULT_ANARCHY_PRESETS,
+  loadAnarchyPresets,
+  saveAnarchyPresets,
+  type AnarchyPreset,
+} from "@/lib/visual-engine/anarchy-presets";
 import {
   DEFAULT_SCENE_PACKS,
   type ScenePack,
@@ -205,6 +214,33 @@ export const VisualEngineStudio: React.FC = () => {
   const [cppActiveStatus, setCppActiveStatus] = useState<string>("");
   const [cppRuntimeError, setCppRuntimeError] = useState<string>("");
 
+  // Système modulaire AnarchyPreset (nombre libre de scènes .js / .cpp, faders & BPM strictement isolés)
+  const [anarchyPresets, setAnarchyPresets] = useState<AnarchyPreset[]>(
+    DEFAULT_ANARCHY_PRESETS
+  );
+  const [activeAnarchyPresetId, setActiveAnarchyPresetId] = useState<string>(
+    DEFAULT_ANARCHY_PACK.id
+  );
+  const [anarchyPresetEnabled, setAnarchyPresetEnabled] =
+    useState<boolean>(true);
+  const [anarchySceneIndex, setAnarchySceneIndex] = useState<number>(0);
+  const [anarchyManualLock, setAnarchyManualLock] = useState<boolean>(false);
+  const [anarchyRuntimeError, setAnarchyRuntimeError] = useState<string>("");
+
+  const activeAnarchyPreset =
+    anarchyPresets.find((p) => p.id === activeAnarchyPresetId) ??
+    anarchyPresets[0] ??
+    DEFAULT_ANARCHY_PACK;
+  const activeAnarchyPresetRef = useRef<AnarchyPreset>(activeAnarchyPreset);
+  activeAnarchyPresetRef.current = activeAnarchyPreset;
+  const anarchyPresetEnabledRef = useRef<boolean>(anarchyPresetEnabled);
+  anarchyPresetEnabledRef.current = anarchyPresetEnabled;
+  const anarchySceneIndexRef = useRef<number>(anarchySceneIndex);
+  anarchySceneIndexRef.current = anarchySceneIndex;
+  const anarchyManualLockRef = useRef<boolean>(anarchyManualLock);
+  anarchyManualLockRef.current = anarchyManualLock;
+  const anarchyLastErrRef = useRef<string>("");
+
   const stageCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -229,14 +265,24 @@ export const VisualEngineStudio: React.FC = () => {
         setShowCppPanel(true);
       }
     };
+    const syncAnarchyPresets = () => {
+      const loaded = loadAnarchyPresets();
+      setAnarchyPresets(loaded.presets);
+      setActiveAnarchyPresetId(loaded.activePresetId);
+    };
     syncWorkspace();
+    syncAnarchyPresets();
     window.addEventListener("storage", syncWorkspace);
     window.addEventListener("focus", syncWorkspace);
     window.addEventListener(CPP_WORKSPACE_EVENT, syncWorkspace);
+    window.addEventListener("storage", syncAnarchyPresets);
+    window.addEventListener(ANARCHY_PRESETS_EVENT, syncAnarchyPresets);
     return () => {
       window.removeEventListener("storage", syncWorkspace);
       window.removeEventListener("focus", syncWorkspace);
       window.removeEventListener(CPP_WORKSPACE_EVENT, syncWorkspace);
+      window.removeEventListener("storage", syncAnarchyPresets);
+      window.removeEventListener(ANARCHY_PRESETS_EVENT, syncAnarchyPresets);
     };
   }, []);
 
@@ -608,6 +654,20 @@ export const VisualEngineStudio: React.FC = () => {
           aspectRatio,
         });
 
+        const liveFaderTelemetry = {
+          intensity: effectivePreset.intensity,
+          strobe: effectivePreset.effects.strobeGlow ?? 0.45,
+          kickBlackout: effectivePreset.effects.kickBlackout ?? 0,
+          psychedelic: effectivePreset.effects.psychedelic ?? 0,
+          colorMorph: effectivePreset.effects.colorTransition ?? 0,
+          anaglyph: effectivePreset.effects.anaglyphSplit ?? 0.16,
+          cameraZoom:
+            effectivePreset.render.camera.kind === "orthographic"
+              ? effectivePreset.render.camera.zoom
+              : 1 / Math.max(0.45, effectivePreset.render.camera.distance),
+          pendulumSwing: effectivePreset.effects.pendulumSwing ?? 0.25,
+        };
+
         if (resolvedCpp) {
           const doc = resolvedCpp.document;
           const docLang: ScriptLanguage =
@@ -662,6 +722,7 @@ export const VisualEngineStudio: React.FC = () => {
                   lyricWord: lyricEval.activeWord,
                   lyricProgress: lyricEval.progress,
                   lyricSection: lyricEval.section,
+                  ...liveFaderTelemetry,
                   params: resolvedCpp.uniforms,
                 }
               );
@@ -701,6 +762,83 @@ export const VisualEngineStudio: React.FC = () => {
             if (cppLastErrRef.current !== compiled.error) {
               cppLastErrRef.current = compiled.error;
               setCppRuntimeError(compiled.error);
+            }
+          }
+        } else if (
+          anarchyPresetEnabledRef.current &&
+          activeAnarchyPresetRef.current.scenes.length > 0
+        ) {
+          const activeAnarchy = activeAnarchyPresetRef.current;
+          const sceneCount = activeAnarchy.scenes.length;
+          const beatFloat = Math.max(
+            0,
+            (timeSeconds - beatOffset) * (bpm / 60)
+          );
+          let targetIdx = anarchySceneIndexRef.current % sceneCount;
+          if (!anarchyManualLockRef.current && autoSceneSwitchBeats > 0) {
+            targetIdx =
+              Math.floor(beatFloat / autoSceneSwitchBeats) % sceneCount;
+            if (anarchySceneIndexRef.current !== targetIdx) {
+              anarchySceneIndexRef.current = targetIdx;
+              setAnarchySceneIndex(targetIdx);
+            }
+          }
+          const scene = activeAnarchy.scenes[targetIdx];
+          if (scene) {
+            const cacheKey = `anarchy::${scene.id}::${scene.language}::${scene.code}`;
+            let compiled = cppCompiledCacheRef.current.get(cacheKey);
+            if (!compiled) {
+              if (cppCompiledCacheRef.current.size > 40) {
+                cppCompiledCacheRef.current.clear();
+              }
+              compiled = compileVisualScript(scene.code, scene.language);
+              cppCompiledCacheRef.current.set(cacheKey, compiled);
+            }
+
+            if (compiled.ok && compiled.fn) {
+              try {
+                const sceneCtx = createCppRenderContext(
+                  ctx,
+                  aspectSpec.width,
+                  aspectSpec.height,
+                  {
+                    t: timeSeconds,
+                    bpm,
+                    beat: Math.floor(beatFloat),
+                    beatPhase: beatFloat - Math.floor(beatFloat),
+                    bass: nextReport.audio.bassEnvelope,
+                    mid: nextReport.audio.midEnvelope,
+                    treble: nextReport.audio.trebleEnvelope,
+                    rms: nextReport.audio.rmsEnvelope,
+                    flux: nextReport.audio.transientPulse,
+                    sceneIndex: targetIdx,
+                    lyricLine: lyricEval.line,
+                    lyricWord: lyricEval.activeWord,
+                    lyricProgress: lyricEval.progress,
+                    lyricSection: lyricEval.section,
+                    ...liveFaderTelemetry,
+                  }
+                );
+                compiled.fn(sceneCtx);
+                if (anarchyLastErrRef.current !== "") {
+                  anarchyLastErrRef.current = "";
+                  setAnarchyRuntimeError("");
+                }
+              } catch (err) {
+                const msg =
+                  err instanceof Error
+                    ? err.message
+                    : "Erreur runtime Scène Preset.";
+                if (anarchyLastErrRef.current !== msg) {
+                  anarchyLastErrRef.current = msg;
+                  setAnarchyRuntimeError(msg);
+                }
+              }
+            } else if (!compiled.ok && compiled.error) {
+              if (anarchyLastErrRef.current !== compiled.error) {
+                anarchyLastErrRef.current = compiled.error;
+                setAnarchyRuntimeError(compiled.error);
+              }
             }
           }
         }
@@ -1642,40 +1780,93 @@ export const VisualEngineStudio: React.FC = () => {
         </div>
       )}
 
+      <AnarchyPresetPanel
+        presets={anarchyPresets}
+        activePreset={activeAnarchyPreset}
+        activeSceneIndex={anarchySceneIndex}
+        manualSceneLock={anarchyManualLock}
+        presetEnabled={anarchyPresetEnabled}
+        bpm={bpm}
+        autoSceneSwitchBeats={autoSceneSwitchBeats}
+        runtimeError={anarchyRuntimeError}
+        onTogglePresetEnabled={(enabled) => {
+          anarchyPresetEnabledRef.current = enabled;
+          setAnarchyPresetEnabled(enabled);
+        }}
+        onSelectPreset={(presetId) => {
+          // ISOLATION STRICTE : aucun fader ni le BPM ne sont touchés lors d'un changement de Preset
+          setActiveAnarchyPresetId(presetId);
+          anarchySceneIndexRef.current = 0;
+          setAnarchySceneIndex(0);
+          anarchyLastErrRef.current = "";
+          setAnarchyRuntimeError("");
+          saveAnarchyPresets(anarchyPresets, presetId);
+        }}
+        onSelectSceneIndex={(idx, lockManual) => {
+          anarchySceneIndexRef.current = idx;
+          setAnarchySceneIndex(idx);
+          anarchyManualLockRef.current = lockManual;
+          setAnarchyManualLock(lockManual);
+        }}
+        onChangeCadenceBeats={(beats) => {
+          setAutoSceneSwitchBeats(beats);
+        }}
+        onUpdateActivePreset={(updater) => {
+          setAnarchyPresets((curr) => {
+            const next = curr.map((p) =>
+              p.id === activeAnarchyPreset.id ? updater(p) : p
+            );
+            saveAnarchyPresets(next, activeAnarchyPreset.id);
+            return next;
+          });
+        }}
+        onInstallPreset={(newPreset) => {
+          // ISOLATION STRICTE : l'import d'un Preset n'écrase aucun fader ni le BPM
+          setAnarchyPresets((curr) => {
+            const filtered = curr.filter((p) => p.id !== newPreset.id);
+            const next = [...filtered, newPreset];
+            saveAnarchyPresets(next, newPreset.id);
+            return next;
+          });
+          setActiveAnarchyPresetId(newPreset.id);
+          anarchySceneIndexRef.current = 0;
+          setAnarchySceneIndex(0);
+          anarchyPresetEnabledRef.current = true;
+          setAnarchyPresetEnabled(true);
+        }}
+        onDeletePreset={(presetId) => {
+          setAnarchyPresets((curr) => {
+            const next = curr.filter((p) => p.id !== presetId);
+            const fallbackId = next[0]?.id ?? DEFAULT_ANARCHY_PACK.id;
+            setActiveAnarchyPresetId(fallbackId);
+            saveAnarchyPresets(next, fallbackId);
+            return next;
+          });
+        }}
+      />
+
       <ScenePackManager
         authorName="Anarchy Community"
         liveSlotIndex={livePackSlotIndex}
         bpm={bpm}
         beatsPerScene={autoSceneSwitchBeats}
         onPackChange={(pack: ScenePack) => {
+          // ISOLATION STRICTE : ne jamais écraser le BPM ni la cadence de l'horloge musicale
           activePackRef.current = pack;
-          setBpm(pack.bpm);
-          setAutoSceneSwitchBeats(pack.beatsPerScene);
         }}
         onSelectSlot={(idx: number, slot: ScenePackSlot, pack: ScenePack) => {
+          // ISOLATION STRICTE : change uniquement la géométrie 3D / palette / seed sans toucher aux 10 faders ni au BPM
           activePackRef.current = pack;
           livePackSlotIndexRef.current = idx;
           setLivePackSlotIndex(idx);
-          setBpm(pack.bpm);
           useCustomPaletteRef.current = false;
           setUseCustomPalette(false);
-          if (activeVariationIdx !== null && pack.beatsPerScene > 0) {
-            setAutoSceneSwitchBeats(pack.beatsPerScene);
-          }
           setActiveVariationIdx(null);
           updatePreset((curr) => ({
             ...curr,
             sceneId: slot.sceneId,
             paletteId: slot.paletteId,
-            intensity: slot.intensity,
             seed: slot.seed ?? curr.seed,
-            effects: {
-              ...curr.effects,
-              strobeGlow: slot.strobe / 100,
-              psychedelic: slot.kaleidoscope / 100,
-              colorTransition: slot.acidHueShift / 100,
-              anaglyphSplit: slot.feedbackTrails / 100,
-            },
           }));
         }}
       />

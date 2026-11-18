@@ -125,9 +125,15 @@ const MILESTONES = [
   },
   {
     id: "M20",
-    commit: "ACTUEL",
+    commit: "b2d43cf",
     title: "Mode JavaScript Natif (.js) Fast-Path V8, Détection Auto & Éditeur Colorisé",
     details: "Ajout du mode JavaScript natif (.js) contournant le transpileur C++ pour une exécution directe V8 60 FPS avec état persistant entre frames, sélecteur JS / C++, détection automatique au collage, coloration syntaxique dédiée JS/C++, compatibilité complète @param/@color/@toggle + routage mixte .js/.cpp, et template 3D low-poly réactif au son.",
+  },
+  {
+    id: "M21",
+    commit: "ACTUEL",
+    title: "Architecture Modulaire AnarchyPreset Multi-Scènes & Isolation Faders/BPM",
+    details: "Séparation stricte entre la couche de contrôle live (10 Faders + Horloge BPM 2 ou 4 mesures jamais écrasés au changement de Preset) et la couche graphique (AnarchyPreset / AnarchyScene à nombre libre de scènes .js et .cpp), migration officielle 'Default — Anarchy Pack', gestion dynamique des scènes (+ Ajouter, Dupliquer, Réordonner, Supprimer), modale 'Importer / Exporter un Preset' et modale 'Doc / Créer un Preset' avec Prompt IA.",
   },
 ];
 

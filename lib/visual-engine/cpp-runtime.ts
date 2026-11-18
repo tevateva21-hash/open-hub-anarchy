@@ -44,6 +44,14 @@ export interface CppRenderContext {
   lyricWord: string;
   lyricProgress: number;
   lyricSection: string;
+  intensity: number;
+  strobe: number;
+  kickBlackout: number;
+  psychedelic: number;
+  colorMorph: number;
+  anaglyph: number;
+  cameraZoom: number;
+  pendulumSwing: number;
   params: Record<string, CppUniformValue>;
   clear: (color?: string) => void;
   background: (r: number, g: number, b: number, alpha?: number) => void;
@@ -1169,6 +1177,14 @@ export function createCppRenderContext(
     lyricWord?: string;
     lyricProgress?: number;
     lyricSection?: string;
+    intensity?: number;
+    strobe?: number;
+    kickBlackout?: number;
+    psychedelic?: number;
+    colorMorph?: number;
+    anaglyph?: number;
+    cameraZoom?: number;
+    pendulumSwing?: number;
     params?: Record<string, CppUniformValue>;
   }
 ): CppRenderContext {
@@ -1183,6 +1199,14 @@ export function createCppRenderContext(
     lyricWord: telemetry.lyricWord ?? "",
     lyricProgress: telemetry.lyricProgress ?? 0,
     lyricSection: telemetry.lyricSection ?? "MAIN",
+    intensity: telemetry.intensity ?? 0.75,
+    strobe: telemetry.strobe ?? 0.45,
+    kickBlackout: telemetry.kickBlackout ?? 0,
+    psychedelic: telemetry.psychedelic ?? 0,
+    colorMorph: telemetry.colorMorph ?? 0,
+    anaglyph: telemetry.anaglyph ?? 0.16,
+    cameraZoom: telemetry.cameraZoom ?? 1,
+    pendulumSwing: telemetry.pendulumSwing ?? 0.25,
     params: telemetry.params ?? {},
     width,
     height,
