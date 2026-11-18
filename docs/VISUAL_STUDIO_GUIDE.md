@@ -74,14 +74,19 @@ Chaque Pack 3D exportable ou généré par une IA suit ce schéma JSON strict :
 }
 ```
 
-### Valeurs autorisées par propriété
-- **`environment.terrainType`** : `'infinite_grid' | 'lowpoly_mountains' | 'dojo_pillars' | 'tunnel'`
-- **`subject.meshType`** : `'voxel_runner' | 'floating_monolith' | 'cyber_katana' | 'abstract_polyhedron' | 'none'`
+### Valeurs autorisées par propriété (Registre centralisé `lib/visual-studio/registry.ts`)
+- **`terrain.type`** : `'infinite_grid' | 'neon_highway' | 'lowpoly_mountains' | 'dojo_pillars' | 'tunnel' | 'mirror_floor'`
+- **`sideProps.type`** : `'none' | 'palm_trees' | 'cyber_towers' | 'dojo_pillars' | 'neon_arches'`
+- **`subject.meshType`** : `'voxel_runner' | 'floating_monolith' | 'cyber_katana' | 'abstract_polyhedron' | 'procedural_group' | 'none'`
+- **`procedural_group parts[].primitive`** : `'box' | 'pyramid' | 'wedge' | 'cylinder' | 'torus' | 'icosahedron' | 'ring'`
+- **`postFx`** : `ps1VertexJitter (0..1)`, `crtScanlines (0..1)`, `chromaticAberration (0..1)`, `kaleidoscopeSegments (0|2|4|6|8)`, `bloomIntensity (0..2)`
 - **`camera.mode`** : `'chase_low' | 'orbit' | 'fps_arms' | 'dramatic_tilt'`
 - **`audioMapping.bassTarget`** : `'camera_zoom_and_jump' | 'subject_pulse' | 'pillar_slam' | 'tunnel_boost'`
 - **`audioMapping.midTarget`** : `'terrain_wave_height' | 'subject_rotation' | 'color_shift' | 'camera_sway'`
 - **`audioMapping.trebleTarget`** : `'particles_burst' | 'wireframe_glow' | 'sky_flash' | 'katana_slash'`
 - **`audioMapping.fluxTarget`** : `'glitch_and_emissive' | 'camera_shake' | 'fov_kick' | 'invert_strobe'`
+
+> **Rétrocompatibilité v1 → v2** : les anciens Packs JSON v1 (`environment` + `subject` unique, sans `layers[]` ni `postFx`) sont automatiquement convertis à la volée vers le pipeline multi-calques v2 (`backdrop`, `terrain`, `sideProps`, `subjects[]`). Les couleurs JSON ont toujours la priorité absolue sur la palette par défaut de l'interface.
 
 ---
 

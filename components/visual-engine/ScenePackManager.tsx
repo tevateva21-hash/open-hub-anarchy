@@ -10,6 +10,7 @@ import type {
   AnarchyCameraMode,
   AnarchyFluxTarget,
   AnarchyMidTarget,
+  AnarchySidePropType,
   AnarchySubjectMeshType,
   AnarchyTerrainType,
   AnarchyTrebleTarget,
@@ -22,6 +23,8 @@ import {
   ANARCHY_CAMERA_MODES,
   ANARCHY_FLUX_TARGETS,
   ANARCHY_MID_TARGETS,
+  ANARCHY_PROCEDURAL_PRIMITIVES,
+  ANARCHY_SIDE_PROP_TYPES,
   ANARCHY_SUBJECT_MESH_TYPES,
   ANARCHY_TERRAIN_TYPES,
   ANARCHY_TREBLE_TARGETS,
@@ -36,6 +39,7 @@ import {
   type ScenePack,
   type ScenePackSlot,
 } from "@/lib/visual-engine/scene-packs";
+import { POST_FX_REGISTRY } from "@/lib/visual-studio/registry";
 import { SCENE_CATALOG, STUDY_PALETTES } from "@/lib/visual-engine/renderer";
 
 export const PACKS_STORAGE_KEY = "openhub_anarchy_3d_packs_v4";
@@ -1260,6 +1264,123 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                     </select>
                   </div>
                 </div>
+
+                {/* Calques v2 : Décor latéral & Post-FX par scène */}
+                <div className="pt-2 border-t border-black/15 grid grid-cols-1 md:grid-cols-3 gap-2">
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-neutral-600 block mb-0.5">
+                      Décor Latéral (sideProps v2)
+                    </label>
+                    <select
+                      value={
+                        activeScene.layers?.find((l) => l.kind === "sideProps")
+                          ?.sideProps.type ?? "none"
+                      }
+                      onChange={(e) => {
+                        const nextType = e.target.value as AnarchySidePropType;
+                        updateActiveScene((s) => {
+                          const existingLayers = s.layers ?? [];
+                          const hasSide = existingLayers.some(
+                            (l) => l.kind === "sideProps"
+                          );
+                          const updatedLayers = hasSide
+                            ? existingLayers.map((l) =>
+                                l.kind === "sideProps"
+                                  ? {
+                                      ...l,
+                                      sideProps: {
+                                        ...l.sideProps,
+                                        type: nextType,
+                                      },
+                                    }
+                                  : l
+                              )
+                            : [
+                                ...existingLayers,
+                                {
+                                  kind: "sideProps" as const,
+                                  sideProps: {
+                                    type: nextType,
+                                    density: 0.7,
+                                    primaryColor:
+                                      s.environment.terrainPrimaryColor,
+                                    secondaryColor:
+                                      s.environment.terrainSecondaryColor,
+                                  },
+                                },
+                              ];
+                          return { ...s, version: 2, layers: updatedLayers };
+                        });
+                      }}
+                      className="w-full px-2 py-1 rounded border border-black bg-brand-white font-bold text-[10px]"
+                    >
+                      {ANARCHY_SIDE_PROP_TYPES.map((p) => (
+                        <option key={p.value} value={p.value}>
+                          {p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-neutral-600 block mb-0.5">
+                      Post-FX : Kaléidoscope (
+                      {activeScene.postFx?.kaleidoscopeSegments ?? 0} seg.)
+                    </label>
+                    <select
+                      value={activeScene.postFx?.kaleidoscopeSegments ?? 0}
+                      onChange={(e) => {
+                        const segs = Number(e.target.value) as
+                          | 0
+                          | 2
+                          | 4
+                          | 6
+                          | 8;
+                        updateActiveScene((s) => ({
+                          ...s,
+                          version: 2,
+                          postFx: {
+                            ...s.postFx,
+                            kaleidoscopeSegments: segs,
+                          },
+                        }));
+                      }}
+                      className="w-full px-2 py-1 rounded border border-black bg-brand-white font-bold text-[10px]"
+                    >
+                      <option value={0}>0 (Désactivé)</option>
+                      <option value={2}>2 segments (Miroir)</option>
+                      <option value={4}>4 segments (Quadrants)</option>
+                      <option value={6}>6 segments (Hexa)</option>
+                      <option value={8}>8 segments (Octa)</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold uppercase text-neutral-600 block mb-0.5">
+                      Post-FX : PS1 Jitter (
+                      {(activeScene.postFx?.ps1VertexJitter ?? 0).toFixed(2)})
+                    </label>
+                    <input
+                      type="range"
+                      min={0}
+                      max={1}
+                      step={0.05}
+                      value={activeScene.postFx?.ps1VertexJitter ?? 0}
+                      onChange={(e) => {
+                        const val = Number(e.target.value);
+                        updateActiveScene((s) => ({
+                          ...s,
+                          version: 2,
+                          postFx: {
+                            ...s.postFx,
+                            ps1VertexJitter: val,
+                          },
+                        }));
+                      }}
+                      className="w-full accent-brand-red"
+                    />
+                  </div>
+                </div>
               </div>
             )}
           </div>
@@ -1496,21 +1617,19 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
               <div className="p-3.5 rounded-xl bg-brand-pearl border-2 border-black space-y-1.5">
                 <div className="font-bold uppercase text-brand-red">
-                  1. Valeurs autorisées — Environment &amp; Subject
+                  1. Calques v2 — Terrain, SideProps &amp; Subjects
                 </div>
                 <p className="text-[11px]">
-                  • <strong>environment.terrainType</strong> :{" "}
+                  • <strong>terrain.type</strong> :{" "}
                   <code>
                     {ANARCHY_TERRAIN_TYPES.map((x) => x.value).join(" | ")}
                   </code>
                 </p>
                 <p className="text-[11px]">
-                  • <strong>environment.terrainSpeed</strong> : nombre (`0.5` à{" "}
-                  `30.0`) × multiplié par le Fader Vitesse Caméra.
-                </p>
-                <p className="text-[11px]">
-                  • <strong>environment.fogDensity</strong> : nombre (`0.005` à{" "}
-                  `0.12`) × modulé par l&apos;Intensité Maître.
+                  • <strong>sideProps.type</strong> :{" "}
+                  <code>
+                    {ANARCHY_SIDE_PROP_TYPES.map((x) => x.value).join(" | ")}
+                  </code>
                 </p>
                 <p className="text-[11px]">
                   • <strong>subject.meshType</strong> :{" "}
@@ -1519,8 +1638,16 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                   </code>
                 </p>
                 <p className="text-[11px]">
-                  • <strong>subject.wireframeOverlay</strong> : `true` ou
-                  `false` · <strong>subject.scale</strong> : `0.3` à `3.0`.
+                  • <strong>procedural_group parts[].primitive</strong> :{" "}
+                  <code>
+                    {ANARCHY_PROCEDURAL_PRIMITIVES.map((x) => x.value).join(" | ")}
+                  </code>
+                </p>
+                <p className="text-[11px]">
+                  • <strong>postFx</strong> :{" "}
+                  <code>
+                    {POST_FX_REGISTRY.map((x) => `${x.key} (${x.range})`).join(" · ")}
+                  </code>
                 </p>
               </div>
 

@@ -3,6 +3,30 @@
  * Aucune dépendance React, Canvas ou WebAudio ici pour faciliter l'édition et les tests.
  */
 
+import type {
+  AnarchyTerrainType,
+  AnarchySidePropType,
+  AnarchySubjectMeshType,
+  AnarchyProceduralPrimitive,
+  AnarchyCameraMode,
+  AnarchyBassTarget,
+  AnarchyMidTarget,
+  AnarchyTrebleTarget,
+  AnarchyFluxTarget,
+} from "@/lib/visual-studio/registry";
+
+export type {
+  AnarchyTerrainType,
+  AnarchySidePropType,
+  AnarchySubjectMeshType,
+  AnarchyProceduralPrimitive,
+  AnarchyCameraMode,
+  AnarchyBassTarget,
+  AnarchyMidTarget,
+  AnarchyTrebleTarget,
+  AnarchyFluxTarget,
+};
+
 export const PRESET_SCHEMA_VERSION = 1 as const;
 export const PROJECT_SCHEMA_VERSION = 1 as const;
 export const RANDOMIZER_VERSION = "1.0.0" as const;
@@ -257,48 +281,15 @@ export interface SceneDescriptor {
   audioMappings: readonly { band: string; target: string }[];
 }
 
-export type AnarchyTerrainType =
-  | "infinite_grid"
-  | "lowpoly_mountains"
-  | "dojo_pillars"
-  | "tunnel";
-
-export type AnarchySubjectMeshType =
-  | "voxel_runner"
-  | "floating_monolith"
-  | "cyber_katana"
-  | "abstract_polyhedron"
-  | "none";
-
-export type AnarchyCameraMode =
-  | "chase_low"
-  | "orbit"
-  | "fps_arms"
-  | "dramatic_tilt";
-
-export type AnarchyBassTarget =
-  | "camera_zoom_and_jump"
-  | "subject_pulse"
-  | "pillar_slam"
-  | "tunnel_boost";
-
-export type AnarchyMidTarget =
-  | "terrain_wave_height"
-  | "subject_rotation"
-  | "color_shift"
-  | "camera_sway";
-
-export type AnarchyTrebleTarget =
-  | "particles_burst"
-  | "wireframe_glow"
-  | "sky_flash"
-  | "katana_slash";
-
-export type AnarchyFluxTarget =
-  | "glitch_and_emissive"
-  | "camera_shake"
-  | "fov_kick"
-  | "invert_strobe";
+export interface AnarchyProceduralPart {
+  primitive: AnarchyProceduralPrimitive;
+  position: [number, number, number];
+  rotation: [number, number, number];
+  scale: [number, number, number];
+  color: string;
+  emissive?: boolean;
+  wireframe?: boolean;
+}
 
 export interface Anarchy3DEnvironment {
   skyColor: string;
@@ -316,6 +307,56 @@ export interface Anarchy3DSubject {
   accentColor: string;
   wireframeOverlay: boolean;
   scale: number;
+  /** Position 3D relative [x, y, z] pour les sujets multiples v2 */
+  position?: [number, number, number];
+  /** Rotation 3D initiale [rx, ry, rz] en radians */
+  rotation?: [number, number, number];
+  /** Liste des primitives géométriques lorsque meshType === "procedural_group" */
+  parts?: AnarchyProceduralPart[];
+}
+
+export interface Anarchy3DBackdropLayer {
+  skyGradient: [string, string];
+  horizonSun?: {
+    enabled: boolean;
+    colorTop: string;
+    colorBottom: string;
+    stripes?: number;
+    size?: number;
+  };
+  starfield?: {
+    enabled: boolean;
+    density?: number;
+    color?: string;
+  };
+}
+
+export interface Anarchy3DTerrainLayer {
+  type: AnarchyTerrainType;
+  speed: number;
+  primaryColor: string;
+  secondaryColor: string;
+}
+
+export interface Anarchy3DSidePropsLayer {
+  type: AnarchySidePropType;
+  density: number;
+  primaryColor: string;
+  secondaryColor: string;
+}
+
+export type Anarchy3DLayer =
+  | { kind: "backdrop"; backdrop: Anarchy3DBackdropLayer }
+  | { kind: "terrain"; terrain: Anarchy3DTerrainLayer }
+  | { kind: "sideProps"; sideProps: Anarchy3DSidePropsLayer }
+  | { kind: "subjects"; subjects: Anarchy3DSubject[] };
+
+export interface Anarchy3DPostFx {
+  ps1VertexJitter?: number;
+  crtScanlines?: number;
+  chromaticAberration?: number;
+  kaleidoscopeSegments?: 0 | 2 | 4 | 6 | 8;
+  bloomIntensity?: number;
 }
 
 export interface Anarchy3DCamera {
@@ -334,8 +375,15 @@ export interface Anarchy3DAudioMapping {
 export interface Anarchy3DScene {
   id: string;
   name: string;
+  version?: 1 | 2;
   environment: Anarchy3DEnvironment;
   subject: Anarchy3DSubject;
+  /** Calques composables v2 (backdrop, terrain, sideProps, subjects) */
+  layers?: Anarchy3DLayer[];
+  /** Sujets multiples rendus simultanément (raccourci ou miroir du calque subjects) */
+  subjects?: Anarchy3DSubject[];
+  /** Pipeline Post-Processing par scène */
+  postFx?: Anarchy3DPostFx;
   camera: Anarchy3DCamera;
   audioMapping: Anarchy3DAudioMapping;
   /** Identifiants optionnels de liaison avec le catalogue interne du moteur 3D */

@@ -10,12 +10,15 @@ import {
   ANARCHY_CAMERA_MODES,
   ANARCHY_FLUX_TARGETS,
   ANARCHY_MID_TARGETS,
+  ANARCHY_PROCEDURAL_PRIMITIVES,
+  ANARCHY_SIDE_PROP_TYPES,
   ANARCHY_SUBJECT_MESH_TYPES,
   ANARCHY_TERRAIN_TYPES,
   ANARCHY_TREBLE_TARGETS,
   DEFAULT_SCENE_PACKS,
   exportScenePackAsJson,
 } from "@/lib/visual-engine/scene-packs";
+import { POST_FX_REGISTRY } from "@/lib/visual-studio/registry";
 
 const LRC_SCENARIO_PROMPT = `Transforme ces paroles en scénario LRC horodaté pour Anarchy Visual Studio (140 BPM, extrait 0.0s → 30.0s) :
 Format exact par ligne : [mm:ss.xx] #SECTION TEXTE COURT
@@ -369,24 +372,27 @@ export default function VisualStudioDocsPage() {
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4 font-mono text-[11px]">
               <div className="p-3 rounded-lg bg-brand-pearl border border-black space-y-1.5">
-                <div className="font-bold text-brand-red">1. ENVIRONMENT &amp; SUBJECT (VALEURS AUTORISÉES)</div>
+                <div className="font-bold text-brand-red">1. CALQUES V2 — TERRAIN, SIDEPROPS, SUBJECTS &amp; POSTFX</div>
                 <ul className="space-y-1 text-neutral-800">
                   <li>
-                    <strong>environment.terrainType</strong> :{" "}
+                    <strong>terrain.type</strong> :{" "}
                     <code>{ANARCHY_TERRAIN_TYPES.map((x) => x.value).join(" | ")}</code>
                   </li>
                   <li>
-                    <strong>environment.terrainSpeed</strong> : vitesse de défilement (<code>0.5</code> à <code>30.0</code>)
-                  </li>
-                  <li>
-                    <strong>environment.fogDensity</strong> : densité du brouillard 3D (<code>0.005</code> à <code>0.12</code>)
+                    <strong>sideProps.type</strong> :{" "}
+                    <code>{ANARCHY_SIDE_PROP_TYPES.map((x) => x.value).join(" | ")}</code>
                   </li>
                   <li>
                     <strong>subject.meshType</strong> :{" "}
                     <code>{ANARCHY_SUBJECT_MESH_TYPES.map((x) => x.value).join(" | ")}</code>
                   </li>
                   <li>
-                    <strong>subject.wireframeOverlay</strong> : <code>true | false</code> · <strong>scale</strong> : <code>0.3</code> à <code>3.0</code>
+                    <strong>procedural_group parts[].primitive</strong> :{" "}
+                    <code>{ANARCHY_PROCEDURAL_PRIMITIVES.map((x) => x.value).join(" | ")}</code>
+                  </li>
+                  <li>
+                    <strong>postFx</strong> :{" "}
+                    <code>{POST_FX_REGISTRY.map((x) => `${x.key} (${x.range})`).join(" · ")}</code>
                   </li>
                 </ul>
               </div>

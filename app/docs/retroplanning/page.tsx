@@ -149,9 +149,15 @@ const MILESTONES = [
   },
   {
     id: "M24",
-    commit: "ACTUEL",
+    commit: "530dc27",
     title: "Architecture Data-Driven JSON ('Cartouche / Pack 3D' Anarchy3DPack & Anarchy3DScene)",
-    details: "Refactorisation du moteur 3D en Data-Driven piloté par JSON strict ('Anarchy3DPack' / 'Anarchy3DScene' : environment, subject, camera, audioMapping) sans aucune exécution de code arbitraire (zéro eval / new Function). Les 10 Faders agissent comme multiplicateurs temps réel sans jamais être écrasés, avec éditeur JSON validé en direct, bouton '+ Ajouter une scène', import/export .json et Prompt IA dédié.",
+    details: "Refactorisation du moteur 3D en Data-Driven piloté par JSON strict ('Anarchy3DPack' / 'Anarchy3DScene' : environment, subject, camera, audioMapping) sans aucune exécution de code arbitraire (zéro eval / new Function). Parseur JSON tolérant ('parseForgivingPackJSON' + auto-réparation syntaxique), calage BPM précis et conservation des 4 variations.",
+  },
+  {
+    id: "M25",
+    commit: "ACTUEL",
+    title: "Moteur Modulaire Multi-Calques v2 (`Anarchy3DPack v2`, `procedural_group`, `postFx` & Registre Extensible)",
+    details: "Refonte du pipeline 3D en calques composables (`backdrop` avec skyGradient, soleil synthwave strié et starfield ; `terrain` incluant neon_highway et mirror_floor ; `sideProps` palm_trees/cyber_towers/dojo_pillars/neon_arches ; `subjects[]` multiples + constructeur `procedural_group` à 7 primitives 3D ; `postFx` par scène avec PS1 jitter, CRT, aberration chromatique, kaléidoscope et bloom). Registre centralisé `lib/visual-studio/registry.ts` mettant automatiquement à jour types, validation et Prompt IA, avec rétrocompatibilité v1 totale.",
   },
 ];
 

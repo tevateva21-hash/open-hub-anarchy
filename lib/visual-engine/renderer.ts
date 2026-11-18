@@ -1,6 +1,12 @@
 import { getAudioFeaturesAt } from "./audioAnalysis";
 import type {
+  Anarchy3DBackdropLayer,
+  Anarchy3DPostFx,
   Anarchy3DScene,
+  Anarchy3DSidePropsLayer,
+  Anarchy3DSubject,
+  Anarchy3DTerrainLayer,
+  AnarchyProceduralPart,
   AudioAnalysis,
   AudioFeatures,
   PaletteId,
@@ -1606,8 +1612,144 @@ function applyPsychedelicPass(
 }
 
 /**
- * Passe post-FX optionnelle Open Hub : Anaglyphe 3D (décalage Rouge #FF1B24 / Cyan #00E5FF)
- * et micro-scanlines grain PS1. N'altère aucun pixel quand anaglyphSplit === 0 et grain === 0.
+ * Symétrie miroir kaléidoscopique rapide (2, 4, 6 ou 8 segments) pilotée par `postFx.kaleidoscopeSegments`.
+ */
+function applyKaleidoscopePass(
+  ctx: CanvasRenderingContext2D,
+  segments: 0 | 2 | 4 | 6 | 8,
+  width: number = STUDY_SIZE.width,
+  height: number = STUDY_SIZE.height
+): void {
+  if (!segments || segments <= 0) return;
+  const imgData = ctx.getImageData(0, 0, width, height);
+  const src = new Uint8ClampedArray(imgData.data);
+  const dst = imgData.data;
+  const halfW = width >> 1;
+  const halfH = height >> 1;
+
+  if (segments === 2) {
+    for (let y = 0; y < height; y++) {
+      for (let x = halfW; x < width; x++) {
+        const mx = width - 1 - x;
+        const sIdx = (y * width + mx) * 4;
+        const dIdx = (y * width + x) * 4;
+        dst[dIdx] = src[sIdx];
+        dst[dIdx + 1] = src[sIdx + 1];
+        dst[dIdx + 2] = src[sIdx + 2];
+      }
+    }
+  } else {
+    // 4, 6 ou 8 segments : symétrie quadrants + diagonales pour 6/8
+    for (let y = 0; y < height; y++) {
+      const sy = y < halfH ? y : height - 1 - y;
+      for (let x = 0; x < width; x++) {
+        let sx = x < halfW ? x : width - 1 - x;
+        let ty = sy;
+        if (segments >= 6) {
+          const nx = sx / Math.max(1, halfW);
+          const ny = ty / Math.max(1, halfH);
+          if (ny > nx) {
+            sx = Math.min(halfW - 1, Math.round(ny * halfW));
+            ty = Math.min(halfH - 1, Math.round(nx * halfH));
+          }
+        }
+        const sIdx = (ty * width + sx) * 4;
+        const dIdx = (y * width + x) * 4;
+        dst[dIdx] = src[sIdx];
+        dst[dIdx + 1] = src[sIdx + 1];
+        dst[dIdx + 2] = src[sIdx + 2];
+      }
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+}
+
+/**
+ * Calque 0 (`backdrop`) du moteur v2 : dégradé de ciel 2 couleurs, soleil synthwave strié et étoiles.
+ */
+function drawAnarchy3DBackdropLayer(
+  ctx: CanvasRenderingContext2D,
+  backdrop: Anarchy3DBackdropLayer,
+  audio: SceneAudioState,
+  timeSeconds: number,
+  width: number,
+  height: number,
+  seed: number,
+  reducedMotion: boolean
+): void {
+  const [skyTop, skyBottom] = backdrop.skyGradient;
+  const horizonY = Math.round(height * 0.54);
+
+  const grad = ctx.createLinearGradient(0, 0, 0, height);
+  grad.addColorStop(0, skyTop);
+  grad.addColorStop(0.54, skyBottom);
+  grad.addColorStop(1, lerpHexColor(skyBottom, "#000000", 0.58));
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, width, height);
+
+  // Étoiles & particules d'ambiance
+  if (backdrop.starfield?.enabled) {
+    const density = clamp01(backdrop.starfield.density ?? 0.5);
+    const starCount = Math.round(18 + density * 64);
+    const starColor = backdrop.starfield.color ?? "#FFFFFF";
+    let rng = (seed ^ 0x9e3779b9) >>> 0;
+    const nextRand = () => {
+      rng = (rng * 1664525 + 1013904223) >>> 0;
+      return rng / 4294967296;
+    };
+    for (let i = 0; i < starCount; i++) {
+      const sx = Math.floor(nextRand() * width);
+      const sy = Math.floor(nextRand() * (horizonY - 6));
+      const twinkle = reducedMotion
+        ? 0.65
+        : 0.35 + 0.65 * Math.abs(Math.sin(timeSeconds * (1.5 + (i % 5) * 0.4) + i));
+      const sz = i % 7 === 0 && audio.trebleEnvelope > 0.35 ? 2 : 1;
+      ctx.globalAlpha = clamp01(twinkle * (0.55 + audio.trebleEnvelope * 0.45));
+      ctx.fillStyle = starColor;
+      ctx.fillRect(sx, sy, sz, sz);
+    }
+    ctx.globalAlpha = 1;
+  }
+
+  // Soleil Synthwave strié à l'horizon
+  if (backdrop.horizonSun?.enabled) {
+    const sunSize = Math.max(0.3, Math.min(2.0, backdrop.horizonSun.size ?? 1.0));
+    const radius = Math.round(32 * sunSize * (1 + audio.bassEnvelope * 0.08));
+    const cx = Math.round(width * 0.5);
+    const cy = horizonY - Math.round(radius * 0.28);
+
+    const sunGrad = ctx.createLinearGradient(cx, cy - radius, cx, cy + radius);
+    sunGrad.addColorStop(0, backdrop.horizonSun.colorTop);
+    sunGrad.addColorStop(1, backdrop.horizonSun.colorBottom);
+
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, 0, Math.PI * 2);
+    ctx.closePath();
+    ctx.clip();
+    ctx.fillStyle = sunGrad;
+    ctx.fillRect(cx - radius, cy - radius, radius * 2, radius * 2);
+
+    // Bandes horizontales découpant la moitié inférieure du soleil
+    const stripeCount = Math.max(0, Math.min(14, backdrop.horizonSun.stripes ?? 6));
+    ctx.fillStyle = skyBottom;
+    for (let s = 0; s < stripeCount; s++) {
+      const t = (s + 1) / (stripeCount + 1);
+      const sy = Math.round(cy + t * radius * 0.92);
+      const sh = Math.max(1, Math.round(1 + t * 3.2));
+      ctx.fillRect(cx - radius - 2, sy, radius * 2 + 4, sh);
+    }
+    ctx.restore();
+  }
+
+  // Ligne d'horizon lumineuse
+  ctx.fillStyle = lerpHexColor(skyBottom, "#FFFFFF", 0.18 + audio.trebleEnvelope * 0.25);
+  ctx.fillRect(0, horizonY, width, 1);
+}
+
+/**
+ * Passe post-FX optionnelle Open Hub : Anaglyphe 3D / Chromatic Aberration,
+ * scanlines CRT, kaléidoscope et bloom émissif.
  */
 function applyOpenHubPostFx(
   ctx: CanvasRenderingContext2D,
@@ -1615,9 +1757,26 @@ function applyOpenHubPostFx(
   audio: SceneAudioState,
   timeSeconds: number,
   width: number = STUDY_SIZE.width,
-  height: number = STUDY_SIZE.height
+  height: number = STUDY_SIZE.height,
+  postFx?: Anarchy3DPostFx
 ): void {
-  const splitNorm = clamp01(effects.anaglyphSplit ?? 0);
+  const bloomAmt = Math.max(0, Math.min(2, postFx?.bloomIntensity ?? 0));
+  if (bloomAmt > 0.2) {
+    ctx.save();
+    ctx.globalCompositeOperation = "lighter";
+    ctx.globalAlpha = clamp01((bloomAmt - 0.15) * (0.12 + audio.bassEnvelope * 0.08));
+    ctx.drawImage(ctx.canvas, -1, 0, width + 2, height);
+    ctx.restore();
+  }
+
+  const kaleido = postFx?.kaleidoscopeSegments ?? 0;
+  if (kaleido > 0) {
+    applyKaleidoscopePass(ctx, kaleido, width, height);
+  }
+
+  const splitNorm = clamp01(
+    Math.max(effects.anaglyphSplit ?? 0, postFx?.chromaticAberration ?? 0)
+  );
   if (splitNorm > 0.02) {
     const offsetPx = Math.max(
       1,
@@ -1640,9 +1799,11 @@ function applyOpenHubPostFx(
     ctx.putImageData(imgData, 0, 0);
   }
 
-  const grainStrength = clamp01(effects.grain);
+  const grainStrength = clamp01(
+    Math.max(effects.grain, postFx?.crtScanlines ?? 0)
+  );
   if (grainStrength > 0.05) {
-    ctx.fillStyle = `rgba(0,0,0,${(0.08 + grainStrength * 0.14).toFixed(3)})`;
+    ctx.fillStyle = `rgba(0,0,0,${(0.08 + grainStrength * 0.16).toFixed(3)})`;
     const offset = Math.floor(timeSeconds * 12) % 2;
     for (let y = 8 + offset; y < height - 6; y += 2) {
       ctx.fillRect(0, y, width, 1);
@@ -1671,6 +1832,37 @@ function buildAnarchy3DScenePolygons(
 ): Poly3D[] {
   const polygons: Poly3D[] = [];
   const { environment: env, subject: sub, camera: cam, audioMapping: map } = scene;
+  const MAX_POLYS = 260;
+
+  // Extraire les calques v2 s'ils sont présents (sinon fallback v1 transparent)
+  const terrainLayer: Anarchy3DTerrainLayer =
+    scene.layers?.find(
+      (l): l is Extract<NonNullable<Anarchy3DScene["layers"]>[number], { kind: "terrain" }> =>
+        l.kind === "terrain"
+    )?.terrain ?? {
+      type: env.terrainType,
+      speed: env.terrainSpeed,
+      primaryColor: env.terrainPrimaryColor,
+      secondaryColor: env.terrainSecondaryColor,
+    };
+
+  const sidePropsLayer: Anarchy3DSidePropsLayer =
+    scene.layers?.find(
+      (l): l is Extract<NonNullable<Anarchy3DScene["layers"]>[number], { kind: "sideProps" }> =>
+        l.kind === "sideProps"
+    )?.sideProps ?? {
+      type: "none",
+      density: 0.6,
+      primaryColor: env.terrainPrimaryColor,
+      secondaryColor: env.terrainSecondaryColor,
+    };
+
+  const subjectsList: Anarchy3DSubject[] =
+    scene.layers?.find(
+      (l): l is Extract<NonNullable<Anarchy3DScene["layers"]>[number], { kind: "subjects" }> =>
+        l.kind === "subjects"
+    )?.subjects ??
+    (scene.subjects && scene.subjects.length > 0 ? scene.subjects : [sub]);
 
   const rotYPoint = (
     lx: number,
@@ -1688,6 +1880,35 @@ function buildAnarchy3DScenePolygons(
       y: cy + ly,
       z: cz + lx * s + lz * c,
     };
+  };
+
+  const rotEulerPoint = (
+    lx: number,
+    ly: number,
+    lz: number,
+    cx: number,
+    cy: number,
+    cz: number,
+    rx: number,
+    ry: number,
+    rz: number
+  ): Vec3 => {
+    // Rotation X
+    const cx0 = Math.cos(rx);
+    const sx0 = Math.sin(rx);
+    const y1 = ly * cx0 - lz * sx0;
+    const z1 = ly * sx0 + lz * cx0;
+    // Rotation Y
+    const cy0 = Math.cos(ry);
+    const sy0 = Math.sin(ry);
+    const x2 = lx * cy0 + z1 * sy0;
+    const z2 = -lx * sy0 + z1 * cy0;
+    // Rotation Z
+    const cz0 = Math.cos(rz);
+    const sz0 = Math.sin(rz);
+    const x3 = x2 * cz0 - y1 * sz0;
+    const y3 = x2 * sz0 + y1 * cz0;
+    return { x: cx + x3, y: cy + y3, z: cz + z2 };
   };
 
   const emissiveBoost =
@@ -1719,20 +1940,27 @@ function buildAnarchy3DScenePolygons(
     tone = 0.74,
     wireRim = wireGlowActive,
     checker = true,
-    rotY = 0
+    rotY = 0,
+    rotX = 0,
+    rotZ = 0
   ) => {
-    if (polygons.length > 120) return;
-    const hw = Math.max(0.08, w * 0.5);
-    const hh = Math.max(0.08, h * 0.5);
-    const hd = Math.max(0.08, d * 0.5);
+    if (polygons.length > MAX_POLYS) return;
+    const hw = Math.max(0.06, w * 0.5);
+    const hh = Math.max(0.06, h * 0.5);
+    const hd = Math.max(0.06, d * 0.5);
     const t = clamp01(tone + emissiveBoost);
+    const pt = (lx: number, ly: number, lz: number) =>
+      rotX === 0 && rotZ === 0
+        ? rotYPoint(lx, ly, lz, x, y, z, rotY)
+        : rotEulerPoint(lx, ly, lz, x, y, z, rotX, rotY, rotZ);
+
     polygons.push(
       {
         vertices: [
-          rotYPoint(-hw, -hh, -hd, x, y, z, rotY),
-          rotYPoint(hw, -hh, -hd, x, y, z, rotY),
-          rotYPoint(hw, hh, -hd, x, y, z, rotY),
-          rotYPoint(-hw, hh, -hd, x, y, z, rotY),
+          pt(-hw, -hh, -hd),
+          pt(hw, -hh, -hd),
+          pt(hw, hh, -hd),
+          pt(-hw, hh, -hd),
         ],
         tone: t,
         checker,
@@ -1742,10 +1970,10 @@ function buildAnarchy3DScenePolygons(
       },
       {
         vertices: [
-          rotYPoint(hw, -hh, -hd, x, y, z, rotY),
-          rotYPoint(hw, -hh, hd, x, y, z, rotY),
-          rotYPoint(hw, hh, hd, x, y, z, rotY),
-          rotYPoint(hw, hh, -hd, x, y, z, rotY),
+          pt(hw, -hh, -hd),
+          pt(hw, -hh, hd),
+          pt(hw, hh, hd),
+          pt(hw, hh, -hd),
         ],
         tone: clamp01(t * 0.78),
         checker: false,
@@ -1755,10 +1983,10 @@ function buildAnarchy3DScenePolygons(
       },
       {
         vertices: [
-          rotYPoint(-hw, -hh, hd, x, y, z, rotY),
-          rotYPoint(-hw, -hh, -hd, x, y, z, rotY),
-          rotYPoint(-hw, hh, -hd, x, y, z, rotY),
-          rotYPoint(-hw, hh, hd, x, y, z, rotY),
+          pt(-hw, -hh, hd),
+          pt(-hw, -hh, -hd),
+          pt(-hw, hh, -hd),
+          pt(-hw, hh, hd),
         ],
         tone: clamp01(t * 0.68),
         checker: false,
@@ -1768,13 +1996,91 @@ function buildAnarchy3DScenePolygons(
       },
       {
         vertices: [
-          rotYPoint(-hw, hh, -hd, x, y, z, rotY),
-          rotYPoint(hw, hh, -hd, x, y, z, rotY),
-          rotYPoint(hw, hh, hd, x, y, z, rotY),
-          rotYPoint(-hw, hh, hd, x, y, z, rotY),
+          pt(-hw, hh, -hd),
+          pt(hw, hh, -hd),
+          pt(hw, hh, hd),
+          pt(-hw, hh, hd),
         ],
         tone: clamp01(t * 1.12),
         checker,
+        wireRim,
+        fillColor,
+        wireColor,
+      }
+    );
+  };
+
+  const addWedge = (
+    x: number,
+    y: number,
+    z: number,
+    w: number,
+    h: number,
+    d: number,
+    fillColor: string,
+    wireColor: string,
+    tone = 0.82,
+    wireRim = wireGlowActive,
+    rx = 0,
+    ry = 0,
+    rz = 0
+  ) => {
+    if (polygons.length > MAX_POLYS) return;
+    const hw = Math.max(0.06, w * 0.5);
+    const hh = Math.max(0.06, h * 0.5);
+    const hd = Math.max(0.06, d * 0.5);
+    const t = clamp01(tone + emissiveBoost);
+    const pt = (lx: number, ly: number, lz: number) =>
+      rotEulerPoint(lx, ly, lz, x, y, z, rx, ry, rz);
+
+    // Rampe / cockpit biseauté (avant plus bas que l'arrière)
+    polygons.push(
+      {
+        vertices: [
+          pt(-hw, -hh, -hd),
+          pt(hw, -hh, -hd),
+          pt(hw, hh, hd),
+          pt(-hw, hh, hd),
+        ],
+        tone: clamp01(t * 1.05),
+        checker: false,
+        wireRim,
+        fillColor,
+        wireColor,
+      },
+      {
+        vertices: [
+          pt(-hw, -hh, hd),
+          pt(hw, -hh, hd),
+          pt(hw, hh, hd),
+          pt(-hw, hh, hd),
+        ],
+        tone: clamp01(t * 0.72),
+        checker: false,
+        wireRim,
+        fillColor,
+        wireColor,
+      },
+      {
+        vertices: [
+          pt(-hw, -hh, -hd),
+          pt(-hw, -hh, hd),
+          pt(-hw, hh, hd),
+        ],
+        tone: clamp01(t * 0.68),
+        checker: false,
+        wireRim,
+        fillColor,
+        wireColor,
+      },
+      {
+        vertices: [
+          pt(hw, -hh, -hd),
+          pt(hw, hh, hd),
+          pt(hw, -hh, hd),
+        ],
+        tone: clamp01(t * 0.8),
+        checker: false,
         wireRim,
         fillColor,
         wireColor,
@@ -1793,19 +2099,26 @@ function buildAnarchy3DScenePolygons(
     tone = 0.82,
     wireRim = wireGlowActive,
     inverted = false,
-    rotY = 0
+    rotY = 0,
+    rotX = 0,
+    rotZ = 0
   ) => {
-    if (polygons.length > 120) return;
-    const r = Math.max(0.12, radius);
-    const h = Math.max(0.15, height);
-    const tipY = inverted ? y - h * 0.5 : y + h * 0.5;
-    const baseY = inverted ? y + h * 0.5 : y - h * 0.5;
-    const apex = { x, y: tipY, z };
+    if (polygons.length > MAX_POLYS) return;
+    const r = Math.max(0.1, radius);
+    const h = Math.max(0.12, height);
+    const tipOffset = inverted ? -h * 0.5 : h * 0.5;
+    const baseOffset = inverted ? h * 0.5 : -h * 0.5;
+    const pt = (lx: number, ly: number, lz: number) =>
+      rotX === 0 && rotZ === 0
+        ? rotYPoint(lx, ly, lz, x, y, z, rotY)
+        : rotEulerPoint(lx, ly, lz, x, y, z, rotX, rotY, rotZ);
+
+    const apex = pt(0, tipOffset, 0);
     const corners = [
-      rotYPoint(-r, baseY - y, -r, x, y, z, rotY),
-      rotYPoint(r, baseY - y, -r, x, y, z, rotY),
-      rotYPoint(r, baseY - y, r, x, y, z, rotY),
-      rotYPoint(-r, baseY - y, r, x, y, z, rotY),
+      pt(-r, baseOffset, -r),
+      pt(r, baseOffset, -r),
+      pt(r, baseOffset, r),
+      pt(-r, baseOffset, r),
     ];
     const baseTone = clamp01(tone + emissiveBoost);
     for (let i = 0; i < 4; i++) {
@@ -1830,9 +2143,13 @@ function buildAnarchy3DScenePolygons(
     fillColor: string,
     wireColor: string,
     tone = 0.78,
-    wireRim = wireGlowActive
+    wireRim = wireGlowActive,
+    cx = 0,
+    cy = 0,
+    rx = 0,
+    ry = 0
   ) => {
-    if (polygons.length > 120) return;
+    if (polygons.length > MAX_POLYS) return;
     const segs = Math.max(4, Math.min(10, Math.round(segments)));
     const baseTone = clamp01(tone + emissiveBoost);
     for (let s = 0; s < segs; s++) {
@@ -1842,12 +2159,17 @@ function buildAnarchy3DScenePolygons(
       const y0 = Math.sin(a0) * radius;
       const x1 = Math.cos(a1) * radius;
       const y1 = Math.sin(a1) * radius;
+      const pt = (lx: number, ly: number, lz: number) =>
+        rx === 0 && ry === 0
+          ? { x: cx + lx, y: cy + ly, z: z + lz }
+          : rotEulerPoint(lx, ly, lz, cx, cy, z, rx, ry, 0);
+
       polygons.push({
         vertices: [
-          { x: x0, y: y0, z },
-          { x: x1, y: y1, z },
-          { x: x1, y: y1, z: z + depth },
-          { x: x0, y: y0, z: z + depth },
+          pt(x0, y0, 0),
+          pt(x1, y1, 0),
+          pt(x1, y1, depth),
+          pt(x0, y0, depth),
         ],
         tone: s % 2 === 0 ? baseTone : clamp01(baseTone * 0.65),
         checker: s % 2 === 0,
@@ -1858,14 +2180,131 @@ function buildAnarchy3DScenePolygons(
     }
   };
 
-  // 1. TERRAIN 3D DATA-DRIVEN (environment.terrainType)
+  const addProceduralPart = (
+    part: AnarchyProceduralPart,
+    cx: number,
+    cy: number,
+    cz: number,
+    parentScale: number,
+    parentAccent: string,
+    baseRotY: number
+  ) => {
+    const px = cx + part.position[0] * parentScale;
+    const py = cy + part.position[1] * parentScale;
+    const pz = cz + part.position[2] * parentScale;
+    const sx = part.scale[0] * parentScale;
+    const sy = part.scale[1] * parentScale;
+    const sz = part.scale[2] * parentScale;
+    const rx = part.rotation[0];
+    const ry = part.rotation[1] + baseRotY;
+    const rz = part.rotation[2];
+    const fill = part.color;
+    const wire = part.emissive ? "#FFFFFF" : parentAccent;
+    const tone = part.emissive ? 0.96 : 0.78;
+    const wireRim = part.wireframe ?? true;
+
+    switch (part.primitive) {
+      case "box":
+        addBox(px, py, pz, sx, sy, sz, fill, wire, tone, wireRim, false, ry, rx, rz);
+        break;
+      case "wedge":
+        addWedge(px, py, pz, sx, sy, sz, fill, wire, tone, wireRim, rx, ry, rz);
+        break;
+      case "pyramid":
+        addPyramid(
+          px,
+          py,
+          pz,
+          Math.max(sx, sz) * 0.55,
+          sy,
+          fill,
+          wire,
+          tone,
+          wireRim,
+          false,
+          ry,
+          rx,
+          rz
+        );
+        break;
+      case "icosahedron":
+        addPyramid(
+          px,
+          py + sy * 0.28,
+          pz,
+          Math.max(sx, sz) * 0.52,
+          sy * 0.6,
+          fill,
+          wire,
+          tone,
+          wireRim,
+          false,
+          ry,
+          rx,
+          rz
+        );
+        addPyramid(
+          px,
+          py - sy * 0.28,
+          pz,
+          Math.max(sx, sz) * 0.52,
+          sy * 0.6,
+          fill,
+          wire,
+          clamp01(tone * 0.85),
+          wireRim,
+          true,
+          ry,
+          rx,
+          rz
+        );
+        break;
+      case "cylinder":
+        addRing(
+          pz - sz * 0.5,
+          Math.max(sx, sy) * 0.5,
+          Math.max(0.18, sz),
+          6,
+          rz,
+          fill,
+          wire,
+          tone,
+          wireRim,
+          px,
+          py,
+          rx,
+          ry
+        );
+        break;
+      case "torus":
+      case "ring":
+        addRing(
+          pz - sz * 0.2,
+          Math.max(sx, sy) * 0.55,
+          Math.max(0.14, sz * 0.45),
+          8,
+          rz,
+          fill,
+          wire,
+          tone,
+          wireRim,
+          px,
+          py,
+          rx,
+          ry
+        );
+        break;
+    }
+  };
+
+  // 1. TERRAIN 3D DATA-DRIVEN (terrainLayer.type)
   const waveAmp =
     map.midTarget === "terrain_wave_height"
       ? 0.25 + audio.midEnvelope * 0.85
       : 0.15 + audio.midEnvelope * 0.25;
   const scrollZ = (timeSeconds * 2.4) % 2.4;
 
-  switch (env.terrainType) {
+  switch (terrainLayer.type) {
     case "infinite_grid": {
       for (let row = 0; row < 4; row++) {
         const z0 = 2.0 + row * 2.4 - scrollZ;
@@ -1887,8 +2326,113 @@ function buildAnarchy3DScenePolygons(
             tone: isAlt ? 0.62 : 0.42,
             checker: true,
             wireRim: true,
-            fillColor: isAlt ? env.terrainPrimaryColor : env.terrainSecondaryColor,
-            wireColor: isAlt ? env.terrainSecondaryColor : env.terrainPrimaryColor,
+            fillColor: isAlt
+              ? terrainLayer.primaryColor
+              : terrainLayer.secondaryColor,
+            wireColor: isAlt
+              ? terrainLayer.secondaryColor
+              : terrainLayer.primaryColor,
+          });
+        }
+      }
+      break;
+    }
+    case "neon_highway": {
+      const roadY = -1.58;
+      for (let row = 0; row < 4; row++) {
+        const z0 = 1.8 + row * 2.4 - scrollZ;
+        const z1 = z0 + 2.25;
+        // Chaussée centrale sombre bordée de néon
+        polygons.push({
+          vertices: [
+            { x: -2.6, y: roadY, z: z0 },
+            { x: 2.6, y: roadY, z: z0 },
+            { x: 2.6, y: roadY, z: z1 },
+            { x: -2.6, y: roadY, z: z1 },
+          ],
+          tone: 0.32,
+          checker: false,
+          wireRim: true,
+          fillColor: lerpHexColor(env.skyColor, terrainLayer.primaryColor, 0.14),
+          wireColor: terrainLayer.primaryColor,
+        });
+        // Marquages de voies défilants
+        if (row % 2 === 0) {
+          for (const lx of [-0.9, 0.9]) {
+            polygons.push({
+              vertices: [
+                { x: lx - 0.06, y: roadY + 0.02, z: z0 + 0.3 },
+                { x: lx + 0.06, y: roadY + 0.02, z: z0 + 0.3 },
+                { x: lx + 0.06, y: roadY + 0.02, z: z0 + 1.35 },
+                { x: lx - 0.06, y: roadY + 0.02, z: z0 + 1.35 },
+              ],
+              tone: 0.95,
+              checker: false,
+              wireRim: false,
+              fillColor: terrainLayer.secondaryColor,
+              wireColor: terrainLayer.secondaryColor,
+            });
+          }
+        }
+        // Glissières latérales lumineuses
+        addBox(
+          -2.75,
+          roadY + 0.18,
+          (z0 + z1) * 0.5,
+          0.16,
+          0.32,
+          2.2,
+          terrainLayer.secondaryColor,
+          terrainLayer.primaryColor,
+          0.88,
+          true,
+          false,
+          0
+        );
+        addBox(
+          2.75,
+          roadY + 0.18,
+          (z0 + z1) * 0.5,
+          0.16,
+          0.32,
+          2.2,
+          terrainLayer.secondaryColor,
+          terrainLayer.primaryColor,
+          0.88,
+          true,
+          false,
+          0
+        );
+      }
+      break;
+    }
+    case "mirror_floor": {
+      const floorY = -1.62;
+      for (let row = 0; row < 4; row++) {
+        const z0 = 2.0 + row * 2.4 - scrollZ;
+        const z1 = z0 + 2.2;
+        for (let col = -2; col <= 1; col++) {
+          const x0 = col * 1.95;
+          const x1 = (col + 1) * 1.95;
+          const isStripe = (row + col) % 2 === 0;
+          polygons.push({
+            vertices: [
+              { x: x0, y: floorY, z: z0 },
+              { x: x1, y: floorY, z: z0 },
+              { x: x1, y: floorY, z: z1 },
+              { x: x0, y: floorY, z: z1 },
+            ],
+            tone: isStripe ? 0.45 : 0.25,
+            checker: false,
+            wireRim: true,
+            fillColor: lerpHexColor(
+              env.skyColor,
+              isStripe ? terrainLayer.primaryColor : terrainLayer.secondaryColor,
+              0.22 + audio.bassEnvelope * 0.18
+            ),
+            wireColor: isStripe
+              ? terrainLayer.primaryColor
+              : terrainLayer.secondaryColor,
           });
         }
       }
@@ -1908,8 +2452,8 @@ function buildAnarchy3DScenePolygons(
           zPos,
           1.15,
           hPeak,
-          i % 2 === 0 ? env.terrainPrimaryColor : env.terrainSecondaryColor,
-          env.terrainSecondaryColor,
+          i % 2 === 0 ? terrainLayer.primaryColor : terrainLayer.secondaryColor,
+          terrainLayer.secondaryColor,
           0.68,
           true,
           false,
@@ -1921,8 +2465,8 @@ function buildAnarchy3DScenePolygons(
           zPos,
           1.15,
           hPeak,
-          i % 2 === 1 ? env.terrainPrimaryColor : env.terrainSecondaryColor,
-          env.terrainPrimaryColor,
+          i % 2 === 1 ? terrainLayer.primaryColor : terrainLayer.secondaryColor,
+          terrainLayer.primaryColor,
           0.68,
           true,
           false,
@@ -1933,7 +2477,9 @@ function buildAnarchy3DScenePolygons(
     }
     case "dojo_pillars": {
       const slamBoost =
-        map.bassTarget === "pillar_slam" ? audio.bassEnvelope * 1.35 : audio.bassEnvelope * 0.45;
+        map.bassTarget === "pillar_slam"
+          ? audio.bassEnvelope * 1.35
+          : audio.bassEnvelope * 0.45;
       for (let i = 0; i < 3; i++) {
         const zPos = 3.4 + i * 2.8 - scrollZ;
         const pHeight = 2.5 + slamBoost;
@@ -1944,8 +2490,8 @@ function buildAnarchy3DScenePolygons(
           0.52,
           pHeight,
           0.52,
-          env.terrainPrimaryColor,
-          env.terrainSecondaryColor,
+          terrainLayer.primaryColor,
+          terrainLayer.secondaryColor,
           0.72,
           true,
           true,
@@ -1958,14 +2504,13 @@ function buildAnarchy3DScenePolygons(
           0.52,
           pHeight,
           0.52,
-          env.terrainPrimaryColor,
-          env.terrainSecondaryColor,
+          terrainLayer.primaryColor,
+          terrainLayer.secondaryColor,
           0.72,
           true,
           true,
           0
         );
-        // Linteau supérieur de portique Torii / Dojo
         addBox(
           0,
           -1.5 + pHeight,
@@ -1973,8 +2518,8 @@ function buildAnarchy3DScenePolygons(
           6.4,
           0.28,
           0.42,
-          env.terrainSecondaryColor,
-          env.terrainPrimaryColor,
+          terrainLayer.secondaryColor,
+          terrainLayer.primaryColor,
           0.84,
           true,
           false,
@@ -1985,7 +2530,9 @@ function buildAnarchy3DScenePolygons(
     }
     case "tunnel": {
       const ringBoost =
-        map.bassTarget === "tunnel_boost" ? 1 + audio.bassEnvelope * 0.45 : 1 + audio.bassEnvelope * 0.2;
+        map.bassTarget === "tunnel_boost"
+          ? 1 + audio.bassEnvelope * 0.45
+          : 1 + audio.bassEnvelope * 0.2;
       for (let r = 0; r < 3; r++) {
         const zPos = 3.0 + r * 2.6 - scrollZ;
         addRing(
@@ -1994,8 +2541,8 @@ function buildAnarchy3DScenePolygons(
           0.55,
           8,
           timeSeconds * (r % 2 === 0 ? 0.75 : -0.75),
-          r % 2 === 0 ? env.terrainPrimaryColor : env.terrainSecondaryColor,
-          r % 2 === 0 ? env.terrainSecondaryColor : env.terrainPrimaryColor,
+          r % 2 === 0 ? terrainLayer.primaryColor : terrainLayer.secondaryColor,
+          r % 2 === 0 ? terrainLayer.secondaryColor : terrainLayer.primaryColor,
           0.76,
           true
         );
@@ -2004,12 +2551,128 @@ function buildAnarchy3DScenePolygons(
     }
   }
 
-  // 2. SUJET CENTRAL 3D DATA-DRIVEN (subject.meshType)
+  // 2. DÉCORS LATÉRAUX PROCÉDURAUX (sidePropsLayer)
+  if (sidePropsLayer.type !== "none" && sidePropsLayer.density > 0.05) {
+    const propCount = Math.max(1, Math.min(4, Math.round(1 + sidePropsLayer.density * 3)));
+    const propStep = 9.0 / propCount;
+    const propScroll = (timeSeconds * 2.4) % propStep;
+
+    for (let i = 0; i < propCount; i++) {
+      const zPos = 2.6 + i * propStep - propScroll;
+      switch (sidePropsLayer.type) {
+        case "palm_trees": {
+          for (const side of [-1, 1]) {
+            const px = side * 3.35;
+            addBox(
+              px,
+              -0.35,
+              zPos,
+              0.22,
+              2.35,
+              0.22,
+              sidePropsLayer.primaryColor,
+              sidePropsLayer.secondaryColor,
+              0.78,
+              true,
+              false,
+              0,
+              0,
+              side * -0.08
+            );
+            addPyramid(
+              px,
+              0.95,
+              zPos,
+              0.95,
+              0.65,
+              sidePropsLayer.secondaryColor,
+              sidePropsLayer.primaryColor,
+              0.88,
+              true,
+              true,
+              i * 0.5
+            );
+          }
+          break;
+        }
+        case "cyber_towers": {
+          for (const side of [-1, 1]) {
+            const px = side * (3.5 + (i % 2) * 0.45);
+            const hTower = 2.6 + ((i * 3) % 3) * 0.75 + audio.bassEnvelope * 0.55;
+            addBox(
+              px,
+              -1.6 + hTower * 0.5,
+              zPos,
+              0.85,
+              hTower,
+              0.85,
+              sidePropsLayer.primaryColor,
+              sidePropsLayer.secondaryColor,
+              0.7,
+              true,
+              true,
+              0
+            );
+          }
+          break;
+        }
+        case "dojo_pillars": {
+          for (const side of [-1, 1]) {
+            const px = side * 3.15;
+            addBox(
+              px,
+              -0.25,
+              zPos,
+              0.38,
+              2.5,
+              0.38,
+              sidePropsLayer.primaryColor,
+              sidePropsLayer.secondaryColor,
+              0.76,
+              true,
+              true,
+              0
+            );
+            addBox(
+              px,
+              1.1,
+              zPos,
+              0.72,
+              0.22,
+              0.72,
+              sidePropsLayer.secondaryColor,
+              sidePropsLayer.primaryColor,
+              0.9,
+              true,
+              false,
+              0
+            );
+          }
+          break;
+        }
+        case "neon_arches": {
+          addRing(
+            zPos,
+            2.75 + audio.bassEnvelope * 0.25,
+            0.35,
+            6,
+            0,
+            sidePropsLayer.primaryColor,
+            sidePropsLayer.secondaryColor,
+            0.84,
+            true
+          );
+          break;
+        }
+      }
+    }
+  }
+
+  // 3. SUJETS 3D MULTIPLES DATA-DRIVEN (subjects[])
   const subjectPulse =
     map.bassTarget === "subject_pulse"
       ? 1 + audio.bassEnvelope * 0.65
       : 1 + audio.bassEnvelope * 0.25;
-  const sc = sub.scale * subjectPulse;
   const rotSpeed =
     map.midTarget === "subject_rotation"
       ? 1.8 + audio.midEnvelope * 2.4
@@ -2020,234 +2683,268 @@ function buildAnarchy3DScenePolygons(
       ? audio.bassEnvelope * 0.75
       : Math.sin(timeSeconds * 2.4) * 0.15;
 
-  switch (sub.meshType) {
-    case "voxel_runner": {
-      const runPhase = timeSeconds * Math.max(4, env.terrainSpeed * 0.65);
-      const stride = Math.sin(runPhase) * 0.45;
-      const centerZ = 4.6;
-      const baseY = -0.35 + jumpY;
-      // Torse 3D
-      addBox(
-        0,
-        baseY + 0.35 * sc,
-        centerZ,
-        0.72 * sc,
-        0.92 * sc,
-        0.44 * sc,
-        primaryCol,
-        accentCol,
-        0.82,
-        wireGlowActive,
-        true,
-        Math.sin(runPhase * 0.5) * 0.18
-      );
-      // Tête + visière cyber
-      addBox(
-        0,
-        baseY + 1.02 * sc,
-        centerZ - 0.05,
-        0.48 * sc,
-        0.44 * sc,
-        0.46 * sc,
-        accentCol,
-        primaryCol,
-        0.92,
-        true,
-        false,
-        0
-      );
-      // Bras gauche & droit articulés
-      addBox(
-        -0.58 * sc,
-        baseY + 0.32 * sc - stride * 0.25,
-        centerZ + stride * 0.5,
-        0.26 * sc,
-        0.75 * sc,
-        0.28 * sc,
-        accentCol,
-        primaryCol,
-        0.78,
-        wireGlowActive,
-        false,
-        stride * 0.4
-      );
-      addBox(
-        0.58 * sc,
-        baseY + 0.32 * sc + stride * 0.25,
-        centerZ - stride * 0.5,
-        0.26 * sc,
-        0.75 * sc,
-        0.28 * sc,
-        accentCol,
-        primaryCol,
-        0.78,
-        wireGlowActive,
-        false,
-        -stride * 0.4
-      );
-      // Jambes gauche & droite en course
-      addBox(
-        -0.24 * sc,
-        baseY - 0.42 * sc + Math.max(0, -stride * 0.3),
-        centerZ - stride * 0.55,
-        0.28 * sc,
-        0.78 * sc,
-        0.3 * sc,
-        primaryCol,
-        accentCol,
-        0.68,
-        wireGlowActive,
-        true,
-        0
-      );
-      addBox(
-        0.24 * sc,
-        baseY - 0.42 * sc + Math.max(0, stride * 0.3),
-        centerZ + stride * 0.55,
-        0.28 * sc,
-        0.78 * sc,
-        0.3 * sc,
-        primaryCol,
-        accentCol,
-        0.68,
-        wireGlowActive,
-        true,
-        0
-      );
-      break;
-    }
-    case "floating_monolith": {
-      const centerZ = 5.4;
-      const monoY = 0.25 + jumpY;
-      addBox(
-        0,
-        monoY,
-        centerZ,
-        0.95 * sc,
-        2.45 * sc,
-        0.75 * sc,
-        primaryCol,
-        accentCol,
-        0.84,
-        wireGlowActive,
-        true,
-        subRotY * 0.55
-      );
-      for (let i = 0; i < 3; i++) {
-        const a = subRotY + (i * Math.PI * 2) / 3;
-        addPyramid(
-          Math.cos(a) * 1.95 * sc,
-          monoY + Math.sin(timeSeconds * 2 + i) * 0.35,
-          centerZ + Math.sin(a) * 1.35 * sc,
-          0.38 * sc,
-          0.85 * sc,
-          accentCol,
-          primaryCol,
-          0.9,
-          true,
-          i % 2 === 1,
-          a
-        );
+  for (let sIdx = 0; sIdx < subjectsList.length; sIdx++) {
+    const curSub = subjectsList[sIdx];
+    const sc = curSub.scale * subjectPulse;
+    const offX = curSub.position?.[0] ?? 0;
+    const offY = curSub.position?.[1] ?? 0;
+    const offZ = curSub.position?.[2] ?? 0;
+    const baseRotY = curSub.rotation?.[1] ?? 0;
+    const sPrimary =
+      map.midTarget === "color_shift"
+        ? lerpHexColor(
+            curSub.primaryColor,
+            curSub.accentColor,
+            clamp01(audio.midEnvelope * 0.75)
+          )
+        : curSub.primaryColor;
+    const sAccent = curSub.accentColor;
+    const sWire = curSub.wireframeOverlay || wireGlowActive;
+
+    switch (curSub.meshType) {
+      case "procedural_group": {
+        const centerZ = 4.9 + offZ;
+        const baseY = offY + jumpY * 0.45;
+        const parts = curSub.parts ?? [];
+        for (const part of parts) {
+          addProceduralPart(
+            part,
+            offX,
+            baseY,
+            centerZ,
+            sc,
+            sAccent,
+            baseRotY + (sIdx > 0 ? subRotY * 0.5 : Math.sin(timeSeconds * 0.9) * 0.12)
+          );
+        }
+        break;
       }
-      break;
-    }
-    case "cyber_katana": {
-      const centerZ = 5.0;
-      const slashBoost =
-        map.trebleTarget === "katana_slash" ? audio.trebleEnvelope * 1.2 : 0.3;
-      // Noyau diamant Shogun central
-      addPyramid(
-        0,
-        0.35 + jumpY,
-        centerZ,
-        0.78 * sc,
-        1.25 * sc,
-        primaryCol,
-        accentCol,
-        0.88,
-        wireGlowActive,
-        false,
-        subRotY
-      );
-      addPyramid(
-        0,
-        -0.45 + jumpY,
-        centerZ,
-        0.78 * sc,
-        1.1 * sc,
-        primaryCol,
-        accentCol,
-        0.74,
-        wireGlowActive,
-        true,
-        subRotY
-      );
-      // Lames 3D croisées
-      for (let b = -1; b <= 1; b += 2) {
+      case "voxel_runner": {
+        const runPhase = timeSeconds * Math.max(4, terrainLayer.speed * 0.65);
+        const stride = Math.sin(runPhase) * 0.45;
+        const centerZ = 4.6 + offZ;
+        const baseY = -0.35 + offY + jumpY;
         addBox(
-          b * (1.25 + slashBoost * 0.45) * sc,
-          0.15 + jumpY,
-          centerZ - 0.3,
-          0.18 * sc,
-          2.55 * sc,
-          0.36 * sc,
-          accentCol,
-          primaryCol,
-          0.94,
+          offX,
+          baseY + 0.35 * sc,
+          centerZ,
+          0.72 * sc,
+          0.92 * sc,
+          0.44 * sc,
+          sPrimary,
+          sAccent,
+          0.82,
+          sWire,
+          true,
+          baseRotY + Math.sin(runPhase * 0.5) * 0.18
+        );
+        addBox(
+          offX,
+          baseY + 1.02 * sc,
+          centerZ - 0.05,
+          0.48 * sc,
+          0.44 * sc,
+          0.46 * sc,
+          sAccent,
+          sPrimary,
+          0.92,
           true,
           false,
-          b * (0.48 + slashBoost * 0.5) + subRotY * 0.35
+          baseRotY
         );
+        addBox(
+          offX - 0.58 * sc,
+          baseY + 0.32 * sc - stride * 0.25,
+          centerZ + stride * 0.5,
+          0.26 * sc,
+          0.75 * sc,
+          0.28 * sc,
+          sAccent,
+          sPrimary,
+          0.78,
+          sWire,
+          false,
+          baseRotY + stride * 0.4
+        );
+        addBox(
+          offX + 0.58 * sc,
+          baseY + 0.32 * sc + stride * 0.25,
+          centerZ - stride * 0.5,
+          0.26 * sc,
+          0.75 * sc,
+          0.28 * sc,
+          sAccent,
+          sPrimary,
+          0.78,
+          sWire,
+          false,
+          baseRotY - stride * 0.4
+        );
+        addBox(
+          offX - 0.24 * sc,
+          baseY - 0.42 * sc + Math.max(0, -stride * 0.3),
+          centerZ - stride * 0.55,
+          0.28 * sc,
+          0.78 * sc,
+          0.3 * sc,
+          sPrimary,
+          sAccent,
+          0.68,
+          sWire,
+          true,
+          baseRotY
+        );
+        addBox(
+          offX + 0.24 * sc,
+          baseY - 0.42 * sc + Math.max(0, stride * 0.3),
+          centerZ + stride * 0.55,
+          0.28 * sc,
+          0.78 * sc,
+          0.3 * sc,
+          sPrimary,
+          sAccent,
+          0.68,
+          sWire,
+          true,
+          baseRotY
+        );
+        break;
       }
-      break;
+      case "floating_monolith": {
+        const centerZ = 5.4 + offZ;
+        const monoY = 0.25 + offY + jumpY;
+        addBox(
+          offX,
+          monoY,
+          centerZ,
+          0.95 * sc,
+          2.45 * sc,
+          0.75 * sc,
+          sPrimary,
+          sAccent,
+          0.84,
+          sWire,
+          true,
+          baseRotY + subRotY * 0.55
+        );
+        for (let i = 0; i < 3; i++) {
+          const a = subRotY + (i * Math.PI * 2) / 3;
+          addPyramid(
+            offX + Math.cos(a) * 1.95 * sc,
+            monoY + Math.sin(timeSeconds * 2 + i) * 0.35,
+            centerZ + Math.sin(a) * 1.35 * sc,
+            0.38 * sc,
+            0.85 * sc,
+            sAccent,
+            sPrimary,
+            0.9,
+            true,
+            i % 2 === 1,
+            a
+          );
+        }
+        break;
+      }
+      case "cyber_katana": {
+        const centerZ = 5.0 + offZ;
+        const slashBoost =
+          map.trebleTarget === "katana_slash"
+            ? audio.trebleEnvelope * 1.2
+            : 0.3;
+        addPyramid(
+          offX,
+          0.35 + offY + jumpY,
+          centerZ,
+          0.78 * sc,
+          1.25 * sc,
+          sPrimary,
+          sAccent,
+          0.88,
+          sWire,
+          false,
+          baseRotY + subRotY
+        );
+        addPyramid(
+          offX,
+          -0.45 + offY + jumpY,
+          centerZ,
+          0.78 * sc,
+          1.1 * sc,
+          sPrimary,
+          sAccent,
+          0.74,
+          sWire,
+          true,
+          baseRotY + subRotY
+        );
+        for (let b = -1; b <= 1; b += 2) {
+          addBox(
+            offX + b * (1.25 + slashBoost * 0.45) * sc,
+            0.15 + offY + jumpY,
+            centerZ - 0.3,
+            0.18 * sc,
+            2.55 * sc,
+            0.36 * sc,
+            sAccent,
+            sPrimary,
+            0.94,
+            true,
+            false,
+            baseRotY + b * (0.48 + slashBoost * 0.5) + subRotY * 0.35
+          );
+        }
+        break;
+      }
+      case "abstract_polyhedron": {
+        const centerZ = 5.2 + offZ;
+        const polyY = 0.2 + offY + jumpY;
+        addPyramid(
+          offX,
+          polyY + 0.45 * sc,
+          centerZ,
+          0.92 * sc,
+          1.15 * sc,
+          sPrimary,
+          sAccent,
+          0.88,
+          sWire,
+          false,
+          baseRotY + subRotY
+        );
+        addPyramid(
+          offX,
+          polyY - 0.45 * sc,
+          centerZ,
+          0.92 * sc,
+          1.15 * sc,
+          sAccent,
+          sPrimary,
+          0.78,
+          sWire,
+          true,
+          baseRotY - subRotY
+        );
+        addRing(
+          centerZ - 0.25,
+          1.55 * sc,
+          0.42 * sc,
+          8,
+          subRotY * 0.8,
+          sAccent,
+          sPrimary,
+          0.86,
+          true,
+          offX,
+          polyY
+        );
+        break;
+      }
+      case "none":
+        break;
     }
-    case "abstract_polyhedron": {
-      const centerZ = 5.2;
-      const polyY = 0.2 + jumpY;
-      addPyramid(
-        0,
-        polyY + 0.45 * sc,
-        centerZ,
-        0.92 * sc,
-        1.15 * sc,
-        primaryCol,
-        accentCol,
-        0.88,
-        wireGlowActive,
-        false,
-        subRotY
-      );
-      addPyramid(
-        0,
-        polyY - 0.45 * sc,
-        centerZ,
-        0.92 * sc,
-        1.15 * sc,
-        accentCol,
-        primaryCol,
-        0.78,
-        wireGlowActive,
-        true,
-        -subRotY
-      );
-      addRing(
-        centerZ - 0.25,
-        1.55 * sc,
-        0.42 * sc,
-        8,
-        subRotY * 0.8,
-        accentCol,
-        primaryCol,
-        0.86,
-        true
-      );
-      break;
-    }
-    case "none":
-      break;
   }
 
-  // 3. MODE CAMÉRA FPS_ARMS : Bras / Lames 3D cybernétiques au premier plan
+  // 4. MODE CAMÉRA FPS_ARMS : Bras / Lames 3D cybernétiques au premier plan
   if (cam.mode === "fps_arms") {
     const slash =
       map.trebleTarget === "katana_slash"
@@ -2283,7 +2980,7 @@ function buildAnarchy3DScenePolygons(
     );
   }
 
-  // 4. PARTICULES 3D SUR LES AIGUS (trebleTarget === "particles_burst" ou "katana_slash")
+  // 5. PARTICULES 3D SUR LES AIGUS (trebleTarget === "particles_burst" ou "katana_slash")
   if (
     (map.trebleTarget === "particles_burst" ||
       map.trebleTarget === "katana_slash") &&
@@ -2300,7 +2997,7 @@ function buildAnarchy3DScenePolygons(
         0.18 + audio.trebleEnvelope * 0.16,
         0.36 + audio.trebleEnvelope * 0.25,
         accentCol,
-        env.terrainPrimaryColor,
+        terrainLayer.primaryColor,
         0.95,
         true,
         i % 2 === 0,
@@ -2461,7 +3158,9 @@ export function renderSceneFrame(
     grain: clamp01(
       (input.effects?.grain ?? DEFAULT_RETRO_EFFECTS.grain) + fluxGlitchBoost
     ),
-    vertexSnap: input.effects?.vertexSnap ?? DEFAULT_RETRO_EFFECTS.vertexSnap,
+    vertexSnap:
+      Boolean(input.effects?.vertexSnap ?? DEFAULT_RETRO_EFFECTS.vertexSnap) ||
+      (scene3d?.postFx?.ps1VertexJitter ?? 0) > 0.12,
     affineTextures:
       input.effects?.affineTextures ?? DEFAULT_RETRO_EFFECTS.affineTextures,
     psychedelic: clamp01(input.effects?.psychedelic ?? 0),
@@ -2679,66 +3378,42 @@ export function renderSceneFrame(
   let vertexCount = 0;
   let triangleCount = 0;
 
-  switch (descriptor.id) {
-    case "industrial-city":
-      drawIndustrialCityScene(sceneTools, palette, frameIndex, audio, effects);
-      break;
-    case "digital-void":
-      drawDigitalVoidScene(
-        sceneTools,
-        palette,
-        frameIndex,
-        audio,
-        effects,
-        seed
-      );
-      break;
-    case "ps1-nightmare": {
-      const counts = drawPs1NightmareScene(
-        sceneTools,
-        palette,
-        effectiveTime,
-        audio,
-        effects,
-        reducedMotion,
-        camOff
-      );
-      vertexCount = counts.vertexCount;
-      triangleCount = counts.triangleCount;
-      break;
-    }
-    case "rave-dungeon": {
-      const counts = drawRaveDungeonScene(
-        sceneTools,
-        palette,
-        effectiveTime,
-        audio,
-        effects,
-        reducedMotion,
-        camOff
-      );
-      vertexCount = counts.vertexCount;
-      triangleCount = counts.triangleCount;
-      break;
-    }
-    case "techno-therapy": {
-      const counts = drawTechnoTherapyScene(
-        sceneTools,
-        palette,
-        effectiveTime,
-        audio,
-        effects,
-        reducedMotion,
-        camOff
-      );
-      vertexCount = counts.vertexCount;
-      triangleCount = counts.triangleCount;
-      break;
-    }
-  }
-
-  // Rendu 3D Data-Driven de la Cartouche / Scène 3D (terrainType + subject.meshType + camera.mode + audioMapping)
   if (scene3d) {
+    const rawBackdrop: Anarchy3DBackdropLayer =
+      scene3d.layers?.find(
+        (
+          l
+        ): l is Extract<
+          NonNullable<Anarchy3DScene["layers"]>[number],
+          { kind: "backdrop" }
+        > => l.kind === "backdrop"
+      )?.backdrop ?? {
+        skyGradient: [scene3d.environment.skyColor, scene3d.environment.fogColor],
+        starfield: {
+          enabled: true,
+          density: 0.45,
+          color: scene3d.environment.terrainPrimaryColor,
+        },
+      };
+    const effectiveBackdrop: Anarchy3DBackdropLayer = {
+      ...rawBackdrop,
+      skyGradient: [
+        colorTransition > 0.01 ? palette.sky : rawBackdrop.skyGradient[0],
+        colorTransition > 0.01 ? palette.haze : rawBackdrop.skyGradient[1],
+      ],
+    };
+
+    drawAnarchy3DBackdropLayer(
+      sceneCtx,
+      effectiveBackdrop,
+      audio,
+      input.timeSeconds,
+      STUDY_SIZE.width,
+      STUDY_SIZE.height,
+      scene3d.seed ?? seed,
+      reducedMotion
+    );
+
     const customPolys = buildAnarchy3DScenePolygons(
       scene3d,
       effectiveTime,
@@ -2760,6 +3435,64 @@ export function renderSceneFrame(
       );
       vertexCount += customCounts.vertexCount;
       triangleCount += customCounts.triangleCount;
+    }
+  } else {
+    switch (descriptor.id) {
+      case "industrial-city":
+        drawIndustrialCityScene(sceneTools, palette, frameIndex, audio, effects);
+        break;
+      case "digital-void":
+        drawDigitalVoidScene(
+          sceneTools,
+          palette,
+          frameIndex,
+          audio,
+          effects,
+          seed
+        );
+        break;
+      case "ps1-nightmare": {
+        const counts = drawPs1NightmareScene(
+          sceneTools,
+          palette,
+          effectiveTime,
+          audio,
+          effects,
+          reducedMotion,
+          camOff
+        );
+        vertexCount = counts.vertexCount;
+        triangleCount = counts.triangleCount;
+        break;
+      }
+      case "rave-dungeon": {
+        const counts = drawRaveDungeonScene(
+          sceneTools,
+          palette,
+          effectiveTime,
+          audio,
+          effects,
+          reducedMotion,
+          camOff
+        );
+        vertexCount = counts.vertexCount;
+        triangleCount = counts.triangleCount;
+        break;
+      }
+      case "techno-therapy": {
+        const counts = drawTechnoTherapyScene(
+          sceneTools,
+          palette,
+          effectiveTime,
+          audio,
+          effects,
+          reducedMotion,
+          camOff
+        );
+        vertexCount = counts.vertexCount;
+        triangleCount = counts.triangleCount;
+        break;
+      }
     }
   }
 
@@ -2841,7 +3574,8 @@ export function renderSceneFrame(
     audio,
     input.timeSeconds,
     targetW,
-    targetH
+    targetH,
+    scene3d?.postFx
   );
 
   ctx.restore();
