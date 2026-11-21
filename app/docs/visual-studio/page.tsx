@@ -450,6 +450,13 @@ export default function VisualStudioDocsPage() {
                     <code>modulators[]</code> (<code>lfo_1..lfo_4</code>, <code>waveform: sine | triangle | saw | square | random_hold</code>, <code>rateBeats: 0.25..8</code>) et{" "}
                     <code>cameraCuts[]</code> (<code>rig</code>, <code>fov</code>, <code>switchEveryBars</code>, <code>onPeakBand: snare | kick | bass</code>, <code>transition: cut | glide</code>).
                   </li>
+                  <li>
+                    <strong>Moteur de Physique Cartoon &amp; Collisions (Anarchy3DPackV7)</strong> :{" "}
+                    <code>physicsWorld</code> (<code>enabled</code>, <code>gravity: [x,y,z]</code>, <code>bounds: {`{ shape: "box"|"sphere"|"floor_only", radiusOrSize, restitution }`}</code>, <code>faderBindings</code> sur <code>gravity | restitution | impulseForce | springStiffness</code>),{" "}
+                    <code>actor.physics</code> (<code>bodyType: dynamic | kinematic | static</code>, <code>mass</code>, <code>restitution: 0..1.2</code>, <code>friction</code>, <code>linearDamping</code>, <code>collisionSquash</code>, <code>audioImpulses[]</code> sur <code>bass | snare | treble | kick</code>),{" "}
+                    <code>joints[]</code> (<code>type: spring</code>, <code>actorA</code>, <code>actorB</code>, <code>stiffness</code>, <code>damping</code>, <code>restLength</code>) et{" "}
+                    <code>physics_spawner</code> (<code>spawnShape: chrome_sphere | music_note | comic_star | pie_eye_ball</code>, <code>spawnRateBeats</code>, <code>spawnOnKick</code>, <code>ttlBars</code>, <code>maxInstances</code>).
+                  </li>
                 </ul>
               </div>
 

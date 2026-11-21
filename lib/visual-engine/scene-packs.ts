@@ -1,7 +1,9 @@
 import type {
   Anarchy3DActor,
+  Anarchy3DActorPhysics,
   Anarchy3DAnimation,
   Anarchy3DAnimationTarget,
+  Anarchy3DAudioImpulse,
   Anarchy3DAudioMapping,
   Anarchy3DAudioModulation,
   Anarchy3DBackdropLayer,
@@ -20,6 +22,10 @@ import type {
   Anarchy3DPackV4,
   Anarchy3DPackV5,
   Anarchy3DPackV6,
+  Anarchy3DPackV7,
+  Anarchy3DPhysicsBounds,
+  Anarchy3DPhysicsJoint,
+  Anarchy3DPhysicsWorld,
   Anarchy3DPostFx,
   Anarchy3DPostFxStep,
   Anarchy3DRenderStyle,
@@ -29,6 +35,7 @@ import type {
   Anarchy3DSceneV4,
   Anarchy3DSceneV5,
   Anarchy3DSceneV6,
+  Anarchy3DSceneV7,
   Anarchy3DSidePropsLayer,
   Anarchy3DSubject,
   Anarchy3DTerrainLayer,
@@ -53,6 +60,11 @@ import type {
   AnarchyMorphEasing,
   AnarchyParallaxPattern,
   AnarchyParticleBehavior,
+  AnarchyPhysicsBodyType,
+  AnarchyPhysicsBoundsShape,
+  AnarchyPhysicsImpulseSource,
+  AnarchyPhysicsJointType,
+  AnarchyPhysicsSpawnShape,
   AnarchyPostFxStackType,
   AnarchyProceduralPart,
   AnarchyProceduralPrimitive,
@@ -98,6 +110,11 @@ import {
   MORPH_EASING_REGISTRY,
   PARALLAX_PATTERN_REGISTRY,
   PARTICLE_BEHAVIOR_REGISTRY,
+  PHYSICS_BODY_TYPE_REGISTRY,
+  PHYSICS_BOUNDS_SHAPE_REGISTRY,
+  PHYSICS_IMPULSE_SOURCE_REGISTRY,
+  PHYSICS_JOINT_TYPE_REGISTRY,
+  PHYSICS_SPAWN_SHAPE_REGISTRY,
   POST_FX_STACK_TYPE_REGISTRY,
   PROCEDURAL_PRIMITIVE_REGISTRY,
   RUBBER_HOSE_SHAPE_REGISTRY,
@@ -120,6 +137,7 @@ import {
   generateAiPackPromptV4,
   generateAiPackPromptV5,
   generateAiPackPromptV6,
+  generateAiPackPromptV7,
 } from "@/lib/visual-studio/registry";
 
 export type {
@@ -128,14 +146,21 @@ export type {
   Anarchy3DPackV4,
   Anarchy3DPackV5,
   Anarchy3DPackV6,
+  Anarchy3DPackV7,
   Anarchy3DScene,
   Anarchy3DSceneV3,
   Anarchy3DSceneV4,
   Anarchy3DSceneV5,
   Anarchy3DSceneV6,
+  Anarchy3DSceneV7,
   Anarchy3DEnvironment,
   Anarchy3DSubject,
   Anarchy3DActor,
+  Anarchy3DActorPhysics,
+  Anarchy3DAudioImpulse,
+  Anarchy3DPhysicsWorld,
+  Anarchy3DPhysicsBounds,
+  Anarchy3DPhysicsJoint,
   Anarchy3DCartoonPhysics,
   Anarchy3DMorphTransition,
   Anarchy3DSceneAutomation,
@@ -171,6 +196,7 @@ export {
   generateAiPackPromptV4,
   generateAiPackPromptV5,
   generateAiPackPromptV6,
+  generateAiPackPromptV7,
 };
 
 export type ScenePackSlot = Anarchy3DScene;
@@ -200,6 +226,11 @@ export const ANARCHY_MORPH_EASINGS = MORPH_EASING_REGISTRY;
 export const ANARCHY_SWARM_SHAPE_TARGETS = SWARM_SHAPE_TARGET_REGISTRY;
 export const ANARCHY_LFO_WAVEFORMS = LFO_WAVEFORM_REGISTRY;
 export const ANARCHY_CAMERA_CUT_TRANSITIONS = CAMERA_CUT_TRANSITION_REGISTRY;
+export const ANARCHY_PHYSICS_BOUNDS_SHAPES = PHYSICS_BOUNDS_SHAPE_REGISTRY;
+export const ANARCHY_PHYSICS_BODY_TYPES = PHYSICS_BODY_TYPE_REGISTRY;
+export const ANARCHY_PHYSICS_IMPULSE_SOURCES = PHYSICS_IMPULSE_SOURCE_REGISTRY;
+export const ANARCHY_PHYSICS_JOINT_TYPES = PHYSICS_JOINT_TYPE_REGISTRY;
+export const ANARCHY_PHYSICS_SPAWN_SHAPES = PHYSICS_SPAWN_SHAPE_REGISTRY;
 export const ANARCHY_SWARM_BEHAVIORS = SWARM_BEHAVIOR_REGISTRY;
 export const ANARCHY_MATERIAL_OVERRIDES = MATERIAL_OVERRIDE_REGISTRY;
 export const ANARCHY_MODULATION_TARGETS = MODULATION_TARGET_REGISTRY;
@@ -252,6 +283,21 @@ const LFO_WAVEFORM_SET = new Set<AnarchyLfoWaveform>(
 );
 const CAMERA_CUT_TRANSITION_SET = new Set<AnarchyCameraCutTransition>(
   CAMERA_CUT_TRANSITION_REGISTRY.map((x) => x.value)
+);
+const PHYSICS_BOUNDS_SHAPE_SET = new Set<AnarchyPhysicsBoundsShape>(
+  PHYSICS_BOUNDS_SHAPE_REGISTRY.map((x) => x.value)
+);
+const PHYSICS_BODY_TYPE_SET = new Set<AnarchyPhysicsBodyType>(
+  PHYSICS_BODY_TYPE_REGISTRY.map((x) => x.value)
+);
+const PHYSICS_IMPULSE_SOURCE_SET = new Set<AnarchyPhysicsImpulseSource>(
+  PHYSICS_IMPULSE_SOURCE_REGISTRY.map((x) => x.value)
+);
+const PHYSICS_JOINT_TYPE_SET = new Set<AnarchyPhysicsJointType>(
+  PHYSICS_JOINT_TYPE_REGISTRY.map((x) => x.value)
+);
+const PHYSICS_SPAWN_SHAPE_SET = new Set<AnarchyPhysicsSpawnShape>(
+  PHYSICS_SPAWN_SHAPE_REGISTRY.map((x) => x.value)
 );
 const SWARM_BEHAVIOR_SET = new Set<AnarchySwarmBehavior>(
   SWARM_BEHAVIOR_REGISTRY.map((x) => x.value)
@@ -423,13 +469,15 @@ export function createDefaultAnarchy3DScene(
   overrides?: {
     id?: string;
     name?: string;
-    version?: 1 | 2 | 3 | 4 | 5 | 6;
+    version?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
     renderStyle?: Anarchy3DRenderStyle;
     compositionMode?: AnarchyCompositionMode;
     kaleidoAxes?: number;
     generators?: Anarchy3DGenerator[];
     actors?: Anarchy3DActor[];
     cartoonPhysics?: Anarchy3DCartoonPhysics;
+    physicsWorld?: Anarchy3DPhysicsWorld;
+    joints?: Anarchy3DPhysicsJoint[];
     morphTransition?: Anarchy3DMorphTransition;
     automations?: Anarchy3DSceneAutomation[];
     modulators?: Anarchy3DLfoModulator[];
@@ -514,6 +562,8 @@ export function createDefaultAnarchy3DScene(
     ...(overrides?.generators ? { generators: overrides.generators } : {}),
     ...(overrides?.actors ? { actors: overrides.actors } : {}),
     ...(overrides?.cartoonPhysics ? { cartoonPhysics: overrides.cartoonPhysics } : {}),
+    ...(overrides?.physicsWorld ? { physicsWorld: overrides.physicsWorld } : {}),
+    ...(overrides?.joints ? { joints: overrides.joints } : {}),
     ...(overrides?.morphTransition ? { morphTransition: overrides.morphTransition } : {}),
     ...(overrides?.automations ? { automations: overrides.automations } : {}),
     ...(overrides?.modulators ? { modulators: overrides.modulators } : {}),
@@ -4226,6 +4276,568 @@ export const DEFAULT_SCENE_PACKS: Anarchy3DPack[] = [
       }),
     ],
   },
+  {
+    packId: "v7-cartoon-physics-showcase",
+    name: "V7 Physics // Cartoon Collisions & Rubber-Hose Springs",
+    author: "Anarchy Visual Studio",
+    bpm: 128,
+    beatsPerScene: 16,
+    seed: 70707,
+    scenes: [
+      createDefaultAnarchy3DScene(0, {
+        id: "v7-chrome-comic-rain",
+        name: "01. Pluie de Sphères Chrome & Formes BD sur le Kick",
+        version: 7,
+        durationBars: 8,
+        transition: "morph",
+        morphTransition: { durationBeats: 4, easing: "easeInOutCubic" },
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "chrome_reflective",
+          outlineThickness: 3,
+          toneMapping: "aces_filmic",
+        },
+        physicsWorld: {
+          enabled: true,
+          gravity: [0, -9.8, 0],
+          bounds: {
+            shape: "floor_only",
+            radiusOrSize: 2.2,
+            restitution: 0.92,
+          },
+          faderBindings: {
+            gravity: "fader_1",
+            restitution: "fader_2",
+            impulseForce: "fader_3",
+            springStiffness: "fader_4",
+          },
+        },
+        cartoonPhysics: {
+          steppedFps: 60,
+          squashStretch: 0.65,
+          squashTrigger: "kick",
+          lineBoil: 0.25,
+        },
+        environment: {
+          skyColor: "#0B1021",
+          fogColor: "#1E293B",
+          fogDensity: 0.018,
+          terrainType: "mirror_floor",
+          terrainSpeed: 9.0,
+          terrainPrimaryColor: "#38BDF8",
+          terrainSecondaryColor: "#F43F5E",
+          lightingPreset: "studio_clean",
+          backdropType: "gradient_sky",
+          backdropColors: ["#0B1021", "#1E293B", "#0F172A"],
+          fog: { enabled: true, color: "#0F172A", density: 0.018 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#E2E8F0",
+          accentColor: "#38BDF8",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "main_entity",
+            type: "organic_blob",
+            position: [-0.85, 0.9, 4.8],
+            scale: 0.95,
+            color: "#F8FAFC",
+            secondaryColor: "#38BDF8",
+            material: "chrome",
+            detail: 28,
+            noiseStrength: 0.45,
+            noiseFrequency: 1.7,
+            speed: 1.25,
+            physics: {
+              bodyType: "dynamic",
+              mass: 1.4,
+              restitution: 0.96,
+              friction: 0.12,
+              linearDamping: 0.06,
+              collisionSquash: true,
+              audioImpulses: [
+                {
+                  source: "bass",
+                  force: [0.8, 7.8, 0],
+                  torque: [0, 0, 2.2],
+                  randomSpread: 1.1,
+                },
+              ],
+            },
+          },
+          {
+            id: "comic_bouncer",
+            type: "rubber_hose_mesh",
+            shape: "pie_eyes",
+            position: [0.85, 1.2, 4.7],
+            scale: 0.9,
+            color: "#FACC15",
+            secondaryColor: "#F43F5E",
+            material: "toon_cel_outline",
+            inkThickness: 3.4,
+            speed: 1.3,
+            physics: {
+              bodyType: "dynamic",
+              mass: 1.0,
+              restitution: 1.05,
+              friction: 0.1,
+              linearDamping: 0.05,
+              collisionSquash: true,
+              audioImpulses: [
+                {
+                  source: "kick",
+                  force: [-0.7, 8.4, 0],
+                  torque: [0, 0, -2.5],
+                  randomSpread: 1.2,
+                },
+              ],
+            },
+          },
+          {
+            id: "kick_spawner",
+            type: "physics_spawner",
+            position: [0, 1.65, 4.9],
+            scale: 0.85,
+            color: "#38BDF8",
+            secondaryColor: "#FACC15",
+            material: "chrome",
+            spawnShape: "chrome_sphere",
+            spawnRateBeats: 1,
+            spawnOnKick: true,
+            ttlBars: 4,
+            maxInstances: 14,
+            physics: {
+              bodyType: "dynamic",
+              mass: 0.75,
+              restitution: 0.95,
+              friction: 0.08,
+              linearDamping: 0.04,
+              collisionSquash: true,
+              audioImpulses: [
+                {
+                  source: "bass",
+                  force: [0, 5.5, 0],
+                  randomSpread: 1.6,
+                },
+              ],
+            },
+          },
+        ],
+        postFX: [
+          { type: "bloom", intensity: 0.85, threshold: 0.48 },
+          { type: "toon_outline", inkThickness: 2.8, inkJitter: 0.25, color: "#09090B" },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0.05,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.75,
+        },
+        camera: {
+          mode: "orbit",
+          rig: "orbit_smooth",
+          beatCut: false,
+          fov: 68,
+          shakeIntensity: 0.06,
+        },
+        audioMapping: {
+          bassTarget: "subject_pulse",
+          midTarget: "color_shift",
+          trebleTarget: "particles_burst",
+          fluxTarget: "glitch_and_emissive",
+        },
+      }),
+      createDefaultAnarchy3DScene(1, {
+        id: "v7-zero-g-rubber-chain",
+        name: "02. Chaîne Articulée Rubber-Hose en Apesanteur",
+        version: 7,
+        durationBars: 8,
+        transition: "morph",
+        morphTransition: { durationBeats: 4, easing: "easeInOutCubic" },
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "toon_cel",
+          outlineThickness: 3.5,
+          toneMapping: "reinhard",
+        },
+        physicsWorld: {
+          enabled: true,
+          gravity: [0, 0, 0],
+          bounds: {
+            shape: "sphere",
+            radiusOrSize: 2.35,
+            restitution: 0.88,
+          },
+          faderBindings: {
+            gravity: "fader_1",
+            restitution: "fader_2",
+            impulseForce: "fader_3",
+            springStiffness: "fader_4",
+          },
+        },
+        joints: [
+          {
+            type: "spring",
+            actorA: "chain_anchor",
+            actorB: "main_entity",
+            stiffness: 22.0,
+            damping: 0.9,
+            restLength: 0.72,
+          },
+          {
+            type: "spring",
+            actorA: "main_entity",
+            actorB: "comic_bouncer",
+            stiffness: 18.0,
+            damping: 0.85,
+            restLength: 0.75,
+          },
+          {
+            type: "spring",
+            actorA: "comic_bouncer",
+            actorB: "chain_tail",
+            stiffness: 15.0,
+            damping: 0.8,
+            restLength: 0.72,
+          },
+        ],
+        cartoonPhysics: {
+          steppedFps: 60,
+          squashStretch: 0.55,
+          squashTrigger: "snare",
+          lineBoil: 0.3,
+        },
+        environment: {
+          skyColor: "#130722",
+          fogColor: "#2E1065",
+          fogDensity: 0.018,
+          terrainType: "infinite_grid",
+          terrainSpeed: 8.0,
+          terrainPrimaryColor: "#A855F7",
+          terrainSecondaryColor: "#22D3EE",
+          lightingPreset: "cyber_neon",
+          backdropType: "liquid_plasma",
+          backdropColors: ["#130722", "#3B0764", "#0E7490"],
+          fog: { enabled: true, color: "#1E1B4B", density: 0.02 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#A855F7",
+          accentColor: "#22D3EE",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "chain_anchor",
+            type: "rubber_hose_mesh",
+            shape: "vintage_wheel",
+            position: [0, 1.15, 4.7],
+            scale: 0.7,
+            color: "#FACC15",
+            secondaryColor: "#09090B",
+            material: "toon_cel_outline",
+            inkThickness: 3.4,
+            speed: 1.2,
+            physics: {
+              bodyType: "kinematic",
+              mass: 2.0,
+              restitution: 0.8,
+            },
+          },
+          {
+            id: "main_entity",
+            type: "rubber_hose_mesh",
+            shape: "boss_character",
+            position: [-0.35, 0.35, 4.7],
+            scale: 0.95,
+            color: "#F43F5E",
+            secondaryColor: "#FACC15",
+            material: "toon_cel_outline",
+            inkThickness: 3.8,
+            speed: 1.3,
+            physics: {
+              bodyType: "dynamic",
+              mass: 1.2,
+              restitution: 0.9,
+              friction: 0.1,
+              linearDamping: 0.12,
+              collisionSquash: true,
+              audioImpulses: [
+                {
+                  source: "snare",
+                  force: [3.8, -1.5, 0],
+                  torque: [0, 0, 2.0],
+                  randomSpread: 1.4,
+                },
+              ],
+            },
+          },
+          {
+            id: "comic_bouncer",
+            type: "organic_blob",
+            position: [0.35, -0.35, 4.7],
+            scale: 0.85,
+            color: "#22D3EE",
+            secondaryColor: "#A855F7",
+            material: "chrome",
+            detail: 26,
+            noiseStrength: 0.5,
+            noiseFrequency: 1.9,
+            speed: 1.35,
+            physics: {
+              bodyType: "dynamic",
+              mass: 1.0,
+              restitution: 0.92,
+              friction: 0.1,
+              linearDamping: 0.12,
+              collisionSquash: true,
+              audioImpulses: [
+                {
+                  source: "bass",
+                  force: [-3.6, 2.2, 0],
+                  randomSpread: 1.5,
+                },
+              ],
+            },
+          },
+          {
+            id: "chain_tail",
+            type: "rubber_hose_mesh",
+            shape: "music_notes",
+            position: [0, -1.1, 4.7],
+            scale: 0.85,
+            color: "#FACC15",
+            secondaryColor: "#F43F5E",
+            material: "toon_cel_outline",
+            inkThickness: 3.4,
+            speed: 1.4,
+            physics: {
+              bodyType: "dynamic",
+              mass: 0.8,
+              restitution: 0.95,
+              friction: 0.08,
+              linearDamping: 0.1,
+              collisionSquash: true,
+              audioImpulses: [
+                {
+                  source: "treble",
+                  force: [2.8, 3.2, 0],
+                  randomSpread: 1.8,
+                },
+              ],
+            },
+          },
+        ],
+        postFX: [
+          { type: "bloom", intensity: 0.9, threshold: 0.45 },
+          { type: "toon_outline", inkThickness: 3.0, inkJitter: 0.3, color: "#09090B" },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0.06,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.8,
+        },
+        camera: {
+          mode: "orbit",
+          rig: "orbit_smooth",
+          beatCut: false,
+          fov: 70,
+          shakeIntensity: 0.06,
+        },
+        audioMapping: {
+          bassTarget: "subject_pulse",
+          midTarget: "subject_rotation",
+          trebleTarget: "particles_burst",
+          fluxTarget: "glitch_and_emissive",
+        },
+      }),
+      createDefaultAnarchy3DScene(2, {
+        id: "v7-cuphead-collision-arena",
+        name: "03. Arène de Collision Cuphead & Squash & Stretch",
+        version: 7,
+        durationBars: 8,
+        transition: "morph",
+        morphTransition: { durationBeats: 4, easing: "easeInOutCubic" },
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "toon_cel",
+          outlineThickness: 4,
+          toneMapping: "reinhard",
+        },
+        physicsWorld: {
+          enabled: true,
+          gravity: [0, -7.5, 0],
+          bounds: {
+            shape: "box",
+            radiusOrSize: 2.15,
+            restitution: 1.02,
+          },
+          faderBindings: {
+            gravity: "fader_1",
+            restitution: "fader_2",
+            impulseForce: "fader_3",
+            springStiffness: "fader_4",
+          },
+        },
+        cartoonPhysics: {
+          steppedFps: 60,
+          squashStretch: 0.85,
+          squashTrigger: "kick",
+          lineBoil: 0.35,
+        },
+        environment: {
+          skyColor: "#F6E7C1",
+          fogColor: "#D9B37C",
+          fogDensity: 0.014,
+          terrainType: "mirror_floor",
+          terrainSpeed: 9.0,
+          terrainPrimaryColor: "#DC2626",
+          terrainSecondaryColor: "#FACC15",
+          lightingPreset: "sunset_warm",
+          backdropType: "gradient_sky",
+          backdropColors: ["#F6E7C1", "#E9C78B", "#C68B59"],
+          fog: { enabled: true, color: "#E2C08D", density: 0.015 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#DC2626",
+          accentColor: "#FACC15",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "main_entity",
+            type: "rubber_hose_mesh",
+            shape: "boss_character",
+            position: [-0.75, 0.2, 4.6],
+            scale: 1.1,
+            color: "#DC2626",
+            secondaryColor: "#FACC15",
+            material: "toon_cel_outline",
+            inkThickness: 3.8,
+            speed: 1.35,
+            physics: {
+              bodyType: "dynamic",
+              mass: 1.6,
+              restitution: 1.05,
+              friction: 0.1,
+              linearDamping: 0.05,
+              collisionSquash: true,
+              audioImpulses: [
+                {
+                  source: "bass",
+                  force: [4.5, 8.2, 0],
+                  torque: [0, 0, 2.5],
+                  randomSpread: 1.3,
+                },
+              ],
+            },
+          },
+          {
+            id: "comic_bouncer",
+            type: "cartoon_sprite",
+            position: [0.75, 0.35, 4.6],
+            scale: 1.05,
+            color: "#06B6D4",
+            secondaryColor: "#FACC15",
+            framesX: 4,
+            framesY: 1,
+            bpmSync: true,
+            inkOutline: true,
+            inkThickness: 3.6,
+            speed: 1.3,
+            physics: {
+              bodyType: "dynamic",
+              mass: 1.3,
+              restitution: 1.08,
+              friction: 0.1,
+              linearDamping: 0.05,
+              collisionSquash: true,
+              audioImpulses: [
+                {
+                  source: "snare",
+                  force: [-4.8, 7.8, 0],
+                  torque: [0, 0, -2.5],
+                  randomSpread: 1.3,
+                },
+              ],
+            },
+          },
+          {
+            id: "arena_note_spawner",
+            type: "physics_spawner",
+            position: [0, 1.35, 4.7],
+            scale: 0.85,
+            color: "#DC2626",
+            secondaryColor: "#FACC15",
+            material: "toon_cel_outline",
+            spawnShape: "music_note",
+            spawnRateBeats: 1,
+            spawnOnKick: true,
+            ttlBars: 3,
+            maxInstances: 12,
+            physics: {
+              bodyType: "dynamic",
+              mass: 0.7,
+              restitution: 1.0,
+              friction: 0.08,
+              linearDamping: 0.04,
+              collisionSquash: true,
+              audioImpulses: [
+                {
+                  source: "treble",
+                  force: [0, 6.2, 0],
+                  randomSpread: 2.0,
+                },
+              ],
+            },
+          },
+        ],
+        postFX: [
+          { type: "toon_outline", inkThickness: 3.4, inkJitter: 0.35, color: "#0B0908" },
+          {
+            type: "vintage_1930_film",
+            filmGrain: 0.24,
+            scratchesAndDust: 0.2,
+            gateWeave: 0.14,
+            colorGrade: "technicolor_30s",
+            vignette: 0.45,
+          },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.35,
+        },
+        camera: {
+          mode: "orbit",
+          rig: "orbit_smooth",
+          beatCut: false,
+          fov: 68,
+          shakeIntensity: 0.06,
+        },
+        audioMapping: {
+          bassTarget: "subject_pulse",
+          midTarget: "camera_sway",
+          trebleTarget: "particles_burst",
+          fluxTarget: "glitch_and_emissive",
+        },
+      }),
+    ],
+  },
 ];
 
 function mulberry32(seed: number) {
@@ -4546,6 +5158,133 @@ function sanitizeAudioModulations(
   return valid.length > 0 ? valid : undefined;
 }
 
+function sanitizeActorPhysics(raw: unknown): Anarchy3DActorPhysics | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const p = raw as Record<string, unknown>;
+  const bodyType: AnarchyPhysicsBodyType = PHYSICS_BODY_TYPE_SET.has(
+    p.bodyType as AnarchyPhysicsBodyType
+  )
+    ? (p.bodyType as AnarchyPhysicsBodyType)
+    : "dynamic";
+  let audioImpulses: Anarchy3DAudioImpulse[] | undefined;
+  if (Array.isArray(p.audioImpulses)) {
+    const validImp: Anarchy3DAudioImpulse[] = [];
+    for (const item of p.audioImpulses.slice(0, 8)) {
+      if (!item || typeof item !== "object") continue;
+      const imp = item as Record<string, unknown>;
+      const source: AnarchyPhysicsImpulseSource = PHYSICS_IMPULSE_SOURCE_SET.has(
+        imp.source as AnarchyPhysicsImpulseSource
+      )
+        ? (imp.source as AnarchyPhysicsImpulseSource)
+        : "bass";
+      const force = sanitizeVec3(imp.force, [0, 5, 0], -40, 40);
+      const torque = Array.isArray(imp.torque)
+        ? sanitizeVec3(imp.torque, [0, 0, 0], -40, 40)
+        : undefined;
+      validImp.push({
+        source,
+        force,
+        ...(torque ? { torque } : {}),
+        ...(imp.randomSpread !== undefined
+          ? { randomSpread: Number(clampNum(imp.randomSpread, 0, 10, 0.8).toFixed(2)) }
+          : {}),
+      });
+    }
+    if (validImp.length > 0) audioImpulses = validImp;
+  }
+  return {
+    bodyType,
+    ...(p.mass !== undefined
+      ? { mass: Number(clampNum(p.mass, 0.1, 50, 1.0).toFixed(2)) }
+      : {}),
+    ...(p.restitution !== undefined
+      ? { restitution: Number(clampNum(p.restitution, 0, 1.2, 0.85).toFixed(2)) }
+      : {}),
+    ...(p.friction !== undefined
+      ? { friction: Number(clampNum(p.friction, 0, 1, 0.15).toFixed(2)) }
+      : {}),
+    ...(p.linearDamping !== undefined
+      ? { linearDamping: Number(clampNum(p.linearDamping, 0, 1, 0.08).toFixed(2)) }
+      : {}),
+    ...(typeof p.collisionSquash === "boolean"
+      ? { collisionSquash: p.collisionSquash }
+      : {}),
+    ...(audioImpulses ? { audioImpulses } : {}),
+  };
+}
+
+function sanitizePhysicsWorld(raw: unknown): Anarchy3DPhysicsWorld | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const pw = raw as Record<string, unknown>;
+  const enabled = typeof pw.enabled === "boolean" ? pw.enabled : true;
+  const gravity = sanitizeVec3(pw.gravity, [0, -9.8, 0], -40, 40);
+  const rawBounds =
+    pw.bounds && typeof pw.bounds === "object"
+      ? (pw.bounds as Record<string, unknown>)
+      : {};
+  const shape: AnarchyPhysicsBoundsShape = PHYSICS_BOUNDS_SHAPE_SET.has(
+    rawBounds.shape as AnarchyPhysicsBoundsShape
+  )
+    ? (rawBounds.shape as AnarchyPhysicsBoundsShape)
+    : "box";
+  const bounds: Anarchy3DPhysicsBounds = {
+    shape,
+    radiusOrSize: Number(clampNum(rawBounds.radiusOrSize, 0.8, 8, 2.4).toFixed(2)),
+    restitution: Number(clampNum(rawBounds.restitution, 0, 1.2, 0.85).toFixed(2)),
+  };
+  let faderBindings: Anarchy3DPhysicsWorld["faderBindings"];
+  if (pw.faderBindings && typeof pw.faderBindings === "object") {
+    const fb = pw.faderBindings as Record<string, unknown>;
+    const cleanFb: NonNullable<Anarchy3DPhysicsWorld["faderBindings"]> = {};
+    const keys = [
+      "gravity",
+      "restitution",
+      "impulseForce",
+      "springStiffness",
+    ] as const;
+    for (const k of keys) {
+      if (MODULATION_SOURCE_SET.has(fb[k] as AnarchyModulationSource)) {
+        cleanFb[k] = fb[k] as AnarchyModulationSource;
+      }
+    }
+    if (Object.keys(cleanFb).length > 0) {
+      faderBindings = cleanFb;
+    }
+  }
+  return {
+    enabled,
+    gravity,
+    bounds,
+    ...(faderBindings ? { faderBindings } : {}),
+  };
+}
+
+function sanitizePhysicsJoints(raw: unknown): Anarchy3DPhysicsJoint[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const valid: Anarchy3DPhysicsJoint[] = [];
+  for (const item of raw.slice(0, 16)) {
+    if (!item || typeof item !== "object") continue;
+    const j = item as Record<string, unknown>;
+    const type: AnarchyPhysicsJointType = PHYSICS_JOINT_TYPE_SET.has(
+      j.type as AnarchyPhysicsJointType
+    )
+      ? (j.type as AnarchyPhysicsJointType)
+      : "spring";
+    const actorA = typeof j.actorA === "string" ? j.actorA.trim() : "";
+    const actorB = typeof j.actorB === "string" ? j.actorB.trim() : "";
+    if (!actorA || !actorB) continue;
+    valid.push({
+      type,
+      actorA,
+      actorB,
+      stiffness: Number(clampNum(j.stiffness, 1, 80, 18).toFixed(2)),
+      damping: Number(clampNum(j.damping, 0.05, 5, 0.85).toFixed(2)),
+      restLength: Number(clampNum(j.restLength, 0.15, 4, 0.65).toFixed(2)),
+    });
+  }
+  return valid.length > 0 ? valid : undefined;
+}
+
 function sanitizeActors(raw: unknown): Anarchy3DActor[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const valid: Anarchy3DActor[] = [];
@@ -4590,6 +5329,7 @@ function sanitizeActors(raw: unknown): Anarchy3DActor[] | undefined {
         ]
       : undefined;
     const audioModulation = sanitizeAudioModulations(a.audioModulation);
+    const physics = sanitizeActorPhysics(a.physics);
     valid.push({
       ...(typeof a.id === "string" && a.id.trim() ? { id: a.id.trim() } : { id: `actor-${i + 1}` }),
       type,
@@ -4656,6 +5396,20 @@ function sanitizeActors(raw: unknown): Anarchy3DActor[] | undefined {
         : {}),
       ...(SWARM_SHAPE_TARGET_SET.has(a.shapeTarget as AnarchySwarmShapeTarget)
         ? { shapeTarget: a.shapeTarget as AnarchySwarmShapeTarget }
+        : {}),
+      ...(physics ? { physics } : {}),
+      ...(PHYSICS_SPAWN_SHAPE_SET.has(a.spawnShape as AnarchyPhysicsSpawnShape)
+        ? { spawnShape: a.spawnShape as AnarchyPhysicsSpawnShape }
+        : {}),
+      ...(a.spawnRateBeats !== undefined
+        ? { spawnRateBeats: Number(clampNum(a.spawnRateBeats, 0.25, 16, 1).toFixed(2)) }
+        : {}),
+      ...(typeof a.spawnOnKick === "boolean" ? { spawnOnKick: a.spawnOnKick } : {}),
+      ...(a.ttlBars !== undefined
+        ? { ttlBars: Number(clampNum(a.ttlBars, 0.5, 32, 4).toFixed(2)) }
+        : {}),
+      ...(a.maxInstances !== undefined
+        ? { maxInstances: Math.round(clampNum(a.maxInstances, 2, 32, 14)) }
         : {}),
       ...(audioModulation ? { audioModulation } : {}),
     });
@@ -5316,6 +6070,8 @@ export function sanitizeAnarchy3DScene(
   const generators = sanitizeGenerators(item.generators);
   const actors = sanitizeActors(item.actors);
   const cartoonPhysics = sanitizeCartoonPhysics(item.cartoonPhysics);
+  const physicsWorld = sanitizePhysicsWorld(item.physicsWorld);
+  const joints = sanitizePhysicsJoints(item.joints);
   const morphTransition = sanitizeMorphTransition(item.morphTransition);
   const automations = sanitizeSceneAutomations(item.automations);
   const modulators = sanitizeLfoModulators(item.modulators);
@@ -5332,6 +6088,14 @@ export function sanitizeAnarchy3DScene(
 
   const sceneAnimations = sanitizeAnimations(item.animations, allowedParams);
   const sceneTriggers = sanitizeTriggers(item.triggers, allowedParams);
+  const hasV7Features = Boolean(
+    item.version === 7 ||
+      physicsWorld ||
+      joints?.length ||
+      actors?.some(
+        (a) => a.type === "physics_spawner" || Boolean(a.physics)
+      )
+  );
   const hasV6Features = Boolean(
     item.version === 6 ||
       morphTransition ||
@@ -5381,7 +6145,9 @@ export function sanitizeAnarchy3DScene(
         ? item.id.trim()
         : `scene-${idx + 1}`,
     name: rawName,
-    version: hasV6Features
+    version: hasV7Features
+      ? 7
+      : hasV6Features
       ? 6
       : hasV5Features
       ? 5
@@ -5398,6 +6164,8 @@ export function sanitizeAnarchy3DScene(
     ...(generators ? { generators } : {}),
     ...(actors ? { actors } : {}),
     ...(cartoonPhysics ? { cartoonPhysics } : {}),
+    ...(physicsWorld ? { physicsWorld } : {}),
+    ...(joints ? { joints } : {}),
     ...(morphTransition ? { morphTransition } : {}),
     ...(automations ? { automations } : {}),
     ...(modulators ? { modulators } : {}),
@@ -6268,6 +7036,8 @@ export function exportScenePackAsJson(pack: Anarchy3DPack): string {
       ...(sc.generators ? { generators: sc.generators } : {}),
       ...(sc.actors ? { actors: sc.actors } : {}),
       ...(sc.cartoonPhysics ? { cartoonPhysics: sc.cartoonPhysics } : {}),
+      ...(sc.physicsWorld ? { physicsWorld: sc.physicsWorld } : {}),
+      ...(sc.joints ? { joints: sc.joints } : {}),
       ...(sc.morphTransition ? { morphTransition: sc.morphTransition } : {}),
       ...(sc.automations ? { automations: sc.automations } : {}),
       ...(sc.modulators ? { modulators: sc.modulators } : {}),

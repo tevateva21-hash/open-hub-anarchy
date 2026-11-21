@@ -345,6 +345,7 @@ export const ACTOR_TYPE_REGISTRY = [
   { value: "parallax_layer", label: "parallax_layer (Plan 2.5D Aquarelle / Gouache Parallaxe)" },
   { value: "cartoon_sprite", label: "cartoon_sprite (Spritesheet BPM + Contour Encre Noir)" },
   { value: "rubber_hose_mesh", label: "rubber_hose_mesh (Formes Rubber-Hose 1930 Cel-Shading)" },
+  { value: "physics_spawner", label: "physics_spawner (Émetteur d'Instances Physiques & Collisions v7)" },
 ] as const;
 
 export const RUBBER_HOSE_SHAPE_REGISTRY = [
@@ -438,6 +439,10 @@ export const MODULATION_TARGET_REGISTRY = [
   { value: "zoom", label: "zoom (Zoom / Distance Caméra)" },
   { value: "fov", label: "fov (Angle de Champ Caméra)" },
   { value: "fogDensity", label: "fogDensity (Densité Brouillard)" },
+  { value: "gravity", label: "gravity (Multiplicateur Gravité v7)" },
+  { value: "restitution", label: "restitution (Élasticité / Rebond v7)" },
+  { value: "impulseForce", label: "impulseForce (Force des Impulsions Audio v7)" },
+  { value: "springStiffness", label: "springStiffness (Raideur des Ressorts v7)" },
 ] as const;
 
 export const MORPH_EASING_REGISTRY = [
@@ -468,6 +473,36 @@ export const LFO_RATE_BEATS_OPTIONS = [0.25, 0.5, 1, 2, 4, 8] as const;
 export const CAMERA_CUT_TRANSITION_REGISTRY = [
   { value: "cut", label: "cut (Coupe Franche)" },
   { value: "glide", label: "glide (Glissement Fluide Rapide)" },
+] as const;
+
+export const PHYSICS_BOUNDS_SHAPE_REGISTRY = [
+  { value: "box", label: "box (Boîte / Arène 3D Fermée)" },
+  { value: "sphere", label: "sphere (Bulle / Dôme Sphérique)" },
+  { value: "floor_only", label: "floor_only (Sol Élastique Ouvert)" },
+] as const;
+
+export const PHYSICS_BODY_TYPE_REGISTRY = [
+  { value: "dynamic", label: "dynamic (Corps Dynamique Soumis aux Forces & Collisions)" },
+  { value: "kinematic", label: "kinematic (Corps Piloté par Animation / Orbite)" },
+  { value: "static", label: "static (Obstacle / Point d'Ancrage Fixe)" },
+] as const;
+
+export const PHYSICS_IMPULSE_SOURCE_REGISTRY = [
+  { value: "bass", label: "bass (Impulsion sur Basses / Kick)" },
+  { value: "snare", label: "snare (Impulsion sur Caisse Claire / Clap)" },
+  { value: "treble", label: "treble (Impulsion sur Aigus / Hi-Hats)" },
+  { value: "kick", label: "kick (Impulsion sur Kick Pur)" },
+] as const;
+
+export const PHYSICS_JOINT_TYPE_REGISTRY = [
+  { value: "spring", label: "spring (Ressort Souple / Chaîne Rubber-Hose)" },
+] as const;
+
+export const PHYSICS_SPAWN_SHAPE_REGISTRY = [
+  { value: "chrome_sphere", label: "chrome_sphere (Sphère Chrome Liquide)" },
+  { value: "music_note", label: "music_note (Note de Musique Cartoon 1930)" },
+  { value: "comic_star", label: "comic_star (Étoile / Forme BD Cel-Shading)" },
+  { value: "pie_eye_ball", label: "pie_eye_ball (Bille Pie-Eye Rétro)" },
 ] as const;
 
 export const POST_FX_STACK_TYPE_REGISTRY = [
@@ -509,6 +544,11 @@ export type AnarchySwarmShapeTarget = (typeof SWARM_SHAPE_TARGET_REGISTRY)[numbe
 export type AnarchyLfoWaveform = (typeof LFO_WAVEFORM_REGISTRY)[number]["value"];
 export type AnarchyLfoRateBeats = (typeof LFO_RATE_BEATS_OPTIONS)[number];
 export type AnarchyCameraCutTransition = (typeof CAMERA_CUT_TRANSITION_REGISTRY)[number]["value"];
+export type AnarchyPhysicsBoundsShape = (typeof PHYSICS_BOUNDS_SHAPE_REGISTRY)[number]["value"];
+export type AnarchyPhysicsBodyType = (typeof PHYSICS_BODY_TYPE_REGISTRY)[number]["value"];
+export type AnarchyPhysicsImpulseSource = (typeof PHYSICS_IMPULSE_SOURCE_REGISTRY)[number]["value"];
+export type AnarchyPhysicsJointType = (typeof PHYSICS_JOINT_TYPE_REGISTRY)[number]["value"];
+export type AnarchyPhysicsSpawnShape = (typeof PHYSICS_SPAWN_SHAPE_REGISTRY)[number]["value"];
 
 export const AI_STYLE_PRESETS = [
   {
@@ -885,22 +925,22 @@ export function generateAiPackPromptV3(
   const stylePreset =
     AI_STYLE_PRESETS.find((s) => s.id === styleId) ?? AI_STYLE_PRESETS[0];
 
-  return `Tu es un directeur artistique 3D / 2.5D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v6 Data-Driven Morphing, DAW Automations & Cartoon 1930).
-Génère une "Cartouche / Pack 3D" au format JSON strict (Anarchy3DPackV6) contenant 4 à 5 scènes enchaînées par morphing fluide à ${Math.round(activeBpm)} BPM.
+  return `Tu es un directeur artistique 3D / 2.5D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v7 Data-Driven Cartoon Physics & Collisions, Morphing Inter-Scènes, DAW Automations & Cartoon 1930).
+Génère une "Cartouche / Pack 3D" au format JSON strict (Anarchy3DPackV7) contenant 3 à 5 scènes enchaînées par morphing fluide à ${Math.round(activeBpm)} BPM.
 
 DIRECTION ARTISTIQUE DEMANDÉE (${stylePreset.label}) :
 - Palette conseillée : ${stylePreset.paletteHint}
 - Décors & Sujets : ${stylePreset.terrainHint}
 - Post-FX suggérés : ${stylePreset.fxHint}
 
-ARCHITECTURE MODULAIRE EN 3 COUCHES + MORPHING & DAW (Anarchy3DPackV6) :
+ARCHITECTURE MODULAIRE EN 3 COUCHES + PHYSIQUE CARTOON v7, MORPHING & DAW (Anarchy3DPackV7) :
 1. COUCHE 1 — ENVIRONNEMENT & ÉCLAIRAGE STUDIO ("environment" & "renderStyle") :
    - environment.lightingPreset : ${lightingPresets}
    - environment.backdropType : ${v4Backdrops} (avec backdropColors: ["#...", "#...", "#..."])
    - environment.fog : { "enabled": true, "color": "#...", "density": 0.03 }
    - renderStyle : { "resolutionScale": 0.2..1.0 (1.0 = HD net), "toneMapping": ${toneMappings}, "shading": ${shadings}, "outlineThickness": 0..6 }
 
-2. COUCHE 2 — ACTEURS ORGANIQUES, CARTOON 1930 & MORPHING PAR ID PARTAGÉ ("actors[]") :
+2. COUCHE 2 — ACTEURS ORGANIQUES, CARTOON 1930, MORPHING & ÉMETTEUR PHYSIQUE ("actors[]") :
    - actors[].type : ${actorTypes}
    - MORPHING INTER-SCÈNES ("morphTransition" / shared "id") :
      * Conserve le MÊME "id" (ex: "id": "main_entity") d'une scène à l'autre pour interpoler sa géométrie (Vertex Lerp : organic_blob ↔ rubber_hose_mesh ↔ particle_swarm), ses couleurs et ses positions sur "morphTransition": { "durationBeats": 4, "easing": ${morphEasings} }.
@@ -909,20 +949,27 @@ ARCHITECTURE MODULAIRE EN 3 COUCHES + MORPHING & DAW (Anarchy3DPackV6) :
      * "parallax_layer" : plan 2.5D (pattern: ${parallaxPatterns}, scrollX, scrollY, depthBlur)
      * "cartoon_sprite" : spritesheet (framesX, framesY, bpmSync: true, inkOutline: true)
      * "rubber_hose_mesh" : formes 1930 cel-shading + contour noir épais (shape: ${rubberShapes}, inkThickness: 2..5)
+   - Acteur Émetteur Physique v7 ("physics_spawner") :
+     * Génère périodiquement ou sur chaque kick des instances physiques légères : { "type": "physics_spawner", "spawnShape": "chrome_sphere" | "music_note" | "comic_star" | "pie_eye_ball", "spawnRateBeats": 1, "spawnOnKick": true, "ttlBars": 4, "maxInstances": 16, "physics": { "bodyType": "dynamic", "mass": 1.0, "restitution": 0.92, "collisionSquash": true } }
    - actors[].material : ${materials} · behavior : ${swarmBehaviors}
    - actors[].audioModulation[] : source ("bass" | "lowMid" | "highMid" | "treble" | "energy" | "kick" | "snare" | "lfo_1".."lfo_4" | "fader_1".."fader_19") → target (${modTargets}).
 
-3. PROGRAMMATION DAW ("automations[]", "modulators[]", "cameraCuts[]") :
+3. MOTEUR DE PHYSIQUE CARTOON & COLLISIONS v7 ("physicsWorld", "actor.physics", "joints[]") :
+   - physicsWorld : { "enabled": true, "gravity": [0, -9.8, 0] (ou [0, 0, 0] apesanteur), "bounds": { "shape": "box" | "sphere" | "floor_only", "radiusOrSize": 2.4, "restitution": 0.85 }, "faderBindings": { "gravity": "fader_1", "restitution": "fader_2", "impulseForce": "fader_3", "springStiffness": "fader_4" } }
+   - actor.physics : { "bodyType": "dynamic" | "kinematic" | "static", "mass": 1.0, "restitution": 0.0..1.2, "friction": 0.15, "linearDamping": 0.08, "collisionSquash": true, "audioImpulses": [{ "source": "bass" | "snare" | "treble" | "kick", "force": [0, 6.5, 0], "torque": [0, 0, 2.0], "randomSpread": 1.2 }] }
+   - joints[] : liaisons élastiques entre deux acteurs : [{ "type": "spring", "actorA": "anchor_top", "actorB": "link_1", "stiffness": 18.0, "damping": 0.85, "restLength": 0.65 }]
+
+4. PROGRAMMATION DAW ("automations[]", "modulators[]", "cameraCuts[]") :
    - automations[] : courbes sur la durée de la scène (progress 0.0 → 1.0) : { "target": ${modTargets}, "actorId"?: "main_entity", "from": 0.2, "to": 1.4, "easing": ${morphEasings} }
    - modulators[] : LFO synchronisés au BPM : { "id": "lfo_1".."lfo_4", "waveform": ${lfoWaveforms}, "rateBeats": 0.25 | 0.5 | 1 | 2 | 4 | 8, "phase": 0..1 }
    - cameraCuts[] : multi-caméras rythmiques : { "mode": ${cameras}, "rig"?: ${cameraRigs}, "fov": 68, "switchEveryBars"?: 2, "onPeakBand"?: "snare" | "kick" | "bass", "transition": "cut" | "glide" }
 
-4. PHYSIQUE CARTOON ("cartoonPhysics") & COUCHE 3 POST-PROCESSING ("postFX[]", "durationBars", "transition") :
+5. PHYSIQUE CARTOON ("cartoonPhysics") & COUCHE 3 POST-PROCESSING ("postFX[]", "durationBars", "transition") :
    - cartoonPhysics : { "steppedFps": 12 | 24 | 60, "squashStretch": 0..1.5, "squashTrigger": "bass" | "snare" | "kick" | "energy", "lineBoil": 0..2, "faderBindings": { "squashStretch": "fader_1", "lineBoil": "fader_2", "filmGrain": "fader_3", "parallaxSpeed": "fader_4", "steppedFps": "fader_5" } }
    - postFX[] : pile d'objets { "type": ${postFxStack}, "intensity": 0..2 } (dont "vintage_1930_film" colorGrade: ${vintageGrades} et "toon_outline" inkThickness/inkJitter)
    - durationBars : 1 | 2 | 4 | 8 | 16 | 32 | 64 mesures · transition : ${transitions}
 
-RÈGLES STRICTES & RÉTROCOMPATIBILITÉ (v1–v5) :
+RÈGLES STRICTES & RÉTROCOMPATIBILITÉ (v1–v6) :
 - Réponds UNIQUEMENT avec un bloc JSON valide (zéro JS, zéro fonction, zéro \`eval\`).
 - Champs v2/v3 toujours supportés : compositionMode (${compositions}), backdrop.shader (${backdropShaders}), generators[] (${generatorTypes}, behavior: ${particleBehaviors}), camera.mode (${cameras}), camera.rig (${cameraRigs}, beatCut), terrain (${terrains}), sideProps (${props}), subject (${meshes}, primitives: ${primitives}), cloner.mode (${cloners}), triggers[].action (${triggers}), audioMapping (bass: ${bass}; mid: ${mid}; treble: ${treble}; flux: ${flux}).
 - Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".`;
@@ -931,6 +978,7 @@ RÈGLES STRICTES & RÉTROCOMPATIBILITÉ (v1–v5) :
 export const generateAiPackPromptV4 = generateAiPackPromptV3;
 export const generateAiPackPromptV5 = generateAiPackPromptV3;
 export const generateAiPackPromptV6 = generateAiPackPromptV3;
+export const generateAiPackPromptV7 = generateAiPackPromptV3;
 
 /**
  * Génère automatiquement le Prompt IA complet à partir du registre extensible.

@@ -1,0 +1,884 @@
+{
+  "packId": "v7-cartoon-physics-showcase",
+  "name": "V7 Physics // Cartoon Collisions & Rubber-Hose Springs",
+  "author": "Anarchy Visual Studio",
+  "bpm": 128,
+  "beatsPerScene": 16,
+  "scenes": [
+    {
+      "id": "v7-chrome-comic-rain",
+      "name": "01. Pluie de Sphères Chrome & Formes BD sur le Kick",
+      "version": 7,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "chrome_reflective",
+        "outlineThickness": 3,
+        "toneMapping": "aces_filmic"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "main_entity",
+          "type": "organic_blob",
+          "position": [
+            -0.85,
+            0.9,
+            4.8
+          ],
+          "scale": 0.95,
+          "color": "#F8FAFC",
+          "secondaryColor": "#38BDF8",
+          "material": "chrome",
+          "detail": 28,
+          "noiseStrength": 0.45,
+          "noiseFrequency": 1.7,
+          "speed": 1.25,
+          "physics": {
+            "bodyType": "dynamic",
+            "mass": 1.4,
+            "restitution": 0.96,
+            "friction": 0.12,
+            "linearDamping": 0.06,
+            "collisionSquash": true,
+            "audioImpulses": [
+              {
+                "source": "bass",
+                "force": [
+                  0.8,
+                  7.8,
+                  0
+                ],
+                "torque": [
+                  0,
+                  0,
+                  2.2
+                ],
+                "randomSpread": 1.1
+              }
+            ]
+          }
+        },
+        {
+          "id": "comic_bouncer",
+          "type": "rubber_hose_mesh",
+          "shape": "pie_eyes",
+          "position": [
+            0.85,
+            1.2,
+            4.7
+          ],
+          "scale": 0.9,
+          "color": "#FACC15",
+          "secondaryColor": "#F43F5E",
+          "material": "toon_cel_outline",
+          "inkThickness": 3.4,
+          "speed": 1.3,
+          "physics": {
+            "bodyType": "dynamic",
+            "mass": 1,
+            "restitution": 1.05,
+            "friction": 0.1,
+            "linearDamping": 0.05,
+            "collisionSquash": true,
+            "audioImpulses": [
+              {
+                "source": "kick",
+                "force": [
+                  -0.7,
+                  8.4,
+                  0
+                ],
+                "torque": [
+                  0,
+                  0,
+                  -2.5
+                ],
+                "randomSpread": 1.2
+              }
+            ]
+          }
+        },
+        {
+          "id": "kick_spawner",
+          "type": "physics_spawner",
+          "position": [
+            0,
+            1.65,
+            4.9
+          ],
+          "scale": 0.85,
+          "color": "#38BDF8",
+          "secondaryColor": "#FACC15",
+          "material": "chrome",
+          "spawnShape": "chrome_sphere",
+          "spawnRateBeats": 1,
+          "spawnOnKick": true,
+          "ttlBars": 4,
+          "maxInstances": 14,
+          "physics": {
+            "bodyType": "dynamic",
+            "mass": 0.75,
+            "restitution": 0.95,
+            "friction": 0.08,
+            "linearDamping": 0.04,
+            "collisionSquash": true,
+            "audioImpulses": [
+              {
+                "source": "bass",
+                "force": [
+                  0,
+                  5.5,
+                  0
+                ],
+                "randomSpread": 1.6
+              }
+            ]
+          }
+        }
+      ],
+      "cartoonPhysics": {
+        "steppedFps": 60,
+        "squashStretch": 0.65,
+        "squashTrigger": "kick",
+        "lineBoil": 0.25
+      },
+      "physicsWorld": {
+        "enabled": true,
+        "gravity": [
+          0,
+          -9.8,
+          0
+        ],
+        "bounds": {
+          "shape": "floor_only",
+          "radiusOrSize": 2.2,
+          "restitution": 0.92
+        },
+        "faderBindings": {
+          "gravity": "fader_1",
+          "restitution": "fader_2",
+          "impulseForce": "fader_3",
+          "springStiffness": "fader_4"
+        }
+      },
+      "morphTransition": {
+        "durationBeats": 4,
+        "easing": "easeInOutCubic"
+      },
+      "postFX": [
+        {
+          "type": "bloom",
+          "intensity": 0.85,
+          "threshold": 0.48
+        },
+        {
+          "type": "toon_outline",
+          "inkThickness": 2.8,
+          "inkJitter": 0.25,
+          "color": "#09090B"
+        }
+      ],
+      "durationBars": 8,
+      "transition": "morph",
+      "environment": {
+        "skyColor": "#0B1021",
+        "fogColor": "#1E293B",
+        "fogDensity": 0.018,
+        "terrainType": "mirror_floor",
+        "terrainSpeed": 9,
+        "terrainPrimaryColor": "#38BDF8",
+        "terrainSecondaryColor": "#F43F5E",
+        "lightingPreset": "studio_clean",
+        "backdropType": "gradient_sky",
+        "backdropColors": [
+          "#0B1021",
+          "#1E293B",
+          "#0F172A"
+        ],
+        "fog": {
+          "enabled": true,
+          "color": "#0F172A",
+          "density": 0.018
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#E2E8F0",
+        "accentColor": "#38BDF8",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#0B1021",
+              "#1E293B"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#F43F5E",
+              "colorBottom": "#38BDF8",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#38BDF8"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "mirror_floor",
+            "speed": 9,
+            "primaryColor": "#38BDF8",
+            "secondaryColor": "#F43F5E"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#38BDF8",
+            "secondaryColor": "#F43F5E"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#E2E8F0",
+              "accentColor": "#38BDF8",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0.05,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 0.75
+      },
+      "camera": {
+        "mode": "orbit",
+        "fov": 68,
+        "shakeIntensity": 0.06,
+        "rig": "orbit_smooth",
+        "beatCut": false
+      },
+      "audioMapping": {
+        "bassTarget": "subject_pulse",
+        "midTarget": "color_shift",
+        "trebleTarget": "particles_burst",
+        "fluxTarget": "glitch_and_emissive"
+      }
+    },
+    {
+      "id": "v7-zero-g-rubber-chain",
+      "name": "02. Chaîne Articulée Rubber-Hose en Apesanteur",
+      "version": 7,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "toon_cel",
+        "outlineThickness": 3.5,
+        "toneMapping": "reinhard"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "chain_anchor",
+          "type": "rubber_hose_mesh",
+          "shape": "vintage_wheel",
+          "position": [
+            0,
+            1.15,
+            4.7
+          ],
+          "scale": 0.7,
+          "color": "#FACC15",
+          "secondaryColor": "#09090B",
+          "material": "toon_cel_outline",
+          "inkThickness": 3.4,
+          "speed": 1.2,
+          "physics": {
+            "bodyType": "kinematic",
+            "mass": 2,
+            "restitution": 0.8
+          }
+        },
+        {
+          "id": "main_entity",
+          "type": "rubber_hose_mesh",
+          "shape": "boss_character",
+          "position": [
+            -0.35,
+            0.35,
+            4.7
+          ],
+          "scale": 0.95,
+          "color": "#F43F5E",
+          "secondaryColor": "#FACC15",
+          "material": "toon_cel_outline",
+          "inkThickness": 3.8,
+          "speed": 1.3,
+          "physics": {
+            "bodyType": "dynamic",
+            "mass": 1.2,
+            "restitution": 0.9,
+            "friction": 0.1,
+            "linearDamping": 0.12,
+            "collisionSquash": true,
+            "audioImpulses": [
+              {
+                "source": "snare",
+                "force": [
+                  3.8,
+                  -1.5,
+                  0
+                ],
+                "torque": [
+                  0,
+                  0,
+                  2
+                ],
+                "randomSpread": 1.4
+              }
+            ]
+          }
+        },
+        {
+          "id": "comic_bouncer",
+          "type": "organic_blob",
+          "position": [
+            0.35,
+            -0.35,
+            4.7
+          ],
+          "scale": 0.85,
+          "color": "#22D3EE",
+          "secondaryColor": "#A855F7",
+          "material": "chrome",
+          "detail": 26,
+          "noiseStrength": 0.5,
+          "noiseFrequency": 1.9,
+          "speed": 1.35,
+          "physics": {
+            "bodyType": "dynamic",
+            "mass": 1,
+            "restitution": 0.92,
+            "friction": 0.1,
+            "linearDamping": 0.12,
+            "collisionSquash": true,
+            "audioImpulses": [
+              {
+                "source": "bass",
+                "force": [
+                  -3.6,
+                  2.2,
+                  0
+                ],
+                "randomSpread": 1.5
+              }
+            ]
+          }
+        },
+        {
+          "id": "chain_tail",
+          "type": "rubber_hose_mesh",
+          "shape": "music_notes",
+          "position": [
+            0,
+            -1.1,
+            4.7
+          ],
+          "scale": 0.85,
+          "color": "#FACC15",
+          "secondaryColor": "#F43F5E",
+          "material": "toon_cel_outline",
+          "inkThickness": 3.4,
+          "speed": 1.4,
+          "physics": {
+            "bodyType": "dynamic",
+            "mass": 0.8,
+            "restitution": 0.95,
+            "friction": 0.08,
+            "linearDamping": 0.1,
+            "collisionSquash": true,
+            "audioImpulses": [
+              {
+                "source": "treble",
+                "force": [
+                  2.8,
+                  3.2,
+                  0
+                ],
+                "randomSpread": 1.8
+              }
+            ]
+          }
+        }
+      ],
+      "cartoonPhysics": {
+        "steppedFps": 60,
+        "squashStretch": 0.55,
+        "squashTrigger": "snare",
+        "lineBoil": 0.3
+      },
+      "physicsWorld": {
+        "enabled": true,
+        "gravity": [
+          0,
+          0,
+          0
+        ],
+        "bounds": {
+          "shape": "sphere",
+          "radiusOrSize": 2.35,
+          "restitution": 0.88
+        },
+        "faderBindings": {
+          "gravity": "fader_1",
+          "restitution": "fader_2",
+          "impulseForce": "fader_3",
+          "springStiffness": "fader_4"
+        }
+      },
+      "joints": [
+        {
+          "type": "spring",
+          "actorA": "chain_anchor",
+          "actorB": "main_entity",
+          "stiffness": 22,
+          "damping": 0.9,
+          "restLength": 0.72
+        },
+        {
+          "type": "spring",
+          "actorA": "main_entity",
+          "actorB": "comic_bouncer",
+          "stiffness": 18,
+          "damping": 0.85,
+          "restLength": 0.75
+        },
+        {
+          "type": "spring",
+          "actorA": "comic_bouncer",
+          "actorB": "chain_tail",
+          "stiffness": 15,
+          "damping": 0.8,
+          "restLength": 0.72
+        }
+      ],
+      "morphTransition": {
+        "durationBeats": 4,
+        "easing": "easeInOutCubic"
+      },
+      "postFX": [
+        {
+          "type": "bloom",
+          "intensity": 0.9,
+          "threshold": 0.45
+        },
+        {
+          "type": "toon_outline",
+          "inkThickness": 3,
+          "inkJitter": 0.3,
+          "color": "#09090B"
+        }
+      ],
+      "durationBars": 8,
+      "transition": "morph",
+      "environment": {
+        "skyColor": "#130722",
+        "fogColor": "#2E1065",
+        "fogDensity": 0.018,
+        "terrainType": "infinite_grid",
+        "terrainSpeed": 8,
+        "terrainPrimaryColor": "#A855F7",
+        "terrainSecondaryColor": "#22D3EE",
+        "lightingPreset": "cyber_neon",
+        "backdropType": "liquid_plasma",
+        "backdropColors": [
+          "#130722",
+          "#3B0764",
+          "#0E7490"
+        ],
+        "fog": {
+          "enabled": true,
+          "color": "#1E1B4B",
+          "density": 0.02
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#A855F7",
+        "accentColor": "#22D3EE",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#130722",
+              "#2E1065"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#22D3EE",
+              "colorBottom": "#A855F7",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#A855F7"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "infinite_grid",
+            "speed": 8,
+            "primaryColor": "#A855F7",
+            "secondaryColor": "#22D3EE"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#A855F7",
+            "secondaryColor": "#22D3EE"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#A855F7",
+              "accentColor": "#22D3EE",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0.06,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 0.8
+      },
+      "camera": {
+        "mode": "orbit",
+        "fov": 70,
+        "shakeIntensity": 0.06,
+        "rig": "orbit_smooth",
+        "beatCut": false
+      },
+      "audioMapping": {
+        "bassTarget": "subject_pulse",
+        "midTarget": "subject_rotation",
+        "trebleTarget": "particles_burst",
+        "fluxTarget": "glitch_and_emissive"
+      }
+    },
+    {
+      "id": "v7-cuphead-collision-arena",
+      "name": "03. Arène de Collision Cuphead & Squash & Stretch",
+      "version": 7,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "toon_cel",
+        "outlineThickness": 4,
+        "toneMapping": "reinhard"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "main_entity",
+          "type": "rubber_hose_mesh",
+          "shape": "boss_character",
+          "position": [
+            -0.75,
+            0.2,
+            4.6
+          ],
+          "scale": 1.1,
+          "color": "#DC2626",
+          "secondaryColor": "#FACC15",
+          "material": "toon_cel_outline",
+          "inkThickness": 3.8,
+          "speed": 1.35,
+          "physics": {
+            "bodyType": "dynamic",
+            "mass": 1.6,
+            "restitution": 1.05,
+            "friction": 0.1,
+            "linearDamping": 0.05,
+            "collisionSquash": true,
+            "audioImpulses": [
+              {
+                "source": "bass",
+                "force": [
+                  4.5,
+                  8.2,
+                  0
+                ],
+                "torque": [
+                  0,
+                  0,
+                  2.5
+                ],
+                "randomSpread": 1.3
+              }
+            ]
+          }
+        },
+        {
+          "id": "comic_bouncer",
+          "type": "cartoon_sprite",
+          "position": [
+            0.75,
+            0.35,
+            4.6
+          ],
+          "scale": 1.05,
+          "color": "#06B6D4",
+          "secondaryColor": "#FACC15",
+          "framesX": 4,
+          "framesY": 1,
+          "bpmSync": true,
+          "inkOutline": true,
+          "inkThickness": 3.6,
+          "speed": 1.3,
+          "physics": {
+            "bodyType": "dynamic",
+            "mass": 1.3,
+            "restitution": 1.08,
+            "friction": 0.1,
+            "linearDamping": 0.05,
+            "collisionSquash": true,
+            "audioImpulses": [
+              {
+                "source": "snare",
+                "force": [
+                  -4.8,
+                  7.8,
+                  0
+                ],
+                "torque": [
+                  0,
+                  0,
+                  -2.5
+                ],
+                "randomSpread": 1.3
+              }
+            ]
+          }
+        },
+        {
+          "id": "arena_note_spawner",
+          "type": "physics_spawner",
+          "position": [
+            0,
+            1.35,
+            4.7
+          ],
+          "scale": 0.85,
+          "color": "#DC2626",
+          "secondaryColor": "#FACC15",
+          "material": "toon_cel_outline",
+          "spawnShape": "music_note",
+          "spawnRateBeats": 1,
+          "spawnOnKick": true,
+          "ttlBars": 3,
+          "maxInstances": 12,
+          "physics": {
+            "bodyType": "dynamic",
+            "mass": 0.7,
+            "restitution": 1,
+            "friction": 0.08,
+            "linearDamping": 0.04,
+            "collisionSquash": true,
+            "audioImpulses": [
+              {
+                "source": "treble",
+                "force": [
+                  0,
+                  6.2,
+                  0
+                ],
+                "randomSpread": 2
+              }
+            ]
+          }
+        }
+      ],
+      "cartoonPhysics": {
+        "steppedFps": 60,
+        "squashStretch": 0.85,
+        "squashTrigger": "kick",
+        "lineBoil": 0.35
+      },
+      "physicsWorld": {
+        "enabled": true,
+        "gravity": [
+          0,
+          -7.5,
+          0
+        ],
+        "bounds": {
+          "shape": "box",
+          "radiusOrSize": 2.15,
+          "restitution": 1.02
+        },
+        "faderBindings": {
+          "gravity": "fader_1",
+          "restitution": "fader_2",
+          "impulseForce": "fader_3",
+          "springStiffness": "fader_4"
+        }
+      },
+      "morphTransition": {
+        "durationBeats": 4,
+        "easing": "easeInOutCubic"
+      },
+      "postFX": [
+        {
+          "type": "toon_outline",
+          "inkThickness": 3.4,
+          "inkJitter": 0.35,
+          "color": "#0B0908"
+        },
+        {
+          "type": "vintage_1930_film",
+          "filmGrain": 0.24,
+          "scratchesAndDust": 0.2,
+          "gateWeave": 0.14,
+          "colorGrade": "technicolor_30s",
+          "vignette": 0.45
+        }
+      ],
+      "durationBars": 8,
+      "transition": "morph",
+      "environment": {
+        "skyColor": "#F6E7C1",
+        "fogColor": "#D9B37C",
+        "fogDensity": 0.014,
+        "terrainType": "mirror_floor",
+        "terrainSpeed": 9,
+        "terrainPrimaryColor": "#DC2626",
+        "terrainSecondaryColor": "#FACC15",
+        "lightingPreset": "sunset_warm",
+        "backdropType": "gradient_sky",
+        "backdropColors": [
+          "#F6E7C1",
+          "#E9C78B",
+          "#C68B59"
+        ],
+        "fog": {
+          "enabled": true,
+          "color": "#E2C08D",
+          "density": 0.015
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#DC2626",
+        "accentColor": "#FACC15",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#F6E7C1",
+              "#D9B37C"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#FACC15",
+              "colorBottom": "#DC2626",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#DC2626"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "mirror_floor",
+            "speed": 9,
+            "primaryColor": "#DC2626",
+            "secondaryColor": "#FACC15"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#DC2626",
+            "secondaryColor": "#FACC15"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#DC2626",
+              "accentColor": "#FACC15",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 0.35
+      },
+      "camera": {
+        "mode": "orbit",
+        "fov": 68,
+        "shakeIntensity": 0.06,
+        "rig": "orbit_smooth",
+        "beatCut": false
+      },
+      "audioMapping": {
+        "bassTarget": "subject_pulse",
+        "midTarget": "camera_sway",
+        "trebleTarget": "particles_burst",
+        "fluxTarget": "glitch_and_emissive"
+      }
+    }
+  ]
+}

@@ -165,3 +165,18 @@ Dans le panneau **`PACK DE SCÈNES // ENCHAÎNEMENT BPM`** :
    - Jusqu'à 4 oscillateurs internes `lfo_1..lfo_4` (`waveform: sine | triangle | saw | square | random_hold`, `rateBeats: 0.25 | 0.5 | 1 | 2 | 4 | 8`, `phase: 0..1`) directement utilisables dans `audioModulation[].source`.
 4. **Multi-Caméras & Cuts Rythmiques (`cameraCuts[]`)** :
    - Définit plusieurs presets de caméra par scène alternant toutes les `switchEveryBars` mesures ou sur un pic audio (`onPeakBand: snare | kick | bass`) avec transition `cut | glide`.
+
+## 10. Moteur v7 : Physique Cartoon & Collisions (`Anarchy3DPackV7`)
+
+1. **Monde Physique Global par Scène (`physicsWorld`)** :
+   - `enabled` : `boolean` (désactivé par défaut pour préserver les scènes abstraites v1–v6).
+   - `gravity` : `[gx, gy, gz]` (ex. `[0, -9.8, 0]` chute classique, `[0, 0, 0]` apesanteur, `[0, 4, 0]` bulles montantes).
+   - `bounds` : `{ shape: "box" | "sphere" | "floor_only", radiusOrSize, restitution }` (murs invisibles ou sol élastique).
+   - `faderBindings` : liaison des 19 faders live (`fader_1..fader_19`) sur `gravity`, `restitution`, `impulseForce` et `springStiffness`.
+2. **Corps Physiques par Acteur (`actor.physics`)** :
+   - `bodyType` : `"dynamic" | "kinematic" | "static"`, `mass`, `restitution` (`0.0..1.2`), `friction`, `linearDamping`.
+   - `collisionSquash` : déclenche automatiquement un *Squash & Stretch* proportionnel à la force de l'impact lors d'une collision avec le sol ou un autre acteur.
+   - `audioImpulses[]` : `{ source: "bass" | "snare" | "treble" | "kick", force: [x, y, z], torque: [x, y, z], randomSpread }` pour faire bondir ou tournoyer les objets sur le beat.
+3. **Liaisons Élastiques & Émetteurs Physiques (`joints[]` & `physics_spawner`)** :
+   - `joints[]` : `{ type: "spring", actorA, actorB, stiffness, damping, restLength }` pour créer des chaînes articulées, pendules ou tentacules rubber-hose.
+   - `physics_spawner` : génère périodiquement (`spawnRateBeats`) ou sur chaque kick (`spawnOnKick`) des instances physiques légères (`spawnShape: "chrome_sphere" | "music_note" | "comic_star" | "pie_eye_ball"`) avec durée de vie (`ttlBars`) et limite maximale (`maxInstances` plafonné pour garantir 60 FPS avec sous-pas fixes `fixedTimeStep = 1/120 s`).

@@ -39,6 +39,11 @@ import type {
   AnarchyLfoWaveform,
   AnarchyLfoRateBeats,
   AnarchyCameraCutTransition,
+  AnarchyPhysicsBoundsShape,
+  AnarchyPhysicsBodyType,
+  AnarchyPhysicsImpulseSource,
+  AnarchyPhysicsJointType,
+  AnarchyPhysicsSpawnShape,
 } from "@/lib/visual-studio/registry";
 
 export type {
@@ -77,6 +82,11 @@ export type {
   AnarchyLfoWaveform,
   AnarchyLfoRateBeats,
   AnarchyCameraCutTransition,
+  AnarchyPhysicsBoundsShape,
+  AnarchyPhysicsBodyType,
+  AnarchyPhysicsImpulseSource,
+  AnarchyPhysicsJointType,
+  AnarchyPhysicsSpawnShape,
 };
 
 export const PRESET_SCHEMA_VERSION = 1 as const;
@@ -533,8 +543,81 @@ export interface Anarchy3DActor {
   inkThickness?: number;
   /** v6 particle_swarm : forme cible vers laquelle l'essaim se morphe */
   shapeTarget?: AnarchySwarmShapeTarget;
+  /** v7 : Corps physique 2.5D/3D de l'acteur (dynamic, kinematic, static, restitution, collisionSquash, audioImpulses) */
+  physics?: Anarchy3DActorPhysics;
+  /** v7 physics_spawner : forme émise, cadence en temps, déclenchement sur kick, durée de vie en mesures et plafond d'instances */
+  spawnShape?: AnarchyPhysicsSpawnShape;
+  spawnRateBeats?: number;
+  spawnOnKick?: boolean;
+  ttlBars?: number;
+  maxInstances?: number;
   /** Modulations audio (bass/lowMid/highMid/treble/energy/kick/snare), lfo_1..lfo_4 ou fader_1..fader_19 */
   audioModulation?: Anarchy3DAudioModulation[];
+}
+
+export interface Anarchy3DAudioImpulse {
+  /** Bande audio déclenchant l'impulsion physique */
+  source: AnarchyPhysicsImpulseSource;
+  /** Vecteur force d'impulsion [fx, fy, fz] */
+  force: [number, number, number];
+  /** Couple angulaire optionnel [tx, ty, tz] */
+  torque?: [number, number, number];
+  /** Dispersion aléatoire sur la direction de l'impulsion [0..5] */
+  randomSpread?: number;
+}
+
+export interface Anarchy3DActorPhysics {
+  bodyType: AnarchyPhysicsBodyType;
+  /** Poids de l'objet [0.1..50] */
+  mass?: number;
+  /** Élasticité au rebond [0.0 mat .. 1.2 super-balle cartoon] */
+  restitution?: number;
+  /** Coefficient de frottement [0..1] */
+  friction?: number;
+  /** Résistance de l'air / amortissement linéaire [0..1] */
+  linearDamping?: number;
+  /** Déclenche automatiquement un Squash & Stretch proportionnel à la force d'impact */
+  collisionSquash?: boolean;
+  /** Forces d'impulsion déclenchées sur les pics audio */
+  audioImpulses?: Anarchy3DAudioImpulse[];
+}
+
+export interface Anarchy3DPhysicsBounds {
+  shape: AnarchyPhysicsBoundsShape;
+  /** Demi-taille de la boîte ou rayon de la sphère [0.8..8] */
+  radiusOrSize: number;
+  /** Coefficient d'élasticité des murs / du sol [0..1.2] */
+  restitution: number;
+}
+
+export interface Anarchy3DPhysicsWorld {
+  /** Désactivé par défaut pour ne pas impacter les scènes v1–v6 */
+  enabled: boolean;
+  /** Vecteur gravité [gx, gy, gz] (ex: [0, -9.8, 0] chute, [0, 0, 0] apesanteur, [0, 4, 0] bulles) */
+  gravity: [number, number, number];
+  /** Murs invisibles ou sol élastique */
+  bounds: Anarchy3DPhysicsBounds;
+  /** Liaison optionnelle des 19 faders live sur la gravité, l'élasticité, la force des impulsions et la raideur des ressorts */
+  faderBindings?: {
+    gravity?: AnarchyModulationSource;
+    restitution?: AnarchyModulationSource;
+    impulseForce?: AnarchyModulationSource;
+    springStiffness?: AnarchyModulationSource;
+  };
+}
+
+export interface Anarchy3DPhysicsJoint {
+  type: AnarchyPhysicsJointType;
+  /** Identifiant du premier acteur */
+  actorA: string;
+  /** Identifiant du second acteur */
+  actorB: string;
+  /** Raideur du ressort [1..80] */
+  stiffness: number;
+  /** Amortissement du ressort [0.05..5] */
+  damping: number;
+  /** Longueur au repos [0.15..4] */
+  restLength: number;
 }
 
 export interface Anarchy3DMorphTransition {
@@ -668,7 +751,7 @@ export interface Anarchy3DTrigger {
 export interface Anarchy3DScene {
   id: string;
   name: string;
-  version?: 1 | 2 | 3 | 4 | 5 | 6;
+  version?: 1 | 2 | 3 | 4 | 5 | 6 | 7;
   /** Style de rendu et résolution par scène */
   renderStyle?: Anarchy3DRenderStyle;
   /** Architecture de composition spatiale (corridor, void_orbital, tunnel_infinite, kaleido_mandala, terrain_flyover) */
@@ -677,10 +760,14 @@ export interface Anarchy3DScene {
   kaleidoAxes?: number;
   /** Générateurs procéduraux avancés v3 (particules, rubans, vagues FFT, réseaux) */
   generators?: Anarchy3DGenerator[];
-  /** Couche 2 v4/v5/v6 : Acteurs organiques, hybrides, Cartoon 1930 & Morphing */
+  /** Couche 2 v4/v5/v6/v7 : Acteurs organiques, hybrides, Cartoon 1930, Morphing & Spawner Physique */
   actors?: Anarchy3DActor[];
   /** Physique dessin animé v5 (steppedFps, squash & stretch, line boil, faderBindings) */
   cartoonPhysics?: Anarchy3DCartoonPhysics;
+  /** v7 : Configuration globale du monde physique & collisions par scène */
+  physicsWorld?: Anarchy3DPhysicsWorld;
+  /** v7 : Liaisons élastiques / ressorts entre acteurs */
+  joints?: Anarchy3DPhysicsJoint[];
   /** v6 : Configuration du morphing inter-scènes (durationBeats, easing) */
   morphTransition?: Anarchy3DMorphTransition;
   /** v6 : Courbes d'automation DAW sur la progression [0..1] de la scène */
@@ -740,6 +827,8 @@ export type Anarchy3DSceneV5 = Anarchy3DScene;
 export type Anarchy3DPackV5 = Anarchy3DPack;
 export type Anarchy3DSceneV6 = Anarchy3DScene;
 export type Anarchy3DPackV6 = Anarchy3DPack;
+export type Anarchy3DSceneV7 = Anarchy3DScene;
+export type Anarchy3DPackV7 = Anarchy3DPack;
 
 export interface SceneFrameInput {
   sceneId: SceneId;

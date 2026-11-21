@@ -18,6 +18,7 @@ import type {
   Anarchy3DSubject,
   Anarchy3DTerrainLayer,
   AnarchyMorphEasing,
+  AnarchyPhysicsSpawnShape,
   AnarchyProceduralPart,
   AnarchySceneTransitionType,
   AnarchyStudioLightingPreset,
@@ -2582,8 +2583,557 @@ function resolveActorModulationValue(
   }
 }
 
+interface V7PhysicsBodyState {
+  id: string;
+  bodyType: "dynamic" | "kinematic" | "static";
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  vz: number;
+  rotZ: number;
+  vRotZ: number;
+  radius: number;
+  mass: number;
+  restitution: number;
+  friction: number;
+  linearDamping: number;
+  collisionSquashEnabled: boolean;
+  impactSquash: number;
+  lastImpulseCooldown: number;
+}
+
+interface V7SpawnedBodyState {
+  spawnerId: string;
+  shape: AnarchyPhysicsSpawnShape;
+  color: string;
+  secondaryColor: string;
+  material: string;
+  x: number;
+  y: number;
+  z: number;
+  vx: number;
+  vy: number;
+  rotZ: number;
+  vRotZ: number;
+  radius: number;
+  mass: number;
+  restitution: number;
+  linearDamping: number;
+  collisionSquashEnabled: boolean;
+  impactSquash: number;
+  bornTime: number;
+  ttlSeconds: number;
+}
+
+interface V7ScenePhysicsSimulation {
+  sceneId: string;
+  lastSimTime: number;
+  spawnCounter: number;
+  lastBeatSpawnSlot: number;
+  lastKickSpawnTime: number;
+  bodies: Map<string, V7PhysicsBodyState>;
+  spawned: V7SpawnedBodyState[];
+}
+
+const V7_PHYSICS_SIM_CACHE = new Map<string, V7ScenePhysicsSimulation>();
+const V7_FIXED_TIME_STEP = 1 / 120;
+
+function stepV7PhysicsWorld(
+  scene: Anarchy3DScene,
+  audio: SceneAudioState,
+  timeSeconds: number,
+  faderValues?: Record<string, number>,
+  lfoValues?: Record<string, number>,
+  sceneProgress = 0
+): V7ScenePhysicsSimulation | undefined {
+  const pw = scene.physicsWorld;
+  const actors = scene.actors;
+  if (!pw?.enabled || !actors || actors.length === 0) return undefined;
+
+  const cacheKey = scene.id || "default-v7-scene";
+  let sim = V7_PHYSICS_SIM_CACHE.get(cacheKey);
+  if (
+    !sim ||
+    sim.sceneId !== cacheKey ||
+    timeSeconds < sim.lastSimTime - 0.25 ||
+    timeSeconds - sim.lastSimTime > 2.5
+  ) {
+    sim = {
+      sceneId: cacheKey,
+      lastSimTime: timeSeconds,
+      spawnCounter: 0,
+      lastBeatSpawnSlot: -1,
+      lastKickSpawnTime: -1,
+      bodies: new Map(),
+      spawned: [],
+    };
+    V7_PHYSICS_SIM_CACHE.set(cacheKey, sim);
+  }
+
+  // Synchroniser les acteurs déclarés avec les corps physiques
+  for (let i = 0; i < actors.length; i++) {
+    const a = actors[i];
+    if (a.type === "physics_spawner" || !a.physics) continue;
+    const id = a.id || `actor-${i + 1}`;
+    const sVal =
+      typeof a.scale === "number"
+        ? a.scale
+        : Array.isArray(a.scale)
+        ? (a.scale[0] + a.scale[1] + a.scale[2]) / 3
+        : 1.0;
+    const radius = Math.max(0.18, Math.min(0.95, 0.36 * sVal));
+    let body = sim.bodies.get(id);
+    if (!body) {
+      body = {
+        id,
+        bodyType: a.physics.bodyType,
+        x: a.position?.[0] ?? (i - (actors.length - 1) * 0.5) * 0.75,
+        y: a.position?.[1] ?? 0.5,
+        z: a.position?.[2] ?? 4.7,
+        vx: 0,
+        vy: 0,
+        vz: 0,
+        rotZ: a.rotation?.[2] ?? 0,
+        vRotZ: 0,
+        radius,
+        mass: Math.max(0.1, a.physics.mass ?? 1.0),
+        restitution: Math.max(0, Math.min(1.2, a.physics.restitution ?? 0.88)),
+        friction: clamp01(a.physics.friction ?? 0.12),
+        linearDamping: clamp01(a.physics.linearDamping ?? 0.08),
+        collisionSquashEnabled: a.physics.collisionSquash !== false,
+        impactSquash: 0,
+        lastImpulseCooldown: 0,
+      };
+      sim.bodies.set(id, body);
+    } else {
+      body.bodyType = a.physics.bodyType;
+      body.radius = radius;
+      body.mass = Math.max(0.1, a.physics.mass ?? 1.0);
+      body.restitution = Math.max(0, Math.min(1.2, a.physics.restitution ?? 0.88));
+      body.friction = clamp01(a.physics.friction ?? 0.12);
+      body.linearDamping = clamp01(a.physics.linearDamping ?? 0.08);
+      body.collisionSquashEnabled = a.physics.collisionSquash !== false;
+    }
+  }
+
+  const dtTotal = Math.max(0, Math.min(0.1, timeSeconds - sim.lastSimTime));
+  sim.lastSimTime = timeSeconds;
+  if (dtTotal <= 1e-5) return sim;
+
+  // Multiplicateurs des 19 Faders & Automations v7
+  const fb = pw.faderBindings;
+  const faderGrav = fb?.gravity
+    ? 0.35 + resolveActorModulationValue(fb.gravity, audio, faderValues, lfoValues) * 1.45
+    : 1.0;
+  const autoGrav =
+    resolveAutomationOverride(scene.automations, "gravity", undefined, sceneProgress) ??
+    1.0;
+  const gravMul = faderGrav * autoGrav;
+
+  const faderRest = fb?.restitution
+    ? 0.5 + resolveActorModulationValue(fb.restitution, audio, faderValues, lfoValues) * 0.75
+    : 1.0;
+  const autoRest =
+    resolveAutomationOverride(
+      scene.automations,
+      "restitution",
+      undefined,
+      sceneProgress
+    ) ?? 1.0;
+  const restMul = faderRest * autoRest;
+
+  const faderImp = fb?.impulseForce
+    ? 0.4 + resolveActorModulationValue(fb.impulseForce, audio, faderValues, lfoValues) * 1.4
+    : 1.0;
+  const autoImp =
+    resolveAutomationOverride(
+      scene.automations,
+      "impulseForce",
+      undefined,
+      sceneProgress
+    ) ?? 1.0;
+  const impMul = faderImp * autoImp;
+
+  const faderSpring = fb?.springStiffness
+    ? 0.45 +
+      resolveActorModulationValue(
+        fb.springStiffness,
+        audio,
+        faderValues,
+        lfoValues
+      ) *
+        1.5
+    : 1.0;
+  const autoSpring =
+    resolveAutomationOverride(
+      scene.automations,
+      "springStiffness",
+      undefined,
+      sceneProgress
+    ) ?? 1.0;
+  const springMul = faderSpring * autoSpring;
+
+  const gx = pw.gravity[0] * 0.18 * gravMul;
+  const gy = pw.gravity[1] * 0.18 * gravMul;
+
+  // Gestion des émetteurs physics_spawner
+  for (let i = 0; i < actors.length; i++) {
+    const sp = actors[i];
+    if (sp.type !== "physics_spawner") continue;
+    const spId = sp.id || `spawner-${i + 1}`;
+    const maxInst = Math.max(2, Math.min(28, sp.maxInstances ?? 14));
+    const rateBeats = Math.max(0.25, sp.spawnRateBeats ?? 1);
+    const beatSlot = Math.floor((timeSeconds * 2.1) / rateBeats);
+    const kickTrig =
+      sp.spawnOnKick !== false &&
+      (audio.bassEnvelope > 0.52 || audio.transientPulse > 0.38) &&
+      timeSeconds - sim.lastKickSpawnTime > 0.24;
+
+    if (beatSlot !== sim.lastBeatSpawnSlot || kickTrig) {
+      sim.lastBeatSpawnSlot = beatSlot;
+      if (kickTrig) sim.lastKickSpawnTime = timeSeconds;
+      const activeForSpawner = sim.spawned.filter((s) => s.spawnerId === spId);
+      if (activeForSpawner.length >= maxInst) {
+        const oldestIdx = sim.spawned.findIndex((s) => s.spawnerId === spId);
+        if (oldestIdx >= 0) sim.spawned.splice(oldestIdx, 1);
+      }
+      sim.spawnCounter += 1;
+      const k = sim.spawnCounter;
+      const spreadX = Math.sin(k * 12.9898) * 0.65;
+      const sScale = typeof sp.scale === "number" ? sp.scale : 0.85;
+      sim.spawned.push({
+        spawnerId: spId,
+        shape: sp.spawnShape ?? "chrome_sphere",
+        color: sp.color ?? "#38BDF8",
+        secondaryColor: sp.secondaryColor ?? "#FACC15",
+        material: sp.material ?? "chrome",
+        x: (sp.position?.[0] ?? 0) + spreadX,
+        y: (sp.position?.[1] ?? 1.45) + Math.cos(k * 7.1) * 0.15,
+        z: sp.position?.[2] ?? 4.8,
+        vx: Math.sin(k * 4.7) * 1.4,
+        vy: -0.4 + Math.cos(k * 3.3) * 0.5,
+        rotZ: (k * 0.7) % (Math.PI * 2),
+        vRotZ: Math.sin(k * 9.2) * 2.2,
+        radius: Math.max(0.14, Math.min(0.38, 0.21 * sScale)),
+        mass: Math.max(0.2, sp.physics?.mass ?? 0.75),
+        restitution: Math.max(0, Math.min(1.2, (sp.physics?.restitution ?? 0.92) * restMul)),
+        linearDamping: clamp01(sp.physics?.linearDamping ?? 0.05),
+        collisionSquashEnabled: sp.physics?.collisionSquash !== false,
+        impactSquash: 0.25,
+        bornTime: timeSeconds,
+        ttlSeconds: Math.max(1.5, (sp.ttlBars ?? 4) * 1.85),
+      });
+    }
+  }
+
+  // Nettoyer les instances expirées
+  sim.spawned = sim.spawned.filter(
+    (s) => timeSeconds - s.bornTime < s.ttlSeconds
+  );
+
+  // Déclenchement des impulsions audio sur les acteurs et instances
+  for (let i = 0; i < actors.length; i++) {
+    const a = actors[i];
+    if (!a.physics?.audioImpulses?.length) continue;
+    if (a.type === "physics_spawner") {
+      for (const imp of a.physics.audioImpulses) {
+        const energy = resolveActorModulationValue(
+          imp.source,
+          audio,
+          faderValues,
+          lfoValues
+        );
+        if (energy > 0.48) {
+          for (let sIdx = 0; sIdx < sim.spawned.length; sIdx++) {
+            const sb = sim.spawned[sIdx];
+            const spread = (imp.randomSpread ?? 1.0) * Math.sin(sIdx * 19.1 + timeSeconds * 7);
+            sb.vx += (imp.force[0] * 0.22 + spread * 0.45) * energy * impMul * dtTotal * 8;
+            sb.vy += imp.force[1] * 0.22 * energy * impMul * dtTotal * 8;
+          }
+        }
+      }
+      continue;
+    }
+    const id = a.id || `actor-${i + 1}`;
+    const body = sim.bodies.get(id);
+    if (!body || body.bodyType !== "dynamic") continue;
+    body.lastImpulseCooldown = Math.max(0, body.lastImpulseCooldown - dtTotal);
+    if (body.lastImpulseCooldown > 0) continue;
+
+    for (const imp of a.physics.audioImpulses) {
+      const energy = resolveActorModulationValue(
+        imp.source,
+        audio,
+        faderValues,
+        lfoValues
+      );
+      if (energy > 0.46) {
+        const spread =
+          (imp.randomSpread ?? 0.8) *
+          Math.sin(timeSeconds * 13.7 + i * 31.4);
+        body.vx += ((imp.force[0] * 0.32 + spread) * energy * impMul) / body.mass;
+        body.vy += (imp.force[1] * 0.32 * energy * impMul) / body.mass;
+        if (imp.torque) {
+          body.vRotZ += imp.torque[2] * 0.45 * energy * impMul;
+        }
+        body.lastImpulseCooldown = 0.16;
+        break;
+      }
+    }
+  }
+
+  // Sous-pas fixes déterministes (fixedTimeStep = 1/120 s) pour éviter toute traversée de mur
+  const subSteps = Math.max(1, Math.min(8, Math.ceil(dtTotal / V7_FIXED_TIME_STEP)));
+  const h = dtTotal / subSteps;
+  const boundR = Math.max(1.1, Math.min(3.2, pw.bounds.radiusOrSize));
+  const wallRest = Math.max(0, Math.min(1.2, pw.bounds.restitution * restMul));
+  const bodyList = Array.from(sim.bodies.values());
+
+  for (let step = 0; step < subSteps; step++) {
+    // 1. Mise à jour des corps cinématiques (orbite / balancier doux)
+    for (let i = 0; i < actors.length; i++) {
+      const a = actors[i];
+      if (a.type === "physics_spawner" || !a.physics) continue;
+      const id = a.id || `actor-${i + 1}`;
+      const b = sim.bodies.get(id);
+      if (!b) continue;
+      if (b.bodyType === "kinematic") {
+        const baseX = a.position?.[0] ?? 0;
+        const baseY = a.position?.[1] ?? 1.1;
+        b.x = baseX + Math.sin(timeSeconds * (a.speed ?? 1.2)) * 0.55;
+        b.y = baseY + Math.cos(timeSeconds * (a.speed ?? 1.2) * 0.7) * 0.15;
+        b.vx = 0;
+        b.vy = 0;
+      }
+    }
+
+    // 2. Forces de ressorts souples (joints[])
+    if (scene.joints && scene.joints.length > 0) {
+      for (const j of scene.joints) {
+        const bA = sim.bodies.get(j.actorA);
+        const bB = sim.bodies.get(j.actorB);
+        if (!bA || !bB) continue;
+        const dx = bB.x - bA.x;
+        const dy = bB.y - bA.y;
+        const dist = Math.max(0.001, Math.hypot(dx, dy));
+        const nx = dx / dist;
+        const ny = dy / dist;
+        const stretch = dist - j.restLength;
+        const kSpring = j.stiffness * springMul;
+        const rvx = bB.vx - bA.vx;
+        const rvy = bB.vy - bA.vy;
+        const relVel = rvx * nx + rvy * ny;
+        const fMag = stretch * kSpring + relVel * j.damping;
+        const fx = nx * fMag;
+        const fy = ny * fMag;
+        if (bA.bodyType === "dynamic") {
+          bA.vx += (fx / bA.mass) * h;
+          bA.vy += (fy / bA.mass) * h;
+        }
+        if (bB.bodyType === "dynamic") {
+          bB.vx -= (fx / bB.mass) * h;
+          bB.vy -= (fy / bB.mass) * h;
+        }
+      }
+    }
+
+    // 3. Intégration vitesse/position & collisions avec bounds pour les acteurs
+    for (const b of bodyList) {
+      b.impactSquash = Math.max(0, b.impactSquash - h * 4.2);
+      if (b.bodyType !== "dynamic") continue;
+
+      b.vx += gx * h;
+      b.vy += gy * h;
+      const damp = Math.max(0.85, 1 - b.linearDamping * h * 4);
+      b.vx *= damp;
+      b.vy *= damp;
+      b.vRotZ *= damp;
+
+      // Plafond de vitesse anti-instabilité
+      b.vx = Math.max(-6.5, Math.min(6.5, b.vx));
+      b.vy = Math.max(-6.5, Math.min(6.5, b.vy));
+
+      b.x += b.vx * h;
+      b.y += b.vy * h;
+      b.rotZ += b.vRotZ * h;
+
+      const e = Math.min(1.12, ((b.restitution + wallRest) * 0.5) * restMul);
+      const minY = -boundR * 0.62 + b.radius;
+      const maxY = boundR * 0.68 - b.radius;
+      const maxX = boundR * 0.95 - b.radius;
+
+      if (pw.bounds.shape === "floor_only" || pw.bounds.shape === "box") {
+        if (b.y < minY) {
+          const impact = Math.abs(b.vy);
+          b.y = minY;
+          b.vy = Math.abs(b.vy) * e;
+          b.vx *= Math.max(0.7, 1 - b.friction * 0.35);
+          if (b.collisionSquashEnabled && impact > 0.35) {
+            b.impactSquash = Math.min(0.85, impact * 0.24);
+          }
+        }
+        if (pw.bounds.shape === "box" && b.y > maxY) {
+          const impact = Math.abs(b.vy);
+          b.y = maxY;
+          b.vy = -Math.abs(b.vy) * e;
+          if (b.collisionSquashEnabled && impact > 0.35) {
+            b.impactSquash = Math.min(0.85, impact * 0.22);
+          }
+        }
+        if (b.x < -maxX) {
+          const impact = Math.abs(b.vx);
+          b.x = -maxX;
+          b.vx = Math.abs(b.vx) * e;
+          if (b.collisionSquashEnabled && impact > 0.35) {
+            b.impactSquash = Math.min(0.85, impact * 0.22);
+          }
+        } else if (b.x > maxX) {
+          const impact = Math.abs(b.vx);
+          b.x = maxX;
+          b.vx = -Math.abs(b.vx) * e;
+          if (b.collisionSquashEnabled && impact > 0.35) {
+            b.impactSquash = Math.min(0.85, impact * 0.22);
+          }
+        }
+      } else if (pw.bounds.shape === "sphere") {
+        const d = Math.hypot(b.x, b.y);
+        const maxD = Math.max(0.4, boundR * 0.78 - b.radius);
+        if (d > maxD && d > 0.001) {
+          const nx = b.x / d;
+          const ny = b.y / d;
+          b.x = nx * maxD;
+          b.y = ny * maxD;
+          const vn = b.vx * nx + b.vy * ny;
+          if (vn > 0) {
+            b.vx -= (1 + e) * vn * nx;
+            b.vy -= (1 + e) * vn * ny;
+            if (b.collisionSquashEnabled && vn > 0.35) {
+              b.impactSquash = Math.min(0.85, vn * 0.24);
+            }
+          }
+        }
+      }
+    }
+
+    // 4. Collisions élastiques entre acteurs (sphère-sphère)
+    for (let i = 0; i < bodyList.length; i++) {
+      for (let j = i + 1; j < bodyList.length; j++) {
+        const a = bodyList[i];
+        const b = bodyList[j];
+        const dx = b.x - a.x;
+        const dy = b.y - a.y;
+        const dist = Math.hypot(dx, dy);
+        const minDist = a.radius + b.radius;
+        if (dist > 0.0001 && dist < minDist) {
+          const nx = dx / dist;
+          const ny = dy / dist;
+          const overlap = minDist - dist;
+          const aDyn = a.bodyType === "dynamic" ? 1 / a.mass : 0;
+          const bDyn = b.bodyType === "dynamic" ? 1 / b.mass : 0;
+          const invSum = aDyn + bDyn;
+          if (invSum <= 0) continue;
+
+          a.x -= nx * overlap * (aDyn / invSum);
+          a.y -= ny * overlap * (aDyn / invSum);
+          b.x += nx * overlap * (bDyn / invSum);
+          b.y += ny * overlap * (bDyn / invSum);
+
+          const rvx = b.vx - a.vx;
+          const rvy = b.vy - a.vy;
+          const velAlongNormal = rvx * nx + rvy * ny;
+          if (velAlongNormal < 0) {
+            const e = Math.min(1.1, ((a.restitution + b.restitution) * 0.5) * restMul);
+            const jImp = (-(1 + e) * velAlongNormal) / invSum;
+            const impX = jImp * nx;
+            const impY = jImp * ny;
+            if (a.bodyType === "dynamic") {
+              a.vx -= impX * aDyn;
+              a.vy -= impY * aDyn;
+            }
+            if (b.bodyType === "dynamic") {
+              b.vx += impX * bDyn;
+              b.vy += impY * bDyn;
+            }
+            const impactMag = Math.abs(velAlongNormal);
+            if (impactMag > 0.25) {
+              if (a.collisionSquashEnabled) {
+                a.impactSquash = Math.min(0.85, Math.max(a.impactSquash, impactMag * 0.28));
+              }
+              if (b.collisionSquashEnabled) {
+                b.impactSquash = Math.min(0.85, Math.max(b.impactSquash, impactMag * 0.28));
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 5. Intégration & collisions pour les instances émises par physics_spawner
+    for (let i = 0; i < sim.spawned.length; i++) {
+      const sb = sim.spawned[i];
+      sb.impactSquash = Math.max(0, sb.impactSquash - h * 4.5);
+      sb.vx += gx * h;
+      sb.vy += gy * h;
+      const damp = Math.max(0.88, 1 - sb.linearDamping * h * 3.5);
+      sb.vx = Math.max(-6, Math.min(6, sb.vx * damp));
+      sb.vy = Math.max(-6, Math.min(6, sb.vy * damp));
+      sb.x += sb.vx * h;
+      sb.y += sb.vy * h;
+      sb.rotZ += sb.vRotZ * h;
+
+      const minY = -boundR * 0.62 + sb.radius;
+      const maxX = boundR * 0.95 - sb.radius;
+      const e = Math.min(1.1, sb.restitution);
+      if (sb.y < minY) {
+        const imp = Math.abs(sb.vy);
+        sb.y = minY;
+        sb.vy = Math.abs(sb.vy) * e;
+        if (sb.collisionSquashEnabled && imp > 0.3) {
+          sb.impactSquash = Math.min(0.8, imp * 0.25);
+        }
+      }
+      if (sb.x < -maxX) {
+        sb.x = -maxX;
+        sb.vx = Math.abs(sb.vx) * e;
+      } else if (sb.x > maxX) {
+        sb.x = maxX;
+        sb.vx = -Math.abs(sb.vx) * e;
+      }
+
+      // Rebond contre les acteurs principaux
+      for (const b of bodyList) {
+        const dx = sb.x - b.x;
+        const dy = sb.y - b.y;
+        const dist = Math.hypot(dx, dy);
+        const minDist = sb.radius + b.radius;
+        if (dist > 0.001 && dist < minDist) {
+          const nx = dx / dist;
+          const ny = dy / dist;
+          sb.x = b.x + nx * minDist;
+          sb.y = b.y + ny * minDist;
+          const rvx = sb.vx - b.vx;
+          const rvy = sb.vy - b.vy;
+          const vn = rvx * nx + rvy * ny;
+          if (vn < 0) {
+            sb.vx -= (1 + e) * vn * nx;
+            sb.vy -= (1 + e) * vn * ny;
+            sb.impactSquash = Math.min(0.8, Math.abs(vn) * 0.26);
+            if (b.collisionSquashEnabled) {
+              b.impactSquash = Math.min(0.8, Math.max(b.impactSquash, Math.abs(vn) * 0.18));
+            }
+          }
+        }
+      }
+    }
+  }
+
+  return sim;
+}
+
 /**
- * COUCHE 2 v4/v5/v6 — Acteurs Organiques, Hybrides, Cartoon 1930 & Morphing Inter-Scènes (`actors[]`).
+ * COUCHE 2 v4/v5/v6/v7 — Acteurs Organiques, Hybrides, Cartoon 1930, Morphing Inter-Scènes & Physique Collisions (`actors[]`).
  */
 function renderV4Actors(
   ctx: CanvasRenderingContext2D,
@@ -2607,6 +3157,17 @@ function renderV4Actors(
 
   const isMorphing = Boolean(prevScene && morphAlpha < 0.999);
   const mAlpha = clamp01(morphAlpha);
+
+  const physicsSim = !reducedMotion
+    ? stepV7PhysicsWorld(
+        scene,
+        audio,
+        timeSeconds,
+        faderValues,
+        lfoValues,
+        sceneProgress
+      )
+    : undefined;
 
   const cp = scene.cartoonPhysics;
   const fb = cp?.faderBindings;
@@ -2659,8 +3220,51 @@ function renderV4Actors(
   ctx.save();
   ctx.imageSmoothingEnabled = true;
 
+  // Dessin des liaisons élastiques / ressorts rubber-hose v7 (joints[])
+  if (physicsSim && scene.joints && scene.joints.length > 0) {
+    for (const j of scene.joints) {
+      const bA = physicsSim.bodies.get(j.actorA);
+      const bB = physicsSim.bodies.get(j.actorB);
+      if (!bA || !bB) continue;
+      const dScaleA = 5.0 / Math.max(1.8, bA.z);
+      const dScaleB = 5.0 / Math.max(1.8, bB.z);
+      const ax =
+        width * 0.5 +
+        (bA.x - camOff.yawRad * 1.4) * (width * 0.16) * dScaleA;
+      const ay =
+        height * 0.5 -
+        (bA.y - camOff.pitchRad * 1.1) * (height * 0.22) * dScaleA;
+      const bx =
+        width * 0.5 +
+        (bB.x - camOff.yawRad * 1.4) * (width * 0.16) * dScaleB;
+      const by =
+        height * 0.5 -
+        (bB.y - camOff.pitchRad * 1.1) * (height * 0.22) * dScaleB;
+
+      const midX = (ax + bx) * 0.5 + Math.sin(t * 4.2) * 8;
+      const midY = (ay + by) * 0.5 + Math.cos(t * 3.5) * 6;
+
+      ctx.save();
+      ctx.lineCap = "round";
+      // Contour noir extérieur type tuyau rubber-hose
+      ctx.strokeStyle = "#09090B";
+      ctx.lineWidth = 6.5;
+      ctx.beginPath();
+      ctx.moveTo(ax, ay);
+      ctx.quadraticCurveTo(midX, midY, bx, by);
+      ctx.stroke();
+      // Cœur coloré du ressort
+      ctx.strokeStyle = "#FACC15";
+      ctx.lineWidth = 2.8;
+      ctx.stroke();
+      ctx.restore();
+    }
+  }
+
   for (let aIdx = 0; aIdx < actors.length; aIdx++) {
     const actor = actors[aIdx];
+    const actorId = actor.id || `actor-${aIdx + 1}`;
+    const physBody = physicsSim?.bodies.get(actorId);
     const prevActor =
       isMorphing && actor.id
         ? prevScene?.actors?.find((pa) => pa.id === actor.id)
@@ -2707,7 +3311,7 @@ function renderV4Actors(
         actor.id,
         sceneProgress
       ) ?? 0.7;
-    const curPosY = actor.position?.[1] ?? 0;
+    const curPosY = physBody ? physBody.y : actor.position?.[1] ?? 0;
     const prevPosY = prevActor?.position?.[1] ?? curPosY;
     let modPosY =
       resolveAutomationOverride(
@@ -2715,14 +3319,16 @@ function renderV4Actors(
         "positionY",
         actor.id,
         sceneProgress
-      ) ?? (prevActor ? prevPosY + (curPosY - prevPosY) * mAlpha : curPosY);
+      ) ?? (prevActor && !physBody ? prevPosY + (curPosY - prevPosY) * mAlpha : curPosY);
     let modSquash =
       (resolveAutomationOverride(
         scene.automations,
         "squashStretch",
         actor.id,
         sceneProgress
-      ) ?? globalSquashAmt) * squashTriggerVal;
+      ) ?? globalSquashAmt) *
+        squashTriggerVal +
+      (physBody?.impactSquash ?? 0) * 1.35;
     let modBoil =
       resolveAutomationOverride(
         scene.automations,
@@ -2754,16 +3360,16 @@ function renderV4Actors(
         else if (m.target === "parallaxSpeed") modParallaxSpeed = Math.max(0.1, modParallaxSpeed + v);
       }
     }
-    // Conservation du volume Squash & Stretch : sx * sy = 1
-    const sqWave = Math.sin(t * 7.5 + aIdx) * 0.15 + 0.85;
-    const squashFactor = clamp01(modSquash * 0.45) * sqWave;
-    const squashX = 1 + squashFactor * 0.42;
+    // Conservation du volume Squash & Stretch : sx * sy = 1 (amplifié par l'impact de collision physique v7)
+    const sqWave = physBody && physBody.impactSquash > 0.05 ? 1.0 : Math.sin(t * 7.5 + aIdx) * 0.15 + 0.85;
+    const squashFactor = clamp01(modSquash * 0.48) * sqWave;
+    const squashX = 1 + squashFactor * 0.45;
     const squashY = 1 / Math.max(0.55, squashX);
 
-    const curPosX = actor.position?.[0] ?? 0;
+    const curPosX = physBody ? physBody.x : actor.position?.[0] ?? 0;
     const prevPosX = prevActor?.position?.[0] ?? curPosX;
-    const posX = prevActor ? prevPosX + (curPosX - prevPosX) * mAlpha : curPosX;
-    const curPosZ = Math.max(1.8, actor.position?.[2] ?? 5.0);
+    const posX = prevActor && !physBody ? prevPosX + (curPosX - prevPosX) * mAlpha : curPosX;
+    const curPosZ = Math.max(1.8, physBody ? physBody.z : actor.position?.[2] ?? 5.0);
     const prevPosZ = Math.max(1.8, prevActor?.position?.[2] ?? curPosZ);
     const posZ = prevActor ? prevPosZ + (curPosZ - prevPosZ) * mAlpha : curPosZ;
     const depthScale = 5.0 / posZ;
@@ -3568,6 +4174,90 @@ function renderV4Actors(
       }
 
       ctx.restore();
+    } else if (actor.type === "physics_spawner" && physicsSim) {
+      // Rendu des instances physiques légères émises par ce physics_spawner
+      const spId = actor.id || `spawner-${aIdx + 1}`;
+      for (let sIdx = 0; sIdx < physicsSim.spawned.length; sIdx++) {
+        const inst = physicsSim.spawned[sIdx];
+        if (inst.spawnerId !== spId) continue;
+        const dScale = 5.0 / Math.max(1.8, inst.z);
+        const ix =
+          width * 0.5 +
+          (inst.x - camOff.yawRad * 1.4) * (width * 0.16) * dScale;
+        const iy =
+          height * 0.5 -
+          (inst.y - camOff.pitchRad * 1.1) * (height * 0.22) * dScale;
+        const ir = Math.max(5, Math.min(width, height) * inst.radius * 0.34 * dScale);
+        const ageRatio = clamp01((timeSeconds - inst.bornTime) / inst.ttlSeconds);
+        const fadeOut = ageRatio > 0.82 ? 1 - (ageRatio - 0.82) / 0.18 : 1;
+        const instSqX = 1 + inst.impactSquash * 0.48;
+        const instSqY = 1 / Math.max(0.55, instSqX);
+
+        ctx.save();
+        ctx.globalAlpha = fadeOut;
+        ctx.translate(ix, iy);
+        ctx.scale(instSqX, instSqY);
+        ctx.rotate(inst.rotZ);
+
+        if (inst.shape === "music_note") {
+          ctx.fillStyle = sIdx % 2 === 0 ? inst.color : inst.secondaryColor;
+          ctx.strokeStyle = "#09090B";
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.ellipse(0, 0, ir * 0.8, ir * 0.58, -0.35, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(ir * 0.65, 0);
+          ctx.lineTo(ir * 0.65, -ir * 2.1);
+          ctx.quadraticCurveTo(ir * 1.5, -ir * 1.9, ir * 1.35, -ir * 1.0);
+          ctx.stroke();
+        } else if (inst.shape === "comic_star") {
+          ctx.fillStyle = sIdx % 2 === 0 ? inst.secondaryColor : inst.color;
+          ctx.strokeStyle = "#09090B";
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          for (let p = 0; p < 10; p++) {
+            const ang = (p / 10) * Math.PI * 2;
+            const rStar = p % 2 === 0 ? ir * 1.15 : ir * 0.52;
+            const px = Math.cos(ang) * rStar;
+            const py = Math.sin(ang) * rStar;
+            if (p === 0) ctx.moveTo(px, py);
+            else ctx.lineTo(px, py);
+          }
+          ctx.closePath();
+          ctx.fill();
+          ctx.stroke();
+        } else if (inst.shape === "pie_eye_ball") {
+          ctx.fillStyle = "#FFFBEB";
+          ctx.strokeStyle = "#09090B";
+          ctx.lineWidth = 2.2;
+          ctx.beginPath();
+          ctx.arc(0, 0, ir, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.fillStyle = "#09090B";
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.arc(0, 0, ir * 0.52, 0.2 * Math.PI, 1.8 * Math.PI);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          // chrome_sphere
+          const g = ctx.createRadialGradient(-ir * 0.35, -ir * 0.35, ir * 0.08, 0, 0, ir);
+          g.addColorStop(0, "#FFFFFF");
+          g.addColorStop(0.35, sIdx % 2 === 0 ? inst.color : inst.secondaryColor);
+          g.addColorStop(1, "#09090B");
+          ctx.fillStyle = g;
+          ctx.strokeStyle = "#09090B";
+          ctx.lineWidth = 1.8;
+          ctx.beginPath();
+          ctx.arc(0, 0, ir, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
     }
   }
 

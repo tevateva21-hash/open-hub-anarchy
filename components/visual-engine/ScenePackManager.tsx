@@ -1897,6 +1897,13 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                   <code>modulators[] (lfo_1..lfo_4, waveform, rateBeats)</code> ·{" "}
                   <code>cameraCuts[] (rig, fov, switchEveryBars, onPeakBand, transition)</code>
                 </p>
+                <p className="text-[11px]">
+                  • <strong>Physique Cartoon &amp; Collisions (v7)</strong> :{" "}
+                  <code>physicsWorld (enabled, gravity: [x,y,z], bounds: box | sphere | floor_only, faderBindings)</code>{" "}
+                  · <code>actor.physics (bodyType: dynamic | kinematic | static, mass, restitution: 0..1.2, friction, linearDamping, collisionSquash, audioImpulses[])</code>{" "}
+                  · <code>joints[] (type: spring, actorA, actorB, stiffness, damping, restLength)</code>{" "}
+                  · <code>physics_spawner (spawnShape, spawnRateBeats, spawnOnKick, ttlBars, maxInstances)</code>
+                </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-brand-pearl border-2 border-black space-y-1.5">
