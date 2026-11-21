@@ -140,3 +140,16 @@ Dans le panneau **`PACK DE SCÈNES // ENCHAÎNEMENT BPM`** :
    - `postFX[]` : `bloom`, `depth_of_field`, `toon_outline`, `chromatic_aberration`, `film_grain`, `pixelate`.
    - Horloge BPM : `HOLD (Manuel)`, `1, 2, 4, 8, 16, 32, 64` mesures + `durationBars` par scène & transitions (`cut | crossfade | camera_swoop | flash`).
 
+## 8. Moteur v5 : Cartoon 1930 / Cuphead (`Anarchy3DPackV5`)
+
+1. **Acteurs 2.5D & Parallaxe Multi-Plans (`actors[]`)** :
+   - `parallax_layer` : plan 2.5D (image ou motif aquarelle/gouache `watercolor_hills | stage_curtains | city_silhouette | clouds_band | checker_floor | psyche_rings`) à profondeur `z` avec `scrollX`, `scrollY`, `depthBlur`.
+   - `cartoon_sprite` : spritesheet `framesX × framesY` jouée au BPM avec contour d'encre noir automatique.
+   - `rubber_hose_mesh` : formes rétro 1930 (`hose_arms | pie_eyes | vintage_wheel | music_notes | fluffy_clouds | theater_curtains | boss_character | psyche_tunnel`) en Cel-Shading plat + contour noir épais (`inkThickness`).
+2. **Physique Dessin Animé (`cartoonPhysics`)** :
+   - `steppedFps` : `12 | 24 | 60` FPS (saccade celluloïd), `squashStretch` + `squashTrigger` (`bass | snare | kick | energy`), `lineBoil` (vibration d'encre).
+   - `faderBindings` : liaison libre des 19 faders sur `squashStretch`, `lineBoil`, `filmGrain`, `parallaxSpeed` et `steppedFps`.
+3. **Post-Processing Pellicule 1930 (`postFX[]`)** :
+   - `vintage_1930_film` : `filmGrain`, `scratchesAndDust`, `gateWeave`, `colorGrade` (`technicolor_30s | sepia_warm | black_and_white_ink | none`), `vignette`.
+   - `toon_outline` : encrage plume (`inkThickness`, `inkJitter`).
+

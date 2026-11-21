@@ -4,6 +4,7 @@ import type {
   Anarchy3DAnimation,
   Anarchy3DBackdropLayer,
   Anarchy3DBackdropShaderConfig,
+  Anarchy3DCartoonPhysics,
   Anarchy3DCloner,
   Anarchy3DGenerator,
   Anarchy3DPostFx,
@@ -2269,6 +2270,10 @@ function resolveActorModulationValue(
       return audio.trebleEnvelope;
     case "energy":
       return clamp01((audio.bassEnvelope + audio.midEnvelope + audio.trebleEnvelope) / 2.2);
+    case "kick":
+      return clamp01(audio.bassEnvelope * 0.8 + audio.transientPulse * 0.55);
+    case "snare":
+      return clamp01(audio.midEnvelope * 0.6 + audio.transientPulse * 0.7);
     default:
       if (source.startsWith("fader_") && faderValues) {
         return clamp01(faderValues[source] ?? 0);
@@ -2278,7 +2283,7 @@ function resolveActorModulationValue(
 }
 
 /**
- * COUCHE 2 v4 — Acteurs Organiques & Hybrides (`actors[]`) avec modulations audio + 19 faders.
+ * COUCHE 2 v4/v5 — Acteurs Organiques, Hybrides & Cartoon 1930 (`actors[]`) avec modulations audio + 19 faders.
  */
 function renderV4Actors(
   ctx: CanvasRenderingContext2D,
@@ -2290,12 +2295,46 @@ function renderV4Actors(
   seed: number,
   reducedMotion: boolean,
   camOff: PerspectiveOffsets,
-  faderValues?: Record<string, number>
+  faderValues?: Record<string, number>,
+  beatPhase = 0
 ): void {
   const actors = scene.actors;
   if (!actors || actors.length === 0) return;
 
-  const t = reducedMotion ? 0 : timeSeconds;
+  const cp = scene.cartoonPhysics;
+  const fb = cp?.faderBindings;
+  let steppedFps: number = cp?.steppedFps ?? 60;
+  if (fb?.steppedFps && faderValues) {
+    const fv = clamp01(faderValues[fb.steppedFps] ?? 0.5);
+    steppedFps = fv < 0.34 ? 12 : fv < 0.68 ? 24 : 60;
+  }
+  const rawT = reducedMotion ? 0 : timeSeconds;
+  const t = steppedFps < 60 ? Math.floor(rawT * steppedFps) / steppedFps : rawT;
+  const boilTick = Math.floor(rawT * Math.min(24, steppedFps));
+  const globalBoil =
+    (cp?.lineBoil ?? 0) +
+    (fb?.lineBoil ? resolveActorModulationValue(fb.lineBoil, audio, faderValues) * 1.4 : 0);
+  const globalParallaxMul =
+    1 +
+    (fb?.parallaxSpeed
+      ? resolveActorModulationValue(fb.parallaxSpeed, audio, faderValues) * 1.8
+      : 0);
+  const squashTriggerVal = resolveActorModulationValue(
+    cp?.squashTrigger ?? "bass",
+    audio,
+    faderValues
+  );
+  const globalSquashAmt =
+    (cp?.squashStretch ?? 0) +
+    (fb?.squashStretch
+      ? resolveActorModulationValue(fb.squashStretch, audio, faderValues) * 0.9
+      : 0);
+
+  const boilOffset = (salt: number, amt: number): number => {
+    if (amt <= 0.01 || reducedMotion) return 0;
+    return Math.sin(boilTick * 12.9898 + salt * 78.233) * amt * 1.8;
+  };
+
   const light = getStudioLightConfig(scene.environment.lightingPreset);
 
   ctx.save();
@@ -2315,6 +2354,9 @@ function renderV4Actors(
     let modRotSpeed = actor.speed ?? 1.0;
     let modEmissive = 0.7;
     let modPosY = actor.position?.[1] ?? 0;
+    let modSquash = globalSquashAmt * squashTriggerVal;
+    let modBoil = globalBoil;
+    let modParallaxSpeed = globalParallaxMul;
 
     if (actor.audioModulation) {
       for (const m of actor.audioModulation) {
@@ -2324,8 +2366,16 @@ function renderV4Actors(
         else if (m.target === "rotationSpeed") modRotSpeed += v;
         else if (m.target === "emissiveIntensity") modEmissive = clamp01(modEmissive + v);
         else if (m.target === "positionY") modPosY += v;
+        else if (m.target === "squashStretch") modSquash = Math.max(0, modSquash + v);
+        else if (m.target === "lineBoil") modBoil = Math.max(0, modBoil + v);
+        else if (m.target === "parallaxSpeed") modParallaxSpeed = Math.max(0.1, modParallaxSpeed + v);
       }
     }
+    // Conservation du volume Squash & Stretch : sx * sy = 1
+    const sqWave = Math.sin(t * 7.5 + aIdx) * 0.15 + 0.85;
+    const squashFactor = clamp01(modSquash * 0.45) * sqWave;
+    const squashX = 1 + squashFactor * 0.42;
+    const squashY = 1 / Math.max(0.55, squashX);
 
     const posX = actor.position?.[0] ?? 0;
     const posZ = Math.max(1.8, actor.position?.[2] ?? 5.0);
@@ -2617,6 +2667,450 @@ function renderV4Actors(
         ctx.stroke();
       }
       ctx.restore();
+    } else if (actor.type === "parallax_layer") {
+      // Plan 2.5D parallaxe aquarelle/gouache ou image avec défilement infini (scrollX, scrollY)
+      const scrollX = (actor.scrollX ?? 0.5) * modParallaxSpeed;
+      const scrollY = (actor.scrollY ?? 0) * modParallaxSpeed;
+      const parallax = actor.parallax ?? 1.0;
+      const offX = ((t * scrollX * 42 + camOff.yawRad * 28 * parallax) % width + width) % width;
+      const offY = ((t * scrollY * 26 + camOff.pitchRad * 14 * parallax) % height + height) % height;
+      const pat = actor.pattern ?? "watercolor_hills";
+      const inkW = Math.max(1.5, actor.inkThickness ?? 2.4);
+
+      ctx.save();
+      if ((actor.depthBlur ?? 0) > 0.05) {
+        ctx.globalAlpha = clamp01(1 - (actor.depthBlur ?? 0) * 0.35);
+      }
+
+      if (actor.url && typeof Image !== "undefined" && !actor.url.endsWith(".glb")) {
+        let img = V4_SPRITE_IMAGE_CACHE.get(actor.url);
+        if (!img) {
+          img = new Image();
+          img.crossOrigin = "anonymous";
+          img.src = actor.url;
+          V4_SPRITE_IMAGE_CACHE.set(actor.url, img);
+        }
+        if (img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, -offX, -offY, width, height);
+          ctx.drawImage(img, width - offX, -offY, width, height);
+        }
+      } else if (pat === "stage_curtains") {
+        // Rideaux de théâtre 1930 drapés gauche/droite + cantonnière dorée
+        const sw = width * 0.18;
+        ctx.fillStyle = col1;
+        ctx.strokeStyle = "#120E0B";
+        ctx.lineWidth = inkW;
+        // Gauche
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(sw + boilOffset(1, modBoil), 0);
+        ctx.quadraticCurveTo(sw * 0.65, height * 0.5, sw * 1.15, height);
+        ctx.lineTo(0, height);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Droite
+        ctx.beginPath();
+        ctx.moveTo(width, 0);
+        ctx.lineTo(width - sw + boilOffset(2, modBoil), 0);
+        ctx.quadraticCurveTo(width - sw * 0.65, height * 0.5, width - sw * 1.15, height);
+        ctx.lineTo(width, height);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Cantonnière haute
+        ctx.fillStyle = col1;
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(width, 0);
+        ctx.lineTo(width, 18);
+        for (let i = 6; i >= 0; i--) {
+          const sx = (i / 6) * width;
+          const prevX = ((i + 0.5) / 6) * width;
+          ctx.quadraticCurveTo(prevX, 28 + boilOffset(i + 5, modBoil), sx, 16);
+        }
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        // Frange dorée
+        ctx.strokeStyle = col2;
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.moveTo(0, 17);
+        ctx.lineTo(width, 17);
+        ctx.stroke();
+      } else if (pat === "watercolor_hills") {
+        const yBase = height * 0.66 - modPosY * 18;
+        ctx.fillStyle = col1;
+        ctx.strokeStyle = "#120E0B";
+        ctx.lineWidth = inkW * 0.85;
+        ctx.beginPath();
+        ctx.moveTo(0, height);
+        for (let x = 0; x <= width; x += 8) {
+          const wx = (x + offX) * 0.02;
+          const hy = yBase - Math.sin(wx) * 22 - Math.cos(wx * 2.1) * 10;
+          ctx.lineTo(x, hy);
+        }
+        ctx.lineTo(width, height);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = col2;
+        ctx.beginPath();
+        ctx.moveTo(0, height);
+        for (let x = 0; x <= width; x += 8) {
+          const wx = (x + offX * 1.5) * 0.028 + 2.1;
+          const hy = yBase + 16 - Math.sin(wx) * 15;
+          ctx.lineTo(x, hy);
+        }
+        ctx.lineTo(width, height);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (pat === "checker_floor") {
+        const floorY = Math.round(height * 0.72);
+        const rows = 5;
+        const cols = 10;
+        const tileW = width / cols;
+        ctx.strokeStyle = "#120E0B";
+        ctx.lineWidth = 1.2;
+        for (let r = 0; r < rows; r++) {
+          const y0 = floorY + (r / rows) * (height - floorY);
+          const y1 = floorY + ((r + 1) / rows) * (height - floorY);
+          const shift = ((offX * (1 + r * 0.35)) % (tileW * 2));
+          for (let c = -2; c <= cols + 2; c++) {
+            const x0 = c * tileW - shift;
+            ctx.fillStyle = (r + c) % 2 === 0 ? col1 : col2;
+            ctx.fillRect(x0, y0, tileW + 1, y1 - y0 + 1);
+          }
+        }
+        ctx.beginPath();
+        ctx.moveTo(0, floorY);
+        ctx.lineTo(width, floorY);
+        ctx.stroke();
+      } else if (pat === "city_silhouette") {
+        const baseY = height * 0.78;
+        ctx.fillStyle = col1;
+        ctx.strokeStyle = "#09090B";
+        ctx.lineWidth = inkW * 0.8;
+        const bCount = 12;
+        const bw = width / bCount;
+        for (let i = -1; i <= bCount + 1; i++) {
+          const bx = i * bw - (offX % bw);
+          const h = 30 + ((Math.abs(i * 37 + seed) % 5) * 14);
+          ctx.fillRect(bx, baseY - h, bw - 2, h + height * 0.25);
+          ctx.strokeRect(bx, baseY - h, bw - 2, h + height * 0.25);
+          ctx.fillStyle = col2;
+          ctx.fillRect(bx + 5, baseY - h + 6, 4, 5);
+          ctx.fillRect(bx + bw - 12, baseY - h + 14, 4, 5);
+          ctx.fillStyle = col1;
+        }
+      } else if (pat === "clouds_band") {
+        const cyCloud = height * 0.26;
+        ctx.fillStyle = col1;
+        ctx.strokeStyle = "#120E0B";
+        ctx.lineWidth = inkW * 0.8;
+        for (let i = -1; i < 6; i++) {
+          const clx = ((i * 78 - offX) % (width + 90) + (width + 90)) % (width + 90) - 45;
+          const cly = cyCloud + (i % 2) * 14;
+          ctx.beginPath();
+          ctx.arc(clx, cly, 16, 0, Math.PI * 2);
+          ctx.arc(clx + 15, cly - 5, 19, 0, Math.PI * 2);
+          ctx.arc(clx + 31, cly, 15, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+        }
+      } else if (pat === "psyche_rings") {
+        const rings = 9;
+        for (let r = rings; r >= 1; r--) {
+          const rad = ((r * 26 + offX * 0.7) % (width * 0.75)) + 8;
+          ctx.beginPath();
+          ctx.arc(width * 0.5, height * 0.5, rad, 0, Math.PI * 2);
+          ctx.fillStyle = r % 2 === 0 ? col1 : col2;
+          ctx.globalAlpha = 0.24;
+          ctx.fill();
+          ctx.globalAlpha = 0.85;
+          ctx.strokeStyle = "#09090B";
+          ctx.lineWidth = 2;
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    } else if (actor.type === "cartoon_sprite") {
+      // Spritesheet framesX x framesY au BPM ou danseur Rubber-Hose 1930 intégré
+      const fx = Math.max(1, actor.framesX ?? 4);
+      const fy = Math.max(1, actor.framesY ?? 1);
+      const totalFrames = fx * fy;
+      const frameIdx = actor.bpmSync !== false
+        ? Math.floor(beatPhase * totalFrames + t * 2) % totalFrames
+        : Math.floor(t * 12) % totalFrames;
+      const s = Math.min(width, height) * 0.24 * modScale * depthScale;
+      const inkW = Math.max(1.8, actor.inkThickness ?? 3.0);
+
+      ctx.save();
+      ctx.translate(cx + boilOffset(aIdx * 7, modBoil), cy + boilOffset(aIdx * 11, modBoil));
+      ctx.scale(squashX, squashY);
+
+      let drewSheet = false;
+      if (actor.url && typeof Image !== "undefined" && !actor.url.endsWith(".glb")) {
+        let img = V4_SPRITE_IMAGE_CACHE.get(actor.url);
+        if (!img) {
+          img = new Image();
+          img.crossOrigin = "anonymous";
+          img.src = actor.url;
+          V4_SPRITE_IMAGE_CACHE.set(actor.url, img);
+        }
+        if (img.complete && img.naturalWidth > 0) {
+          const fw = img.naturalWidth / fx;
+          const fh = img.naturalHeight / fy;
+          const col = frameIdx % fx;
+          const row = Math.floor(frameIdx / fx);
+          ctx.drawImage(img, col * fw, row * fh, fw, fh, -s, -s, s * 2, s * 2);
+          if (actor.inkOutline !== false) {
+            ctx.strokeStyle = "#09090B";
+            ctx.lineWidth = inkW;
+            ctx.strokeRect(-s, -s, s * 2, s * 2);
+          }
+          drewSheet = true;
+        }
+      }
+
+      if (!drewSheet) {
+        // Personnage Cartoon 1930 Rubber-Hose animé au tempo BPM
+        const danceSwing = Math.sin(frameIdx * ((Math.PI * 2) / Math.max(2, totalFrames))) * 0.45;
+        ctx.strokeStyle = "#09090B";
+        ctx.lineWidth = inkW;
+        ctx.lineCap = "round";
+        // Jambes rubber-hose courbées
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.22, s * 0.35);
+        ctx.quadraticCurveTo(-s * 0.38, s * 0.65, -s * 0.26 + danceSwing * 14, s * 0.92);
+        ctx.moveTo(s * 0.22, s * 0.35);
+        ctx.quadraticCurveTo(s * 0.38, s * 0.65, s * 0.26 - danceSwing * 14, s * 0.92);
+        ctx.stroke();
+        // Chaussures rétro jaunes
+        ctx.fillStyle = col2;
+        ctx.beginPath();
+        ctx.ellipse(-s * 0.28 + danceSwing * 14, s * 0.95, s * 0.22, s * 0.12, 0, 0, Math.PI * 2);
+        ctx.ellipse(s * 0.28 - danceSwing * 14, s * 0.95, s * 0.22, s * 0.12, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Bras rubber-hose + gants blancs
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.45, s * 0.05);
+        ctx.quadraticCurveTo(-s * 0.9, -s * 0.15 + danceSwing * 22, -s * 0.98, -s * 0.45);
+        ctx.moveTo(s * 0.45, s * 0.05);
+        ctx.quadraticCurveTo(s * 0.9, -s * 0.15 - danceSwing * 22, s * 0.98, -s * 0.45);
+        ctx.stroke();
+        ctx.fillStyle = "#FFFBEB";
+        ctx.beginPath();
+        ctx.arc(-s * 0.98, -s * 0.45, s * 0.16, 0, Math.PI * 2);
+        ctx.arc(s * 0.98, -s * 0.45, s * 0.16, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Corps / Tête tasse 1930
+        ctx.fillStyle = col1;
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.56, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Yeux Pie-Eyes blancs + encoche camembert
+        ctx.fillStyle = "#FFFBEB";
+        ctx.beginPath();
+        ctx.ellipse(-s * 0.18, -s * 0.12, s * 0.16, s * 0.22, 0, 0, Math.PI * 2);
+        ctx.ellipse(s * 0.18, -s * 0.12, s * 0.16, s * 0.22, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#09090B";
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.14, -s * 0.12);
+        ctx.arc(-s * 0.14, -s * 0.12, s * 0.09, 0.25 * Math.PI, 1.85 * Math.PI);
+        ctx.closePath();
+        ctx.moveTo(s * 0.14, -s * 0.12);
+        ctx.arc(s * 0.14, -s * 0.12, s * 0.09, 0.25 * Math.PI, 1.85 * Math.PI);
+        ctx.closePath();
+        ctx.fill();
+        // Large sourire 1930
+        ctx.beginPath();
+        ctx.arc(0, s * 0.16, s * 0.26, 0.1 * Math.PI, 0.9 * Math.PI);
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else if (actor.type === "rubber_hose_mesh") {
+      // Formes Cartoon 1930 / Cuphead en Cel-Shading plat + contour noir épais + line boil
+      const shape = actor.shape ?? "boss_character";
+      const s = Math.min(width, height) * 0.25 * modScale * depthScale;
+      const inkW = Math.max(2.0, actor.inkThickness ?? 3.6);
+      const bx = boilOffset(aIdx * 13 + 1, modBoil);
+      const by = boilOffset(aIdx * 17 + 2, modBoil);
+
+      ctx.save();
+      ctx.translate(cx + bx, cy + by);
+      ctx.scale(squashX, squashY);
+      ctx.strokeStyle = "#09090B";
+      ctx.lineWidth = inkW;
+      ctx.lineCap = "round";
+      ctx.lineJoin = "round";
+
+      if (shape === "boss_character") {
+        // Boss 1930 rebondissant (corps rond, cornes/couronne, pie-eyes, sourire large)
+        ctx.fillStyle = col2;
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.45, -s * 0.65);
+        ctx.lineTo(-s * 0.62, -s * 1.15);
+        ctx.lineTo(-s * 0.18, -s * 0.82);
+        ctx.lineTo(0, -s * 1.2);
+        ctx.lineTo(s * 0.18, -s * 0.82);
+        ctx.lineTo(s * 0.62, -s * 1.15);
+        ctx.lineTo(s * 0.45, -s * 0.65);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = col1;
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.88, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        // Pie-eyes expressifs
+        ctx.fillStyle = "#FFFBEB";
+        ctx.beginPath();
+        ctx.ellipse(-s * 0.28, -s * 0.18, s * 0.22, s * 0.3, 0, 0, Math.PI * 2);
+        ctx.ellipse(s * 0.28, -s * 0.18, s * 0.22, s * 0.3, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+
+        ctx.fillStyle = "#09090B";
+        const look = Math.sin(t * modRotSpeed * 2.2) * s * 0.06;
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.24 + look, -s * 0.18);
+        ctx.arc(-s * 0.24 + look, -s * 0.18, s * 0.12, 0.2 * Math.PI, 1.82 * Math.PI);
+        ctx.closePath();
+        ctx.moveTo(s * 0.24 + look, -s * 0.18);
+        ctx.arc(s * 0.24 + look, -s * 0.18, s * 0.12, 0.2 * Math.PI, 1.82 * Math.PI);
+        ctx.closePath();
+        ctx.fill();
+
+        // Bouche cartoon ouverte aux dents blanches
+        ctx.fillStyle = "#FFFBEB";
+        ctx.beginPath();
+        ctx.arc(0, s * 0.24, s * 0.42, 0.05 * Math.PI, 0.95 * Math.PI);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "hose_arms") {
+        // Bras / tuyaux rubber-hose sinusoïdaux avec gants blancs
+        const wave = Math.sin(t * modRotSpeed * 3.4) * s * 0.45;
+        ctx.lineWidth = Math.max(4, inkW * 2.1);
+        ctx.strokeStyle = col1;
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.72, 0);
+        ctx.bezierCurveTo(-s * 1.15, -wave, -s * 1.35, wave, -s * 1.62, -s * 0.25 + wave * 0.5);
+        ctx.moveTo(s * 0.72, 0);
+        ctx.bezierCurveTo(s * 1.15, wave, s * 1.35, -wave, s * 1.62, -s * 0.25 - wave * 0.5);
+        ctx.stroke();
+
+        ctx.lineWidth = inkW;
+        ctx.strokeStyle = "#09090B";
+        ctx.fillStyle = col2;
+        ctx.beginPath();
+        ctx.arc(-s * 1.62, -s * 0.25 + wave * 0.5, s * 0.24, 0, Math.PI * 2);
+        ctx.arc(s * 1.62, -s * 0.25 - wave * 0.5, s * 0.24, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "pie_eyes") {
+        // Paire d'yeux "Pie-Eyes" géants flottants
+        const blink = Math.abs(Math.sin(t * modRotSpeed * 1.5)) < 0.08 ? 0.15 : 1;
+        ctx.scale(1, blink);
+        ctx.fillStyle = col1;
+        ctx.beginPath();
+        ctx.ellipse(-s * 0.48, 0, s * 0.44, s * 0.62, 0, 0, Math.PI * 2);
+        ctx.ellipse(s * 0.48, 0, s * 0.44, s * 0.62, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = col2;
+        const rotEye = t * modRotSpeed * 1.8;
+        ctx.beginPath();
+        ctx.moveTo(-s * 0.4, 0);
+        ctx.arc(-s * 0.4, 0, s * 0.24, rotEye, rotEye + Math.PI * 1.62);
+        ctx.closePath();
+        ctx.moveTo(s * 0.4, 0);
+        ctx.arc(s * 0.4, 0, s * 0.24, -rotEye, -rotEye + Math.PI * 1.62);
+        ctx.closePath();
+        ctx.fill();
+      } else if (shape === "vintage_wheel") {
+        // Roue / engrenage cartoon tournant au tempo steppedFps
+        ctx.rotate(t * modRotSpeed * 1.1);
+        ctx.fillStyle = col1;
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.92, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        for (let k = 0; k < 8; k++) {
+          const a = (k / 8) * Math.PI * 2;
+          ctx.beginPath();
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(a) * s * 0.9, Math.sin(a) * s * 0.9);
+          ctx.stroke();
+        }
+        ctx.fillStyle = col2;
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.28, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "music_notes") {
+        for (let n = -1; n <= 1; n++) {
+          const nx = n * s * 0.95;
+          const ny = Math.sin(t * modRotSpeed * 3.2 + n * 1.4) * s * 0.28;
+          ctx.fillStyle = n === 0 ? col2 : col1;
+          ctx.beginPath();
+          ctx.ellipse(nx, ny, s * 0.16, s * 0.11, -0.35, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.stroke();
+          ctx.beginPath();
+          ctx.moveTo(nx + s * 0.12, ny);
+          ctx.lineTo(nx + s * 0.12, ny - s * 0.55);
+          ctx.quadraticCurveTo(nx + s * 0.38, ny - s * 0.5, nx + s * 0.34, ny - s * 0.28);
+          ctx.stroke();
+        }
+      } else if (shape === "fluffy_clouds") {
+        ctx.fillStyle = col1;
+        ctx.beginPath();
+        ctx.arc(-s * 0.45, 0, s * 0.36, 0, Math.PI * 2);
+        ctx.arc(0, -s * 0.18, s * 0.48, 0, Math.PI * 2);
+        ctx.arc(s * 0.48, 0, s * 0.36, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+      } else if (shape === "psyche_tunnel") {
+        const rings = 7;
+        for (let r = rings; r >= 1; r--) {
+          const frac = ((r / rings) + (t * modRotSpeed * 0.28)) % 1;
+          const rad = (0.18 + frac * 1.45) * s;
+          ctx.beginPath();
+          ctx.arc(
+            Math.sin(t * 2 + r) * 8,
+            Math.cos(t * 1.7 + r) * 6,
+            rad,
+            0,
+            Math.PI * 2
+          );
+          ctx.strokeStyle = "#09090B";
+          ctx.lineWidth = inkW + 1.5;
+          ctx.stroke();
+          ctx.strokeStyle = r % 2 === 0 ? col1 : col2;
+          ctx.lineWidth = inkW * 0.7;
+          ctx.stroke();
+        }
+      } else {
+        // theater_curtains fallback shape
+        ctx.fillStyle = col1;
+        ctx.fillRect(-s, -s, s * 2, s * 0.4);
+        ctx.strokeRect(-s, -s, s * 2, s * 0.4);
+      }
+
+      ctx.restore();
     }
   }
 
@@ -2635,11 +3129,23 @@ function applyV4PostFxStack(
   width: number,
   height: number,
   transitionType?: AnarchySceneTransitionType,
-  transitionProgress?: number
+  transitionProgress?: number,
+  cartoonPhysics?: Anarchy3DCartoonPhysics,
+  faderValues?: Record<string, number>
 ): void {
+  const filmTick = Math.floor(timeSeconds * (cartoonPhysics?.steppedFps ?? 24));
+  const faderGrainBoost =
+    cartoonPhysics?.faderBindings?.filmGrain
+      ? resolveActorModulationValue(
+          cartoonPhysics.faderBindings.filmGrain,
+          audio,
+          faderValues
+        ) * 0.65
+      : 0;
+
   if (postFX && postFX.length > 0) {
     for (const step of postFX) {
-      const intensity = clamp01((step.intensity ?? 0.75) * 0.5) * 2;
+      const intensity = clamp01((step.intensity ?? 0.85) * 0.5) * 2;
       if (intensity <= 0.01) continue;
 
       if (step.type === "bloom") {
@@ -2665,11 +3171,141 @@ function applyV4PostFxStack(
         ctx.fillRect(0, 0, width, height);
         ctx.restore();
       } else if (step.type === "toon_outline") {
+        // Encrage noir épais type plume + vibration inkJitter (Line Boil)
+        const inkW = Math.max(1.5, step.inkThickness ?? Math.max(2, Math.round(intensity * 3)));
+        const jitter = step.inkJitter ?? 0;
+        const jx = jitter > 0 ? Math.sin(filmTick * 17.3) * jitter : 0;
+        const jy = jitter > 0 ? Math.cos(filmTick * 23.1) * jitter : 0;
         ctx.save();
         ctx.strokeStyle = step.color ?? "#09090B";
-        ctx.lineWidth = Math.max(2, Math.round(intensity * 3));
-        ctx.strokeRect(2, 2, width - 4, height - 4);
+        ctx.lineWidth = inkW;
+        ctx.strokeRect(2 + jx, 2 + jy, width - 4, height - 4);
+        if (jitter > 0.3) {
+          ctx.globalAlpha = 0.45;
+          ctx.lineWidth = Math.max(1, inkW * 0.55);
+          ctx.strokeRect(3 - jx, 3 - jy, width - 6, height - 6);
+        }
         ctx.restore();
+      } else if (step.type === "vintage_1930_film") {
+        // 1. Gate Weave (micro-tremblement mécanique du projecteur 1930)
+        const weave = clamp01(step.gateWeave ?? 0.35);
+        if (weave > 0.02) {
+          const wx = Math.round(Math.sin(filmTick * 11.7) * weave * 2.5);
+          const wy = Math.round(Math.cos(filmTick * 19.3) * weave * 2.0);
+          if (wx !== 0 || wy !== 0) {
+            ctx.save();
+            ctx.drawImage(ctx.canvas, wx, wy);
+            ctx.restore();
+          }
+        }
+
+        // 2. Color Grade 1930 (technicolor_30s | sepia_warm | black_and_white_ink | none)
+        const grade = step.colorGrade ?? "technicolor_30s";
+        if (grade === "black_and_white_ink") {
+          const imgData = ctx.getImageData(0, 0, width, height);
+          const d = imgData.data;
+          for (let i = 0; i < d.length; i += 4) {
+            const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
+            const contrast = clamp01(((lum / 255) - 0.5) * 1.38 + 0.5) * 255;
+            d[i] = contrast;
+            d[i + 1] = contrast * 0.98;
+            d[i + 2] = contrast * 0.94;
+          }
+          ctx.putImageData(imgData, 0, 0);
+        } else if (grade === "sepia_warm") {
+          ctx.save();
+          ctx.globalCompositeOperation = "color";
+          ctx.globalAlpha = 0.42;
+          ctx.fillStyle = "#B47B38";
+          ctx.fillRect(0, 0, width, height);
+          ctx.globalCompositeOperation = "soft-light";
+          ctx.globalAlpha = 0.25;
+          ctx.fillStyle = "#F5D08A";
+          ctx.fillRect(0, 0, width, height);
+          ctx.restore();
+        } else if (grade === "technicolor_30s") {
+          ctx.save();
+          ctx.globalCompositeOperation = "soft-light";
+          ctx.globalAlpha = 0.24;
+          const techGrad = ctx.createLinearGradient(0, 0, width, height);
+          techGrad.addColorStop(0, "#EF4444");
+          techGrad.addColorStop(0.5, "#FDE68A");
+          techGrad.addColorStop(1, "#06B6D4");
+          ctx.fillStyle = techGrad;
+          ctx.fillRect(0, 0, width, height);
+          ctx.restore();
+        }
+
+        // 3. Grain argentique 35 mm animé
+        const grainAmt = clamp01((step.filmGrain ?? 0.45) + faderGrainBoost);
+        if (grainAmt > 0.02) {
+          ctx.save();
+          let gRng = ((filmTick * 1664525) ^ 0x9e3779b9) >>> 0;
+          const count = Math.round(width * height * 0.022 * grainAmt);
+          for (let i = 0; i < count; i++) {
+            gRng = (gRng * 1664525 + 1013904223) >>> 0;
+            const gx = (gRng >>> 16) % width;
+            const gy = (gRng & 0xffff) % height;
+            ctx.fillStyle = i % 2 === 0 ? "#FFFFFF" : "#09090B";
+            ctx.globalAlpha = clamp01(grainAmt * 0.2);
+            ctx.fillRect(gx, gy, 1, 1);
+          }
+          ctx.restore();
+        }
+
+        // 4. Rayures verticales & poussières aléatoires
+        const scratchAmt = clamp01(step.scratchesAndDust ?? 0.35);
+        if (scratchAmt > 0.02) {
+          ctx.save();
+          let sRng = ((filmTick * 22695477) ^ 0x517cc1b7) >>> 0;
+          const nextS = () => {
+            sRng = (sRng * 1664525 + 1013904223) >>> 0;
+            return sRng / 4294967296;
+          };
+          const scratchCount = Math.max(1, Math.round(scratchAmt * 4));
+          for (let s = 0; s < scratchCount; s++) {
+            if (nextS() > 0.45) {
+              const sx = Math.round(nextS() * width);
+              ctx.strokeStyle = s % 2 === 0 ? "rgba(255,250,235,0.38)" : "rgba(12,10,8,0.42)";
+              ctx.lineWidth = 1;
+              ctx.beginPath();
+              ctx.moveTo(sx, 0);
+              ctx.lineTo(sx + (nextS() - 0.5) * 4, height);
+              ctx.stroke();
+            }
+          }
+          const dustCount = Math.round(scratchAmt * 14);
+          for (let d = 0; d < dustCount; d++) {
+            const dx = nextS() * width;
+            const dy = nextS() * height;
+            const dr = 0.7 + nextS() * 1.6;
+            ctx.fillStyle = d % 2 === 0 ? "rgba(12,10,8,0.45)" : "rgba(255,250,235,0.45)";
+            ctx.beginPath();
+            ctx.arc(dx, dy, dr, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.restore();
+        }
+
+        // 5. Vignette projecteur douce
+        const vigAmt = clamp01(step.vignette ?? 0.5);
+        if (vigAmt > 0.02) {
+          ctx.save();
+          const rad = Math.max(width, height) * 0.72;
+          const vGrad = ctx.createRadialGradient(
+            width * 0.5,
+            height * 0.5,
+            rad * 0.34,
+            width * 0.5,
+            height * 0.5,
+            rad
+          );
+          vGrad.addColorStop(0, "rgba(0,0,0,0)");
+          vGrad.addColorStop(1, `rgba(10,8,6,${clamp01(vigAmt * 0.72).toFixed(3)})`);
+          ctx.fillStyle = vGrad;
+          ctx.fillRect(0, 0, width, height);
+          ctx.restore();
+        }
       } else if (step.type === "chromatic_aberration") {
         const offsetPx = Math.max(1, Math.round(intensity * (2.5 + audio.transientPulse * 3)));
         const imgData = ctx.getImageData(0, 0, width, height);
@@ -2688,7 +3324,7 @@ function applyV4PostFxStack(
       } else if (step.type === "film_grain") {
         ctx.save();
         let gRng = ((Math.floor(timeSeconds * 60) * 1664525) ^ 0x517cc1b7) >>> 0;
-        const count = Math.round(width * height * 0.015 * intensity);
+        const count = Math.round(width * height * 0.015 * clamp01(intensity + faderGrainBoost));
         ctx.fillStyle = "#FFFFFF";
         ctx.globalAlpha = clamp01(intensity * 0.14);
         for (let i = 0; i < count; i++) {
@@ -4956,7 +5592,8 @@ export function renderSceneFrame(
         scene3d.seed ?? seed,
         reducedMotion,
         swoopCamOff,
-        input.faderValues
+        input.faderValues,
+        beatPhase
       );
     }
 
@@ -5149,7 +5786,9 @@ export function renderSceneFrame(
     targetW,
     targetH,
     input.transitionType ?? scene3d?.transition,
-    input.transitionProgress
+    input.transitionProgress,
+    scene3d?.cartoonPhysics,
+    input.faderValues
   );
 
   ctx.restore();

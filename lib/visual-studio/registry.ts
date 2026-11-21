@@ -342,7 +342,39 @@ export const ACTOR_TYPE_REGISTRY = [
   { value: "particle_swarm", label: "particle_swarm (Essaim 1k–10k Particules)" },
   { value: "glb_model", label: "glb_model (Modèle 3D .glb + Surcharge Matériau)" },
   { value: "sprite_2d", label: "sprite_2d (Plan 2D Illustration BD Parallaxe)" },
+  { value: "parallax_layer", label: "parallax_layer (Plan 2.5D Aquarelle / Gouache Parallaxe)" },
+  { value: "cartoon_sprite", label: "cartoon_sprite (Spritesheet BPM + Contour Encre Noir)" },
+  { value: "rubber_hose_mesh", label: "rubber_hose_mesh (Formes Rubber-Hose 1930 Cel-Shading)" },
 ] as const;
+
+export const RUBBER_HOSE_SHAPE_REGISTRY = [
+  { value: "hose_arms", label: "hose_arms (Bras / Tuyaux Ondulants)" },
+  { value: "pie_eyes", label: "pie_eyes (Yeux Pie-Eyes Rétro 1930)" },
+  { value: "vintage_wheel", label: "vintage_wheel (Roue / Engrenage Cartoon)" },
+  { value: "music_notes", label: "music_notes (Notes de Musique Rebondissantes)" },
+  { value: "fluffy_clouds", label: "fluffy_clouds (Nuages Rétro 1930)" },
+  { value: "theater_curtains", label: "theater_curtains (Rideaux de Théâtre Rouges)" },
+  { value: "boss_character", label: "boss_character (Boss Rubber-Hose Rebondissant)" },
+  { value: "psyche_tunnel", label: "psyche_tunnel (Tunnel Psychédélique Cartoon)" },
+] as const;
+
+export const PARALLAX_PATTERN_REGISTRY = [
+  { value: "watercolor_hills", label: "watercolor_hills (Collines Peintes à l'Aquarelle)" },
+  { value: "stage_curtains", label: "stage_curtains (Scène & Rideaux de Théâtre 1930)" },
+  { value: "city_silhouette", label: "city_silhouette (Silhouettes Urbaines Encre)" },
+  { value: "clouds_band", label: "clouds_band (Bande de Nuages Gouache)" },
+  { value: "checker_floor", label: "checker_floor (Sol Damier Perspective Cartoon)" },
+  { value: "psyche_rings", label: "psyche_rings (Anneaux Hypnotiques Psyché)" },
+] as const;
+
+export const VINTAGE_COLOR_GRADE_REGISTRY = [
+  { value: "technicolor_30s", label: "technicolor_30s (Technicolor 2-Strip 1930)" },
+  { value: "sepia_warm", label: "sepia_warm (Sépia Chaud Pellicule)" },
+  { value: "black_and_white_ink", label: "black_and_white_ink (Noir & Blanc Encre)" },
+  { value: "none", label: "none (Couleurs Natives)" },
+] as const;
+
+export const STEPPED_FPS_OPTIONS = [12, 24, 60] as const;
 
 export const SWARM_BEHAVIOR_REGISTRY = [
   { value: "curl_noise_flow", label: "curl_noise_flow (Flux Fluide Curl-Noise)" },
@@ -365,6 +397,8 @@ export const MODULATION_SOURCE_REGISTRY = [
   "highMid",
   "treble",
   "energy",
+  "kick",
+  "snare",
   "fader_1",
   "fader_2",
   "fader_3",
@@ -392,15 +426,21 @@ export const MODULATION_TARGET_REGISTRY = [
   { value: "rotationSpeed", label: "rotationSpeed (Vitesse de Rotation)" },
   { value: "emissiveIntensity", label: "emissiveIntensity (Intensité Émissive)" },
   { value: "positionY", label: "positionY (Élévation Verticale Y)" },
+  { value: "squashStretch", label: "squashStretch (Écrasement / Étirement Cartoon)" },
+  { value: "lineBoil", label: "lineBoil (Vibration d'Encre)" },
+  { value: "filmGrain", label: "filmGrain (Grain Pellicule 35 mm)" },
+  { value: "parallaxSpeed", label: "parallaxSpeed (Vitesse Parallaxe)" },
+  { value: "steppedFps", label: "steppedFps (Cadence 12 / 24 / 60 FPS)" },
 ] as const;
 
 export const POST_FX_STACK_TYPE_REGISTRY = [
   { value: "bloom", label: "bloom (Halo Lumineux Cinéma)" },
   { value: "depth_of_field", label: "depth_of_field (Flou de Profondeur Blender)" },
-  { value: "toon_outline", label: "toon_outline (Contours Noirs BD)" },
+  { value: "toon_outline", label: "toon_outline (Contours Noirs Plume BD)" },
   { value: "chromatic_aberration", label: "chromatic_aberration (Aberration Chromatique)" },
   { value: "film_grain", label: "film_grain (Grain Pellicule 35mm)" },
   { value: "pixelate", label: "pixelate (Pixelisation Rétro Optionnelle)" },
+  { value: "vintage_1930_film", label: "vintage_1930_film (Pellicule 1930 : Grain, Rayures, Gate Weave, Technicolor/Sépia/N&B)" },
 ] as const;
 
 export const SCENE_TRANSITION_REGISTRY = [
@@ -416,6 +456,10 @@ export type AnarchyStudioLightingPreset = (typeof STUDIO_LIGHTING_PRESET_REGISTR
 export type AnarchyV4BackdropType = (typeof V4_BACKDROP_TYPE_REGISTRY)[number]["value"];
 export type AnarchyToneMapping = (typeof TONE_MAPPING_REGISTRY)[number]["value"];
 export type AnarchyActorType = (typeof ACTOR_TYPE_REGISTRY)[number]["value"];
+export type AnarchyRubberHoseShape = (typeof RUBBER_HOSE_SHAPE_REGISTRY)[number]["value"];
+export type AnarchyParallaxPattern = (typeof PARALLAX_PATTERN_REGISTRY)[number]["value"];
+export type AnarchyVintageColorGrade = (typeof VINTAGE_COLOR_GRADE_REGISTRY)[number]["value"];
+export type AnarchySteppedFps = (typeof STEPPED_FPS_OPTIONS)[number];
 export type AnarchySwarmBehavior = (typeof SWARM_BEHAVIOR_REGISTRY)[number]["value"];
 export type AnarchyMaterialOverride = (typeof MATERIAL_OVERRIDE_REGISTRY)[number]["value"];
 export type AnarchyModulationSource = (typeof MODULATION_SOURCE_REGISTRY)[number];
@@ -782,6 +826,9 @@ export function generateAiPackPromptV3(
   const modTargets = MODULATION_TARGET_REGISTRY.map((m) => `"${m.value}"`).join(" | ");
   const postFxStack = POST_FX_STACK_TYPE_REGISTRY.map((p) => `"${p.value}"`).join(" | ");
   const transitions = SCENE_TRANSITION_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
+  const rubberShapes = RUBBER_HOSE_SHAPE_REGISTRY.map((r) => `"${r.value}"`).join(" | ");
+  const parallaxPatterns = PARALLAX_PATTERN_REGISTRY.map((p) => `"${p.value}"`).join(" | ");
+  const vintageGrades = VINTAGE_COLOR_GRADE_REGISTRY.map((v) => `"${v.value}"`).join(" | ");
   const cloners = CLONER_MODE_REGISTRY.map((c) => `"${c.value}"`).join(" | ");
   const triggers = TRIGGER_ACTION_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
   const bass = BASS_TARGET_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
@@ -792,41 +839,46 @@ export function generateAiPackPromptV3(
   const stylePreset =
     AI_STYLE_PRESETS.find((s) => s.id === styleId) ?? AI_STYLE_PRESETS[0];
 
-  return `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v4 Data-Driven Organique & Studio).
-Génère une "Cartouche / Pack 3D" au format JSON strict (Anarchy3DPackV4) contenant 4 à 5 scènes radicalement non-géométriques et variées synchronisées à ${Math.round(activeBpm)} BPM.
+  return `Tu es un directeur artistique 3D / 2.5D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v5 Data-Driven Organique & Cartoon 1930 / Cuphead).
+Génère une "Cartouche / Pack 3D" au format JSON strict (Anarchy3DPackV5) contenant 4 à 5 scènes radicalement variées synchronisées à ${Math.round(activeBpm)} BPM.
 
 DIRECTION ARTISTIQUE DEMANDÉE (${stylePreset.label}) :
 - Palette conseillée : ${stylePreset.paletteHint}
 - Décors & Sujets : ${stylePreset.terrainHint}
 - Post-FX suggérés : ${stylePreset.fxHint}
 
-ARCHITECTURE MODULAIRE EN 3 COUCHES (Anarchy3DPackV4) :
+ARCHITECTURE MODULAIRE EN 3 COUCHES + CARTOON 1930 (Anarchy3DPackV5) :
 1. COUCHE 1 — ENVIRONNEMENT & ÉCLAIRAGE STUDIO ("environment" & "renderStyle") :
    - environment.lightingPreset : ${lightingPresets}
    - environment.backdropType : ${v4Backdrops} (avec backdropColors: ["#...", "#...", "#..."])
    - environment.fog : { "enabled": true, "color": "#...", "density": 0.03 }
    - renderStyle : { "resolutionScale": 0.2..1.0 (1.0 = HD net), "toneMapping": ${toneMappings}, "shading": ${shadings}, "outlineThickness": 0..6 }
-   - Aucun rendu pixelisé/CRT par défaut : n'active "pixelate" ou CRT que si explicitement voulu.
 
-2. COUCHE 2 — ACTEURS ORGANIQUES & HYBRIDES ("actors[]") :
+2. COUCHE 2 — ACTEURS ORGANIQUES & CARTOON 1930 ("actors[]") :
    - actors[].type : ${actorTypes}
+   - Acteurs Cartoon 1930 / Cuphead :
+     * "parallax_layer" : plan 2.5D (pattern: ${parallaxPatterns}, scrollX, scrollY, depthBlur, position[2]=profondeur z)
+     * "cartoon_sprite" : spritesheet (framesX, framesY, bpmSync: true, inkOutline: true)
+     * "rubber_hose_mesh" : formes 1930 cel-shading + contour noir épais (shape: ${rubberShapes}, inkThickness: 2..5)
    - actors[].material : ${materials}
    - actors[].behavior (particle_swarm, count 1000..10000) : ${swarmBehaviors}
-   - actors[].audioModulation[] : relie source ("bass" | "lowMid" | "highMid" | "treble" | "energy" | "fader_1".."fader_19") à target (${modTargets}) avec { "amount": 0.5, "offset": 0 }.
-   - Ex: organic_blob chrome déformé par Simplex 3D + spline_ribbons réagissant aux aigus + sprite_2d BD parallaxe + glb_model.
+   - actors[].audioModulation[] : source ("bass" | "lowMid" | "highMid" | "treble" | "energy" | "kick" | "snare" | "fader_1".."fader_19") → target (${modTargets}).
 
-3. COUCHE 3 — POST-PROCESSING CUMULABLE & HORLOGE ÉTENDUE ("postFX[]", "durationBars", "transition") :
-   - postFX[] : pile d'objets { "type": ${postFxStack}, "intensity": 0..2, "radius"?: number }
-   - durationBars : 1 | 2 | 4 | 8 | 16 | 32 | 64 mesures par scène
-   - transition : ${transitions}
+3. PHYSIQUE CARTOON ("cartoonPhysics") & COUCHE 3 POST-PROCESSING ("postFX[]", "durationBars", "transition") :
+   - cartoonPhysics : { "steppedFps": 12 | 24 | 60, "squashStretch": 0..1.5, "squashTrigger": "bass" | "snare" | "kick" | "energy", "lineBoil": 0..2, "faderBindings": { "squashStretch": "fader_1", "lineBoil": "fader_2", "filmGrain": "fader_3", "parallaxSpeed": "fader_4", "steppedFps": "fader_5" } }
+   - postFX[] : pile d'objets { "type": ${postFxStack}, "intensity": 0..2 }
+     * "vintage_1930_film" : { "type": "vintage_1930_film", "filmGrain": 0..1, "scratchesAndDust": 0..1, "gateWeave": 0..1, "colorGrade": ${vintageGrades}, "vignette": 0..1 }
+     * "toon_outline" : { "type": "toon_outline", "inkThickness": 1..6, "inkJitter": 0..3, "color": "#09090B" }
+   - durationBars : 1 | 2 | 4 | 8 | 16 | 32 | 64 mesures · transition : ${transitions}
 
-RÈGLES STRICTES & RÉTROCOMPATIBILITÉ (v1/v2/v3) :
+RÈGLES STRICTES & RÉTROCOMPATIBILITÉ (v1–v4) :
 - Réponds UNIQUEMENT avec un bloc JSON valide (zéro JS, zéro fonction, zéro \`eval\`).
 - Champs v2/v3 toujours supportés : compositionMode (${compositions}), backdrop.shader (${backdropShaders}), generators[] (${generatorTypes}, behavior: ${particleBehaviors}), camera.mode (${cameras}), camera.rig (${cameraRigs}, beatCut), terrain (${terrains}), sideProps (${props}), subject (${meshes}, primitives: ${primitives}), cloner.mode (${cloners}), triggers[].action (${triggers}), audioMapping (bass: ${bass}; mid: ${mid}; treble: ${treble}; flux: ${flux}).
 - Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".`;
 }
 
 export const generateAiPackPromptV4 = generateAiPackPromptV3;
+export const generateAiPackPromptV5 = generateAiPackPromptV3;
 
 /**
  * Génère automatiquement le Prompt IA complet à partir du registre extensible.

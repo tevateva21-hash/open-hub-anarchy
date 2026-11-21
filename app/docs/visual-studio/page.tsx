@@ -431,6 +431,15 @@ export default function VisualStudioDocsPage() {
                     <code>postFX[]</code> cumulable (<code>bloom | depth_of_field | toon_outline | chromatic_aberration | film_grain | pixelate</code>),{" "}
                     <code>durationBars</code> (<code>1..64</code> + <code>HOLD</code>) &amp; <code>transition</code> (<code>cut | crossfade | camera_swoop | flash</code>).
                   </li>
+                  <li>
+                    <strong>Cartoon 1930 / Cuphead (Anarchy3DPackV5)</strong> :{" "}
+                    <code>parallax_layer</code> (<code>watercolor_hills | stage_curtains | city_silhouette | clouds_band | checker_floor | psyche_rings</code>, <code>scrollX/Y</code>),{" "}
+                    <code>cartoon_sprite</code> (<code>framesX × framesY</code> au BPM + contour noir),{" "}
+                    <code>rubber_hose_mesh</code> (<code>hose_arms | pie_eyes | vintage_wheel | music_notes | fluffy_clouds | theater_curtains | boss_character | psyche_tunnel</code>),{" "}
+                    <code>cartoonPhysics</code> (<code>steppedFps: 12|24|60</code>, <code>squashStretch</code>, <code>lineBoil</code>, <code>faderBindings</code>),{" "}
+                    <code>vintage_1930_film</code> (<code>filmGrain</code>, <code>scratchesAndDust</code>, <code>gateWeave</code>, <code>colorGrade</code>, <code>vignette</code>) &amp;{" "}
+                    <code>toon_outline</code> (<code>inkThickness</code>, <code>inkJitter</code>).
+                  </li>
                 </ul>
               </div>
 

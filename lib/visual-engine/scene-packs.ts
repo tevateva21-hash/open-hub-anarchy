@@ -7,6 +7,7 @@ import type {
   Anarchy3DBackdropLayer,
   Anarchy3DBackdropShaderConfig,
   Anarchy3DCamera,
+  Anarchy3DCartoonPhysics,
   Anarchy3DCloner,
   Anarchy3DEnvironment,
   Anarchy3DGenerator,
@@ -14,12 +15,14 @@ import type {
   Anarchy3DPack,
   Anarchy3DPackV3,
   Anarchy3DPackV4,
+  Anarchy3DPackV5,
   Anarchy3DPostFx,
   Anarchy3DPostFxStep,
   Anarchy3DRenderStyle,
   Anarchy3DScene,
   Anarchy3DSceneV3,
   Anarchy3DSceneV4,
+  Anarchy3DSceneV5,
   Anarchy3DSidePropsLayer,
   Anarchy3DSubject,
   Anarchy3DTerrainLayer,
@@ -38,13 +41,16 @@ import type {
   AnarchyMidTarget,
   AnarchyModulationSource,
   AnarchyModulationTarget,
+  AnarchyParallaxPattern,
   AnarchyParticleBehavior,
   AnarchyPostFxStackType,
   AnarchyProceduralPart,
   AnarchyProceduralPrimitive,
+  AnarchyRubberHoseShape,
   AnarchySceneTransitionType,
   AnarchyShadingMode,
   AnarchySidePropType,
+  AnarchySteppedFps,
   AnarchyStudioLightingPreset,
   AnarchySubjectMeshType,
   AnarchySwarmBehavior,
@@ -52,6 +58,7 @@ import type {
   AnarchyToneMapping,
   AnarchyTrebleTarget,
   AnarchyV4BackdropType,
+  AnarchyVintageColorGrade,
   PaletteId,
   SceneId,
 } from "@/lib/visual-engine/contracts";
@@ -74,12 +81,15 @@ import {
   MID_TARGET_REGISTRY,
   MODULATION_SOURCE_REGISTRY,
   MODULATION_TARGET_REGISTRY,
+  PARALLAX_PATTERN_REGISTRY,
   PARTICLE_BEHAVIOR_REGISTRY,
   POST_FX_STACK_TYPE_REGISTRY,
   PROCEDURAL_PRIMITIVE_REGISTRY,
+  RUBBER_HOSE_SHAPE_REGISTRY,
   SCENE_TRANSITION_REGISTRY,
   SHADING_MODE_REGISTRY,
   SIDE_PROPS_REGISTRY,
+  STEPPED_FPS_OPTIONS,
   STUDIO_LIGHTING_PRESET_REGISTRY,
   SUBJECT_MESH_REGISTRY,
   SWARM_BEHAVIOR_REGISTRY,
@@ -88,21 +98,26 @@ import {
   TREBLE_TARGET_REGISTRY,
   TRIGGER_ACTION_REGISTRY,
   V4_BACKDROP_TYPE_REGISTRY,
+  VINTAGE_COLOR_GRADE_REGISTRY,
   generateAiPackPromptFromRegistry,
   generateAiPackPromptV3,
   generateAiPackPromptV4,
+  generateAiPackPromptV5,
 } from "@/lib/visual-studio/registry";
 
 export type {
   Anarchy3DPack,
   Anarchy3DPackV3,
   Anarchy3DPackV4,
+  Anarchy3DPackV5,
   Anarchy3DScene,
   Anarchy3DSceneV3,
   Anarchy3DSceneV4,
+  Anarchy3DSceneV5,
   Anarchy3DEnvironment,
   Anarchy3DSubject,
   Anarchy3DActor,
+  Anarchy3DCartoonPhysics,
   Anarchy3DAudioModulation,
   Anarchy3DPostFxStep,
   Anarchy3DCamera,
@@ -127,8 +142,10 @@ export {
   AI_STYLE_PRESETS,
   JSON_SNIPPETS_3D,
   EXTENDED_BARS_OPTIONS,
+  STEPPED_FPS_OPTIONS,
   generateAiPackPromptV3,
   generateAiPackPromptV4,
+  generateAiPackPromptV5,
 };
 
 export type ScenePackSlot = Anarchy3DScene;
@@ -151,6 +168,9 @@ export const ANARCHY_STUDIO_LIGHTING_PRESETS = STUDIO_LIGHTING_PRESET_REGISTRY;
 export const ANARCHY_V4_BACKDROP_TYPES = V4_BACKDROP_TYPE_REGISTRY;
 export const ANARCHY_TONE_MAPPINGS = TONE_MAPPING_REGISTRY;
 export const ANARCHY_ACTOR_TYPES = ACTOR_TYPE_REGISTRY;
+export const ANARCHY_RUBBER_HOSE_SHAPES = RUBBER_HOSE_SHAPE_REGISTRY;
+export const ANARCHY_PARALLAX_PATTERNS = PARALLAX_PATTERN_REGISTRY;
+export const ANARCHY_VINTAGE_COLOR_GRADES = VINTAGE_COLOR_GRADE_REGISTRY;
 export const ANARCHY_SWARM_BEHAVIORS = SWARM_BEHAVIOR_REGISTRY;
 export const ANARCHY_MATERIAL_OVERRIDES = MATERIAL_OVERRIDE_REGISTRY;
 export const ANARCHY_MODULATION_TARGETS = MODULATION_TARGET_REGISTRY;
@@ -182,6 +202,15 @@ const TONE_MAPPING_SET = new Set<AnarchyToneMapping>(
 );
 const ACTOR_TYPE_SET = new Set<AnarchyActorType>(
   ACTOR_TYPE_REGISTRY.map((x) => x.value)
+);
+const RUBBER_HOSE_SHAPE_SET = new Set<AnarchyRubberHoseShape>(
+  RUBBER_HOSE_SHAPE_REGISTRY.map((x) => x.value)
+);
+const PARALLAX_PATTERN_SET = new Set<AnarchyParallaxPattern>(
+  PARALLAX_PATTERN_REGISTRY.map((x) => x.value)
+);
+const VINTAGE_COLOR_GRADE_SET = new Set<AnarchyVintageColorGrade>(
+  VINTAGE_COLOR_GRADE_REGISTRY.map((x) => x.value)
 );
 const SWARM_BEHAVIOR_SET = new Set<AnarchySwarmBehavior>(
   SWARM_BEHAVIOR_REGISTRY.map((x) => x.value)
@@ -353,12 +382,13 @@ export function createDefaultAnarchy3DScene(
   overrides?: {
     id?: string;
     name?: string;
-    version?: 1 | 2 | 3 | 4;
+    version?: 1 | 2 | 3 | 4 | 5;
     renderStyle?: Anarchy3DRenderStyle;
     compositionMode?: AnarchyCompositionMode;
     kaleidoAxes?: number;
     generators?: Anarchy3DGenerator[];
     actors?: Anarchy3DActor[];
+    cartoonPhysics?: Anarchy3DCartoonPhysics;
     postFX?: Anarchy3DPostFxStep[];
     durationBars?: number;
     transition?: AnarchySceneTransitionType;
@@ -438,6 +468,7 @@ export function createDefaultAnarchy3DScene(
     ...(overrides?.kaleidoAxes !== undefined ? { kaleidoAxes: overrides.kaleidoAxes } : {}),
     ...(overrides?.generators ? { generators: overrides.generators } : {}),
     ...(overrides?.actors ? { actors: overrides.actors } : {}),
+    ...(overrides?.cartoonPhysics ? { cartoonPhysics: overrides.cartoonPhysics } : {}),
     ...(overrides?.postFX ? { postFX: overrides.postFX } : {}),
     ...(overrides?.durationBars !== undefined ? { durationBars: overrides.durationBars } : {}),
     ...(overrides?.transition ? { transition: overrides.transition } : {}),
@@ -3127,6 +3158,513 @@ export const DEFAULT_SCENE_PACKS: Anarchy3DPack[] = [
       }),
     ],
   },
+  {
+    packId: "v5-cuphead-1930-showcase",
+    name: "V5 Cartoon 1930 // Cuphead & Rubber-Hose",
+    author: "Anarchy Visual Studio",
+    bpm: 132,
+    beatsPerScene: 16,
+    seed: 19305,
+    scenes: [
+      createDefaultAnarchy3DScene(0, {
+        id: "v5-theater-curtains",
+        name: "01. Théâtre 1930 — Rideaux Rouges & Parallaxe",
+        version: 5,
+        durationBars: 4,
+        transition: "crossfade",
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "toon_cel",
+          outlineThickness: 3,
+          toneMapping: "reinhard",
+        },
+        cartoonPhysics: {
+          steppedFps: 24,
+          squashStretch: 0.55,
+          squashTrigger: "bass",
+          lineBoil: 0.75,
+          faderBindings: {
+            squashStretch: "fader_1",
+            lineBoil: "fader_2",
+            filmGrain: "fader_3",
+            parallaxSpeed: "fader_4",
+            steppedFps: "fader_5",
+          },
+        },
+        environment: {
+          skyColor: "#F6E7C1",
+          fogColor: "#D9B37C",
+          fogDensity: 0.012,
+          terrainType: "infinite_grid",
+          terrainSpeed: 8.0,
+          terrainPrimaryColor: "#B91C1C",
+          terrainSecondaryColor: "#F59E0B",
+          lightingPreset: "sunset_warm",
+          backdropType: "gradient_sky",
+          backdropColors: ["#F6E7C1", "#E9C78B", "#C68B59"],
+          fog: { enabled: true, color: "#E2C08D", density: 0.015 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#B91C1C",
+          accentColor: "#FDE68A",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "watercolor-hills-bg",
+            type: "parallax_layer",
+            pattern: "watercolor_hills",
+            position: [0, 0.1, 8.0],
+            scrollX: 0.35,
+            scrollY: 0,
+            depthBlur: 0.35,
+            color: "#88A87A",
+            secondaryColor: "#5C7C58",
+            parallax: 0.6,
+          },
+          {
+            id: "checker-stage-floor",
+            type: "parallax_layer",
+            pattern: "checker_floor",
+            position: [0, -0.5, 5.5],
+            scrollX: 0.9,
+            scrollY: 0,
+            color: "#F6E7C1",
+            secondaryColor: "#78350F",
+            parallax: 1.1,
+          },
+          {
+            id: "stage-dancer-sprite",
+            type: "cartoon_sprite",
+            position: [0, -0.1, 4.6],
+            scale: 1.15,
+            framesX: 4,
+            framesY: 2,
+            bpmSync: true,
+            inkOutline: true,
+            color: "#DC2626",
+            secondaryColor: "#FDE047",
+            audioModulation: [
+              { source: "kick", target: "squashStretch", amount: 0.65, offset: 0 },
+              { source: "bass", target: "positionY", amount: 0.35, offset: 0 },
+            ],
+          },
+          {
+            id: "theater-curtains-fg",
+            type: "parallax_layer",
+            pattern: "stage_curtains",
+            position: [0, 0, 2.8],
+            scrollX: 0,
+            scrollY: 0,
+            color: "#991B1B",
+            secondaryColor: "#F59E0B",
+            parallax: 1.4,
+          },
+        ],
+        postFX: [
+          { type: "toon_outline", inkThickness: 3.5, inkJitter: 0.9, color: "#120E0B" },
+          {
+            type: "vintage_1930_film",
+            filmGrain: 0.42,
+            scratchesAndDust: 0.35,
+            gateWeave: 0.35,
+            colorGrade: "technicolor_30s",
+            vignette: 0.52,
+          },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.25,
+        },
+        camera: {
+          mode: "chase_low",
+          rig: "handheld_shake",
+          beatCut: false,
+          fov: 66,
+          shakeIntensity: 0.14,
+        },
+        audioMapping: {
+          bassTarget: "subject_pulse",
+          midTarget: "camera_sway",
+          trebleTarget: "particles_burst",
+          fluxTarget: "camera_shake",
+        },
+      }),
+      createDefaultAnarchy3DScene(1, {
+        id: "v5-rubber-hose-boss",
+        name: "02. Boss Rubber-Hose en Technicolor",
+        version: 5,
+        durationBars: 4,
+        transition: "flash",
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "toon_cel",
+          outlineThickness: 4,
+          toneMapping: "reinhard",
+        },
+        cartoonPhysics: {
+          steppedFps: 24,
+          squashStretch: 0.85,
+          squashTrigger: "kick",
+          lineBoil: 1.05,
+          faderBindings: {
+            squashStretch: "fader_1",
+            lineBoil: "fader_2",
+            filmGrain: "fader_3",
+            parallaxSpeed: "fader_4",
+          },
+        },
+        environment: {
+          skyColor: "#93C5FD",
+          fogColor: "#FDE68A",
+          fogDensity: 0.01,
+          terrainType: "infinite_grid",
+          terrainSpeed: 10.0,
+          terrainPrimaryColor: "#EF4444",
+          terrainSecondaryColor: "#38BDF8",
+          lightingPreset: "studio_clean",
+          backdropType: "gradient_sky",
+          backdropColors: ["#60A5FA", "#BFDBFE", "#FEF3C7"],
+          fog: { enabled: false, color: "#FEF3C7", density: 0 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#EF4444",
+          accentColor: "#FACC15",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "clouds-parallax-band",
+            type: "parallax_layer",
+            pattern: "clouds_band",
+            position: [0, 0.35, 7.5],
+            scrollX: 0.75,
+            scrollY: 0,
+            color: "#FFFBEB",
+            secondaryColor: "#DBEAFE",
+            parallax: 0.7,
+          },
+          {
+            id: "boss-rubber-hose",
+            type: "rubber_hose_mesh",
+            shape: "boss_character",
+            position: [0, 0, 4.8],
+            scale: 1.25,
+            color: "#DC2626",
+            secondaryColor: "#FACC15",
+            inkThickness: 3.8,
+            speed: 1.4,
+            audioModulation: [
+              { source: "kick", target: "squashStretch", amount: 0.9, offset: 0 },
+              { source: "snare", target: "lineBoil", amount: 0.8, offset: 0 },
+            ],
+          },
+          {
+            id: "waving-hose-arms",
+            type: "rubber_hose_mesh",
+            shape: "hose_arms",
+            position: [0, 0.05, 4.6],
+            scale: 1.15,
+            color: "#18181B",
+            secondaryColor: "#FFFBEB",
+            inkThickness: 3.4,
+            speed: 1.8,
+          },
+          {
+            id: "bouncing-music-notes",
+            type: "rubber_hose_mesh",
+            shape: "music_notes",
+            position: [0, 0.3, 4.0],
+            scale: 1.0,
+            color: "#09090B",
+            secondaryColor: "#FDE047",
+            inkThickness: 2.5,
+            speed: 1.5,
+            audioModulation: [
+              { source: "treble", target: "positionY", amount: 0.45, offset: 0 },
+            ],
+          },
+        ],
+        postFX: [
+          { type: "toon_outline", inkThickness: 3.5, inkJitter: 1.1, color: "#0B0908" },
+          {
+            type: "vintage_1930_film",
+            filmGrain: 0.38,
+            scratchesAndDust: 0.28,
+            gateWeave: 0.42,
+            colorGrade: "technicolor_30s",
+            vignette: 0.45,
+          },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.2,
+        },
+        camera: {
+          mode: "orbit",
+          rig: "dolly_zoom_on_kick",
+          beatCut: false,
+          fov: 68,
+          shakeIntensity: 0.2,
+        },
+        audioMapping: {
+          bassTarget: "camera_zoom_and_jump",
+          midTarget: "subject_rotation",
+          trebleTarget: "sky_flash",
+          fluxTarget: "camera_shake",
+        },
+      }),
+      createDefaultAnarchy3DScene(2, {
+        id: "v5-bw-ink-break-12fps",
+        name: "03. Break Noir & Blanc 12 FPS (16 Mesures)",
+        version: 5,
+        durationBars: 16,
+        transition: "crossfade",
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "toon_cel",
+          outlineThickness: 4,
+          toneMapping: "cineon",
+        },
+        cartoonPhysics: {
+          steppedFps: 12,
+          squashStretch: 0.45,
+          squashTrigger: "snare",
+          lineBoil: 1.35,
+          faderBindings: {
+            lineBoil: "fader_2",
+            filmGrain: "fader_3",
+            parallaxSpeed: "fader_4",
+            steppedFps: "fader_5",
+          },
+        },
+        environment: {
+          skyColor: "#E5E5E5",
+          fogColor: "#A3A3A3",
+          fogDensity: 0.02,
+          terrainType: "infinite_grid",
+          terrainSpeed: 6.0,
+          terrainPrimaryColor: "#171717",
+          terrainSecondaryColor: "#F5F5F5",
+          lightingPreset: "studio_clean",
+          backdropType: "gradient_sky",
+          backdropColors: ["#F5F5F4", "#D6D3D1", "#78716C"],
+          fog: { enabled: true, color: "#D6D3D1", density: 0.02 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#171717",
+          accentColor: "#F5F5F5",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "ink-city-bg",
+            type: "parallax_layer",
+            pattern: "city_silhouette",
+            position: [0, -0.05, 7.2],
+            scrollX: 0.55,
+            scrollY: 0,
+            color: "#1C1917",
+            secondaryColor: "#57534E",
+            parallax: 0.8,
+          },
+          {
+            id: "vintage-spinning-wheel",
+            type: "rubber_hose_mesh",
+            shape: "vintage_wheel",
+            position: [0, 0.05, 4.8],
+            scale: 1.2,
+            color: "#F5F5F4",
+            secondaryColor: "#1C1917",
+            inkThickness: 4.0,
+            speed: 1.1,
+            audioModulation: [
+              { source: "energy", target: "rotationSpeed", amount: 0.9, offset: 0.2 },
+            ],
+          },
+          {
+            id: "retro-fluffy-clouds",
+            type: "rubber_hose_mesh",
+            shape: "fluffy_clouds",
+            position: [0, 0.55, 4.2],
+            scale: 1.0,
+            color: "#FFFFFF",
+            secondaryColor: "#D6D3D1",
+            inkThickness: 3.0,
+            speed: 0.8,
+          },
+        ],
+        postFX: [
+          { type: "toon_outline", inkThickness: 4.0, inkJitter: 1.5, color: "#09090B" },
+          {
+            type: "vintage_1930_film",
+            filmGrain: 0.65,
+            scratchesAndDust: 0.58,
+            gateWeave: 0.55,
+            colorGrade: "black_and_white_ink",
+            vignette: 0.65,
+          },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.1,
+        },
+        camera: {
+          mode: "dramatic_tilt",
+          rig: "orbit_smooth",
+          beatCut: false,
+          fov: 64,
+          shakeIntensity: 0.16,
+        },
+        audioMapping: {
+          bassTarget: "pillar_slam",
+          midTarget: "camera_sway",
+          trebleTarget: "particles_burst",
+          fluxTarget: "camera_shake",
+        },
+      }),
+      createDefaultAnarchy3DScene(3, {
+        id: "v5-psyche-tunnel-pie-eyes",
+        name: "04. Drop Psychédélique — Tunnel & Pie-Eyes",
+        version: 5,
+        durationBars: 8,
+        transition: "camera_swoop",
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "toon_cel",
+          outlineThickness: 4,
+          toneMapping: "aces_filmic",
+        },
+        cartoonPhysics: {
+          steppedFps: 24,
+          squashStretch: 1.0,
+          squashTrigger: "bass",
+          lineBoil: 1.45,
+          faderBindings: {
+            squashStretch: "fader_1",
+            lineBoil: "fader_2",
+            filmGrain: "fader_3",
+            parallaxSpeed: "fader_4",
+            steppedFps: "fader_5",
+          },
+        },
+        environment: {
+          skyColor: "#3B0764",
+          fogColor: "#BE185D",
+          fogDensity: 0.015,
+          terrainType: "tunnel",
+          terrainSpeed: 16.0,
+          terrainPrimaryColor: "#FACC15",
+          terrainSecondaryColor: "#EC4899",
+          lightingPreset: "cyber_neon",
+          backdropType: "liquid_plasma",
+          backdropColors: ["#2E1065", "#DB2777", "#FACC15"],
+          fog: { enabled: false, color: "#2E1065", density: 0 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#FACC15",
+          accentColor: "#EC4899",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "hypnotic-psyche-rings",
+            type: "parallax_layer",
+            pattern: "psyche_rings",
+            position: [0, 0, 7.0],
+            scrollX: 1.2,
+            scrollY: 0.6,
+            color: "#FACC15",
+            secondaryColor: "#EC4899",
+            parallax: 1.0,
+          },
+          {
+            id: "cartoon-psyche-tunnel",
+            type: "rubber_hose_mesh",
+            shape: "psyche_tunnel",
+            position: [0, 0, 5.2],
+            scale: 1.3,
+            color: "#22D3EE",
+            secondaryColor: "#F43F5E",
+            inkThickness: 3.6,
+            speed: 2.0,
+            audioModulation: [
+              { source: "bass", target: "scale", amount: 0.55, offset: 0 },
+              { source: "energy", target: "rotationSpeed", amount: 1.2, offset: 0.3 },
+            ],
+          },
+          {
+            id: "floating-pie-eyes",
+            type: "rubber_hose_mesh",
+            shape: "pie_eyes",
+            position: [0, 0, 4.2],
+            scale: 1.15,
+            color: "#FFFBEB",
+            secondaryColor: "#09090B",
+            inkThickness: 4.0,
+            speed: 1.6,
+            audioModulation: [
+              { source: "kick", target: "squashStretch", amount: 0.95, offset: 0 },
+              { source: "treble", target: "lineBoil", amount: 0.9, offset: 0 },
+            ],
+          },
+        ],
+        postFX: [
+          { type: "toon_outline", inkThickness: 4.2, inkJitter: 1.6, color: "#09090B" },
+          {
+            type: "vintage_1930_film",
+            filmGrain: 0.45,
+            scratchesAndDust: 0.35,
+            gateWeave: 0.48,
+            colorGrade: "sepia_warm",
+            vignette: 0.5,
+          },
+          { type: "chromatic_aberration", intensity: 0.18 },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.5,
+        },
+        camera: {
+          mode: "orbit",
+          rig: "top_down_spin",
+          beatCut: true,
+          fov: 76,
+          shakeIntensity: 0.3,
+        },
+        audioMapping: {
+          bassTarget: "tunnel_boost",
+          midTarget: "color_shift",
+          trebleTarget: "sky_flash",
+          fluxTarget: "fov_kick",
+        },
+      }),
+    ],
+  },
 ];
 
 function mulberry32(seed: number) {
@@ -3529,10 +4067,90 @@ function sanitizeActors(raw: unknown): Anarchy3DActor[] | undefined {
       ...(a.parallax !== undefined
         ? { parallax: Number(clampNum(a.parallax, 0, 2, 1).toFixed(2)) }
         : {}),
+      ...(a.scrollX !== undefined
+        ? { scrollX: Number(clampNum(a.scrollX, -5, 5, 0.5).toFixed(2)) }
+        : {}),
+      ...(a.scrollY !== undefined
+        ? { scrollY: Number(clampNum(a.scrollY, -5, 5, 0).toFixed(2)) }
+        : {}),
+      ...(PARALLAX_PATTERN_SET.has(a.pattern as AnarchyParallaxPattern)
+        ? { pattern: a.pattern as AnarchyParallaxPattern }
+        : {}),
+      ...(a.depthBlur !== undefined
+        ? { depthBlur: Number(clampNum(a.depthBlur, 0, 1, 0).toFixed(2)) }
+        : {}),
+      ...(a.framesX !== undefined
+        ? { framesX: Math.round(clampNum(a.framesX, 1, 16, 4)) }
+        : {}),
+      ...(a.framesY !== undefined
+        ? { framesY: Math.round(clampNum(a.framesY, 1, 16, 1)) }
+        : {}),
+      ...(typeof a.bpmSync === "boolean" ? { bpmSync: a.bpmSync } : {}),
+      ...(typeof a.inkOutline === "boolean" ? { inkOutline: a.inkOutline } : {}),
+      ...(RUBBER_HOSE_SHAPE_SET.has(a.shape as AnarchyRubberHoseShape)
+        ? { shape: a.shape as AnarchyRubberHoseShape }
+        : {}),
+      ...(a.inkThickness !== undefined
+        ? { inkThickness: Number(clampNum(a.inkThickness, 1, 6, 3.2).toFixed(2)) }
+        : {}),
       ...(audioModulation ? { audioModulation } : {}),
     });
   }
   return valid.length > 0 ? valid : undefined;
+}
+
+function sanitizeCartoonPhysics(
+  raw: unknown
+): Anarchy3DCartoonPhysics | undefined {
+  if (!raw || typeof raw !== "object") return undefined;
+  const cp = raw as Record<string, unknown>;
+  const rawFps = Number(cp.steppedFps);
+  const steppedFps: AnarchySteppedFps | undefined =
+    rawFps === 12 || rawFps === 24 || rawFps === 60
+      ? rawFps
+      : cp.steppedFps !== undefined
+      ? 24
+      : undefined;
+  const squashTrigger =
+    cp.squashTrigger === "bass" ||
+    cp.squashTrigger === "snare" ||
+    cp.squashTrigger === "kick" ||
+    cp.squashTrigger === "energy"
+      ? cp.squashTrigger
+      : undefined;
+
+  let faderBindings: Anarchy3DCartoonPhysics["faderBindings"];
+  if (cp.faderBindings && typeof cp.faderBindings === "object") {
+    const fb = cp.faderBindings as Record<string, unknown>;
+    const cleanFb: NonNullable<Anarchy3DCartoonPhysics["faderBindings"]> = {};
+    const keys = [
+      "squashStretch",
+      "lineBoil",
+      "filmGrain",
+      "parallaxSpeed",
+      "steppedFps",
+    ] as const;
+    for (const k of keys) {
+      if (MODULATION_SOURCE_SET.has(fb[k] as AnarchyModulationSource)) {
+        cleanFb[k] = fb[k] as AnarchyModulationSource;
+      }
+    }
+    if (Object.keys(cleanFb).length > 0) {
+      faderBindings = cleanFb;
+    }
+  }
+
+  return {
+    ...(steppedFps !== undefined ? { steppedFps } : {}),
+    ...(cp.squashStretch !== undefined
+      ? { squashStretch: Number(clampNum(cp.squashStretch, 0, 1.5, 0.6).toFixed(2)) }
+      : {}),
+    ...(squashTrigger ? { squashTrigger } : {}),
+    ...(cp.lineBoil !== undefined
+      ? { lineBoil: Number(clampNum(cp.lineBoil, 0, 2, 0.8).toFixed(2)) }
+      : {}),
+    ...(faderBindings ? { faderBindings } : {}),
+  };
 }
 
 function sanitizePostFxStack(raw: unknown): Anarchy3DPostFxStep[] | undefined {
@@ -3542,6 +4160,10 @@ function sanitizePostFxStack(raw: unknown): Anarchy3DPostFxStep[] | undefined {
     if (!item || typeof item !== "object") continue;
     const fx = item as Record<string, unknown>;
     if (!POST_FX_STACK_SET.has(fx.type as AnarchyPostFxStackType)) continue;
+    const colorGrade: AnarchyVintageColorGrade | undefined =
+      VINTAGE_COLOR_GRADE_SET.has(fx.colorGrade as AnarchyVintageColorGrade)
+        ? (fx.colorGrade as AnarchyVintageColorGrade)
+        : undefined;
     valid.push({
       type: fx.type as AnarchyPostFxStackType,
       ...(fx.intensity !== undefined
@@ -3555,6 +4177,25 @@ function sanitizePostFxStack(raw: unknown): Anarchy3DPostFxStep[] | undefined {
         : {}),
       ...(fx.color !== undefined
         ? { color: sanitizeHexColor(fx.color, "#09090B") }
+        : {}),
+      ...(fx.inkThickness !== undefined
+        ? { inkThickness: Number(clampNum(fx.inkThickness, 1, 6, 3.2).toFixed(2)) }
+        : {}),
+      ...(fx.inkJitter !== undefined
+        ? { inkJitter: Number(clampNum(fx.inkJitter, 0, 3, 1.0).toFixed(2)) }
+        : {}),
+      ...(fx.filmGrain !== undefined
+        ? { filmGrain: Number(clampNum(fx.filmGrain, 0, 1, 0.45).toFixed(2)) }
+        : {}),
+      ...(fx.scratchesAndDust !== undefined
+        ? { scratchesAndDust: Number(clampNum(fx.scratchesAndDust, 0, 1, 0.35).toFixed(2)) }
+        : {}),
+      ...(fx.gateWeave !== undefined
+        ? { gateWeave: Number(clampNum(fx.gateWeave, 0, 1, 0.35).toFixed(2)) }
+        : {}),
+      ...(colorGrade ? { colorGrade } : {}),
+      ...(fx.vignette !== undefined
+        ? { vignette: Number(clampNum(fx.vignette, 0, 1, 0.5).toFixed(2)) }
         : {}),
     });
   }
@@ -3984,6 +4625,7 @@ export function sanitizeAnarchy3DScene(
       : undefined;
   const generators = sanitizeGenerators(item.generators);
   const actors = sanitizeActors(item.actors);
+  const cartoonPhysics = sanitizeCartoonPhysics(item.cartoonPhysics);
   const postFX = sanitizePostFxStack(item.postFX);
   const durationBars =
     item.durationBars !== undefined
@@ -3996,6 +4638,16 @@ export function sanitizeAnarchy3DScene(
 
   const sceneAnimations = sanitizeAnimations(item.animations, allowedParams);
   const sceneTriggers = sanitizeTriggers(item.triggers, allowedParams);
+  const hasV5Features = Boolean(
+    cartoonPhysics ||
+      actors?.some(
+        (a) =>
+          a.type === "parallax_layer" ||
+          a.type === "cartoon_sprite" ||
+          a.type === "rubber_hose_mesh"
+      ) ||
+      postFX?.some((p) => p.type === "vintage_1930_film")
+  );
   const hasV4Features = Boolean(
     mergedParams ||
       sceneTriggers?.length ||
@@ -4026,7 +4678,9 @@ export function sanitizeAnarchy3DScene(
         ? item.id.trim()
         : `scene-${idx + 1}`,
     name: rawName,
-    version: hasV4Features
+    version: hasV5Features
+      ? 5
+      : hasV4Features
       ? 4
       : hasV3Features
       ? 3
@@ -4038,6 +4692,7 @@ export function sanitizeAnarchy3DScene(
     ...(kaleidoAxes !== undefined ? { kaleidoAxes } : {}),
     ...(generators ? { generators } : {}),
     ...(actors ? { actors } : {}),
+    ...(cartoonPhysics ? { cartoonPhysics } : {}),
     ...(postFX ? { postFX } : {}),
     ...(durationBars !== undefined ? { durationBars } : {}),
     ...(transition ? { transition } : {}),
@@ -4897,6 +5552,7 @@ export function exportScenePackAsJson(pack: Anarchy3DPack): string {
       ...(sc.kaleidoAxes !== undefined ? { kaleidoAxes: sc.kaleidoAxes } : {}),
       ...(sc.generators ? { generators: sc.generators } : {}),
       ...(sc.actors ? { actors: sc.actors } : {}),
+      ...(sc.cartoonPhysics ? { cartoonPhysics: sc.cartoonPhysics } : {}),
       ...(sc.postFX ? { postFX: sc.postFX } : {}),
       ...(sc.durationBars !== undefined ? { durationBars: sc.durationBars } : {}),
       ...(sc.transition ? { transition: sc.transition } : {}),

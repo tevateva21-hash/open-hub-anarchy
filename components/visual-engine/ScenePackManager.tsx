@@ -1872,6 +1872,21 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                   </code>{" "}
                   · <code>durationBars (1..64)</code> · <code>transition (cut | crossfade | camera_swoop | flash)</code>
                 </p>
+                <p className="text-[11px]">
+                  • <strong>Cartoon 1930 / Cuphead (v5)</strong> :{" "}
+                  <code>
+                    actors[] (parallax_layer | cartoon_sprite | rubber_hose_mesh)
+                  </code>{" "}
+                  ·{" "}
+                  <code>
+                    cartoonPhysics (steppedFps: 12|24|60, squashStretch, lineBoil, faderBindings)
+                  </code>{" "}
+                  ·{" "}
+                  <code>
+                    vintage_1930_film (filmGrain, scratchesAndDust, gateWeave, colorGrade: technicolor_30s|sepia_warm|black_and_white_ink, vignette)
+                  </code>{" "}
+                  · <code>toon_outline (inkThickness, inkJitter)</code>
+                </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-brand-pearl border-2 border-black space-y-1.5">

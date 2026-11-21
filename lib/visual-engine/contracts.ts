@@ -30,6 +30,10 @@ import type {
   AnarchyModulationTarget,
   AnarchyPostFxStackType,
   AnarchySceneTransitionType,
+  AnarchyRubberHoseShape,
+  AnarchyParallaxPattern,
+  AnarchyVintageColorGrade,
+  AnarchySteppedFps,
 } from "@/lib/visual-studio/registry";
 
 export type {
@@ -59,6 +63,10 @@ export type {
   AnarchyModulationTarget,
   AnarchyPostFxStackType,
   AnarchySceneTransitionType,
+  AnarchyRubberHoseShape,
+  AnarchyParallaxPattern,
+  AnarchyVintageColorGrade,
+  AnarchySteppedFps,
 };
 
 export const PRESET_SCHEMA_VERSION = 1 as const;
@@ -496,10 +504,44 @@ export interface Anarchy3DActor {
   url?: string;
   /** Libellé ou variante d'illustration BD pour sprite_2d */
   label?: string;
-  /** Facteur parallaxe 2D/3D pour sprite_2d [0..2] */
+  /** Facteur parallaxe 2D/3D pour sprite_2d / parallax_layer [0..2] */
   parallax?: number;
-  /** Modulations audio (bass/lowMid/highMid/treble/energy) ou fader_1..fader_19 */
+  /** v5 parallax_layer : défilement horizontal / vertical infini */
+  scrollX?: number;
+  scrollY?: number;
+  /** v5 parallax_layer : motif procédural aquarelle/gouache */
+  pattern?: AnarchyParallaxPattern;
+  /** v5 parallax_layer : flou de profondeur [0..1] */
+  depthBlur?: number;
+  /** v5 cartoon_sprite : découpage spritesheet framesX x framesY au BPM */
+  framesX?: number;
+  framesY?: number;
+  bpmSync?: boolean;
+  inkOutline?: boolean;
+  /** v5 rubber_hose_mesh : forme rétro 1930 & épaisseur d'encre */
+  shape?: AnarchyRubberHoseShape;
+  inkThickness?: number;
+  /** Modulations audio (bass/lowMid/highMid/treble/energy/kick/snare) ou fader_1..fader_19 */
   audioModulation?: Anarchy3DAudioModulation[];
+}
+
+export interface Anarchy3DCartoonPhysics {
+  /** Cadence saccadée style celluloïd 1930 (12 | 24 | 60 FPS) */
+  steppedFps?: AnarchySteppedFps;
+  /** Intensité du Squash & Stretch (conservation du volume) [0..1.5] */
+  squashStretch?: number;
+  /** Source audio déclenchant le Squash & Stretch */
+  squashTrigger?: "bass" | "snare" | "kick" | "energy";
+  /** Intensité de la vibration d'encre (Line Boil) [0..2] */
+  lineBoil?: number;
+  /** Liaison libre des 19 faders live sur les paramètres Cartoon 1930 */
+  faderBindings?: {
+    squashStretch?: AnarchyModulationSource;
+    lineBoil?: AnarchyModulationSource;
+    filmGrain?: AnarchyModulationSource;
+    parallaxSpeed?: AnarchyModulationSource;
+    steppedFps?: AnarchyModulationSource;
+  };
 }
 
 export interface Anarchy3DPostFxStep {
@@ -512,6 +554,15 @@ export interface Anarchy3DPostFxStep {
   threshold?: number;
   /** Couleur de contour optionnelle (ex: toon_outline) */
   color?: string;
+  /** v5 toon_outline : épaisseur de plume [1..6] et tremblement d'encre [0..3] */
+  inkThickness?: number;
+  inkJitter?: number;
+  /** v5 vintage_1930_film : grain 35mm, rayures/poussières, gate weave, étalonnage & vignette */
+  filmGrain?: number;
+  scratchesAndDust?: number;
+  gateWeave?: number;
+  colorGrade?: AnarchyVintageColorGrade;
+  vignette?: number;
 }
 
 export interface Anarchy3DGenerator {
@@ -561,7 +612,7 @@ export interface Anarchy3DTrigger {
 export interface Anarchy3DScene {
   id: string;
   name: string;
-  version?: 1 | 2 | 3 | 4;
+  version?: 1 | 2 | 3 | 4 | 5;
   /** Style de rendu et résolution par scène */
   renderStyle?: Anarchy3DRenderStyle;
   /** Architecture de composition spatiale (corridor, void_orbital, tunnel_infinite, kaleido_mandala, terrain_flyover) */
@@ -570,9 +621,11 @@ export interface Anarchy3DScene {
   kaleidoAxes?: number;
   /** Générateurs procéduraux avancés v3 (particules, rubans, vagues FFT, réseaux) */
   generators?: Anarchy3DGenerator[];
-  /** Couche 2 v4 : Acteurs organiques & hybrides libres */
+  /** Couche 2 v4/v5 : Acteurs organiques, hybrides & Cartoon 1930 */
   actors?: Anarchy3DActor[];
-  /** Couche 3 v4 : Pile d'effets post-processing optionnels et cumulables */
+  /** Physique dessin animé v5 (steppedFps, squash & stretch, line boil, faderBindings) */
+  cartoonPhysics?: Anarchy3DCartoonPhysics;
+  /** Couche 3 v4/v5 : Pile d'effets post-processing optionnels et cumulables */
   postFX?: Anarchy3DPostFxStep[];
   /** Couche 3 v4 : Durée individuelle de la scène en mesures (1, 2, 4, 8, 16, 32, 64) */
   durationBars?: number;
@@ -617,6 +670,8 @@ export type Anarchy3DSceneV3 = Anarchy3DScene;
 export type Anarchy3DPackV3 = Anarchy3DPack;
 export type Anarchy3DSceneV4 = Anarchy3DScene;
 export type Anarchy3DPackV4 = Anarchy3DPack;
+export type Anarchy3DSceneV5 = Anarchy3DScene;
+export type Anarchy3DPackV5 = Anarchy3DPack;
 
 export interface SceneFrameInput {
   sceneId: SceneId;
