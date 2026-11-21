@@ -295,19 +295,19 @@
           "color": "#DC2626",
           "secondaryColor": "#FACC15",
           "material": "toon_cel_outline",
-          "inkThickness": 4,
-          "speed": 1.45,
+          "inkThickness": 3.6,
+          "speed": 1.2,
           "audioModulation": [
             {
               "source": "kick",
               "target": "squashStretch",
-              "amount": 0.85,
+              "amount": 0.45,
               "offset": 0
             },
             {
               "source": "lfo_1",
               "target": "positionY",
-              "amount": 0.25,
+              "amount": 0.15,
               "offset": 0
             }
           ]
@@ -326,14 +326,14 @@
           "secondaryColor": "#DC2626",
           "count": 3200,
           "behavior": "vortex",
-          "speed": 1.35
+          "speed": 1.15
         }
       ],
       "cartoonPhysics": {
-        "steppedFps": 24,
-        "squashStretch": 0.75,
+        "steppedFps": 60,
+        "squashStretch": 0.45,
         "squashTrigger": "kick",
-        "lineBoil": 0.95,
+        "lineBoil": 0.35,
         "faderBindings": {
           "squashStretch": "fader_1",
           "lineBoil": "fader_2",
@@ -348,15 +348,15 @@
         {
           "target": "lineBoil",
           "actorId": "main_entity",
-          "from": 0.3,
-          "to": 1.65,
-          "easing": "expoIn"
+          "from": 0.15,
+          "to": 0.45,
+          "easing": "easeInOutCubic"
         },
         {
           "target": "squashStretch",
           "actorId": "main_entity",
-          "from": 0.35,
-          "to": 1.25,
+          "from": 0.25,
+          "to": 0.55,
           "easing": "easeInOutCubic"
         }
       ],
@@ -364,30 +364,30 @@
         {
           "id": "lfo_1",
           "waveform": "sine",
-          "rateBeats": 1,
+          "rateBeats": 2,
           "phase": 0
         },
         {
           "id": "lfo_3",
-          "waveform": "saw",
-          "rateBeats": 2,
+          "waveform": "triangle",
+          "rateBeats": 4,
           "phase": 0
         }
       ],
       "cameraCuts": [
         {
-          "mode": "chase_low",
-          "rig": "handheld_shake",
+          "mode": "orbit",
+          "rig": "orbit_smooth",
           "fov": 66,
-          "switchEveryBars": 2,
+          "switchEveryBars": 4,
           "onPeakBand": "snare",
-          "transition": "cut"
+          "transition": "glide"
         },
         {
           "mode": "orbit",
           "rig": "dolly_zoom_on_kick",
-          "fov": 74,
-          "switchEveryBars": 2,
+          "fov": 72,
+          "switchEveryBars": 4,
           "onPeakBand": "snare",
           "transition": "glide"
         }
@@ -395,17 +395,17 @@
       "postFX": [
         {
           "type": "toon_outline",
-          "inkThickness": 3.8,
-          "inkJitter": 1.2,
+          "inkThickness": 3.2,
+          "inkJitter": 0.35,
           "color": "#0B0908"
         },
         {
           "type": "vintage_1930_film",
-          "filmGrain": 0.42,
-          "scratchesAndDust": 0.32,
-          "gateWeave": 0.38,
+          "filmGrain": 0.22,
+          "scratchesAndDust": 0.18,
+          "gateWeave": 0.15,
           "colorGrade": "technicolor_30s",
-          "vignette": 0.48
+          "vignette": 0.42
         }
       ],
       "durationBars": 8,
@@ -499,17 +499,17 @@
         "bloomIntensity": 0.3
       },
       "camera": {
-        "mode": "chase_low",
+        "mode": "orbit",
         "fov": 68,
-        "shakeIntensity": 0.18,
-        "rig": "handheld_shake",
+        "shakeIntensity": 0.08,
+        "rig": "orbit_smooth",
         "beatCut": false
       },
       "audioMapping": {
         "bassTarget": "subject_pulse",
         "midTarget": "camera_sway",
         "trebleTarget": "particles_burst",
-        "fluxTarget": "camera_shake"
+        "fluxTarget": "glitch_and_emissive"
       }
     },
     {
@@ -533,23 +533,23 @@
             0,
             4.8
           ],
-          "scale": 1.4,
+          "scale": 1.35,
           "color": "#22D3EE",
           "secondaryColor": "#F43F5E",
           "count": 5000,
           "behavior": "curl_noise_flow",
-          "speed": 1.8,
+          "speed": 1.35,
           "audioModulation": [
             {
               "source": "bass",
               "target": "scale",
-              "amount": 0.65,
+              "amount": 0.35,
               "offset": 0
             },
             {
               "source": "lfo_3",
               "target": "rotationSpeed",
-              "amount": 0.9,
+              "amount": 0.4,
               "offset": 0
             }
           ]
@@ -568,31 +568,31 @@
           "secondaryColor": "#A855F7",
           "count": 5000,
           "behavior": "vortex",
-          "speed": 1.5
+          "speed": 1.2
         }
       ],
       "morphTransition": {
-        "durationBeats": 8,
+        "durationBeats": 4,
         "easing": "easeInOutCubic"
       },
       "automations": [
         {
           "target": "rotationSpeed",
           "actorId": "main_entity",
-          "from": 0.8,
-          "to": 2.8,
-          "easing": "expoIn"
+          "from": 0.9,
+          "to": 1.6,
+          "easing": "easeInOutCubic"
         },
         {
           "target": "zoom",
-          "from": 0.9,
-          "to": 1.65,
-          "easing": "expoIn"
+          "from": 0.96,
+          "to": 1.18,
+          "easing": "easeInOutCubic"
         },
         {
           "target": "fov",
-          "from": 64,
-          "to": 94,
+          "from": 68,
+          "to": 78,
           "easing": "easeInOutCubic"
         }
       ],
@@ -605,14 +605,8 @@
         },
         {
           "id": "lfo_3",
-          "waveform": "saw",
-          "rateBeats": 1,
-          "phase": 0
-        },
-        {
-          "id": "lfo_4",
-          "waveform": "random_hold",
-          "rateBeats": 0.5,
+          "waveform": "sine",
+          "rateBeats": 2,
           "phase": 0
         }
       ],
@@ -620,33 +614,33 @@
         {
           "mode": "fps_arms",
           "rig": "first_person_fly",
-          "fov": 78,
+          "fov": 74,
           "switchEveryBars": 4,
           "transition": "glide"
         },
         {
           "mode": "orbit",
-          "rig": "top_down_spin",
-          "fov": 88,
+          "rig": "orbit_smooth",
+          "fov": 78,
           "switchEveryBars": 4,
           "onPeakBand": "snare",
-          "transition": "cut"
+          "transition": "glide"
         }
       ],
       "postFX": [
         {
           "type": "bloom",
-          "intensity": 1.15,
-          "threshold": 0.4
+          "intensity": 0.9,
+          "threshold": 0.45
         },
         {
           "type": "depth_of_field",
-          "intensity": 0.6,
-          "radius": 3
+          "intensity": 0.45,
+          "radius": 2.5
         },
         {
           "type": "chromatic_aberration",
-          "intensity": 0.22
+          "intensity": 0.12
         }
       ],
       "durationBars": 16,
@@ -656,7 +650,7 @@
         "fogColor": "#1E1B4B",
         "fogDensity": 0.025,
         "terrainType": "tunnel",
-        "terrainSpeed": 18,
+        "terrainSpeed": 14,
         "terrainPrimaryColor": "#22D3EE",
         "terrainSecondaryColor": "#F43F5E",
         "lightingPreset": "cyber_neon",
@@ -705,7 +699,7 @@
           "kind": "terrain",
           "terrain": {
             "type": "tunnel",
-            "speed": 18,
+            "speed": 14,
             "primaryColor": "#22D3EE",
             "secondaryColor": "#F43F5E"
           }
@@ -735,14 +729,14 @@
       "postFx": {
         "ps1VertexJitter": 0,
         "crtScanlines": 0,
-        "chromaticAberration": 0.15,
+        "chromaticAberration": 0.08,
         "kaleidoscopeSegments": 0,
-        "bloomIntensity": 1
+        "bloomIntensity": 0.85
       },
       "camera": {
         "mode": "fps_arms",
-        "fov": 82,
-        "shakeIntensity": 0.26,
+        "fov": 76,
+        "shakeIntensity": 0.1,
         "rig": "first_person_fly",
         "beatCut": false
       },
@@ -750,7 +744,7 @@
         "bassTarget": "tunnel_boost",
         "midTarget": "subject_rotation",
         "trebleTarget": "particles_burst",
-        "fluxTarget": "fov_kick"
+        "fluxTarget": "glitch_and_emissive"
       }
     },
     {
@@ -773,25 +767,25 @@
             0.05,
             4.6
           ],
-          "scale": 1.4,
+          "scale": 1.35,
           "color": "#F8FAFC",
           "secondaryColor": "#F43F5E",
           "material": "chrome",
           "detail": 32,
-          "noiseStrength": 0.85,
-          "noiseFrequency": 2.2,
-          "speed": 1.7,
+          "noiseStrength": 0.65,
+          "noiseFrequency": 2,
+          "speed": 1.35,
           "audioModulation": [
             {
               "source": "kick",
               "target": "squashStretch",
-              "amount": 0.9,
+              "amount": 0.45,
               "offset": 0
             },
             {
               "source": "lfo_1",
               "target": "scale",
-              "amount": 0.35,
+              "amount": 0.2,
               "offset": 0
             }
           ]
@@ -809,8 +803,8 @@
           "color": "#FACC15",
           "secondaryColor": "#22D3EE",
           "count": 4200,
-          "behavior": "beat_explosion",
-          "speed": 1.6
+          "behavior": "vortex",
+          "speed": 1.25
         },
         {
           "id": "drop_pie_eyes",
@@ -824,15 +818,15 @@
           "scale": 1.05,
           "color": "#FFFBEB",
           "secondaryColor": "#09090B",
-          "inkThickness": 3.8,
-          "speed": 1.75
+          "inkThickness": 3.4,
+          "speed": 1.3
         }
       ],
       "cartoonPhysics": {
         "steppedFps": 60,
-        "squashStretch": 0.95,
+        "squashStretch": 0.55,
         "squashTrigger": "bass",
-        "lineBoil": 0.85,
+        "lineBoil": 0.3,
         "faderBindings": {
           "squashStretch": "fader_1",
           "lineBoil": "fader_2"
@@ -840,45 +834,45 @@
       },
       "morphTransition": {
         "durationBeats": 4,
-        "easing": "elasticOut"
+        "easing": "easeInOutCubic"
       },
       "automations": [
         {
           "target": "scale",
           "actorId": "main_entity",
-          "from": 1.1,
-          "to": 1.55,
-          "easing": "elasticOut"
+          "from": 1.15,
+          "to": 1.38,
+          "easing": "easeInOutCubic"
         }
       ],
       "modulators": [
         {
           "id": "lfo_1",
           "waveform": "sine",
-          "rateBeats": 0.5,
+          "rateBeats": 2,
           "phase": 0
         },
         {
           "id": "lfo_4",
-          "waveform": "square",
-          "rateBeats": 1,
+          "waveform": "triangle",
+          "rateBeats": 4,
           "phase": 0
         }
       ],
       "cameraCuts": [
         {
           "mode": "orbit",
-          "rig": "dolly_zoom_on_kick",
-          "fov": 74,
-          "switchEveryBars": 1,
+          "rig": "orbit_smooth",
+          "fov": 72,
+          "switchEveryBars": 4,
           "onPeakBand": "kick",
-          "transition": "cut"
+          "transition": "glide"
         },
         {
           "mode": "dramatic_tilt",
-          "rig": "top_down_spin",
-          "fov": 84,
-          "switchEveryBars": 1,
+          "rig": "dolly_zoom_on_kick",
+          "fov": 76,
+          "switchEveryBars": 4,
           "onPeakBand": "snare",
           "transition": "glide"
         }
@@ -886,18 +880,18 @@
       "postFX": [
         {
           "type": "bloom",
-          "intensity": 1,
+          "intensity": 0.85,
           "threshold": 0.45
         },
         {
           "type": "toon_outline",
-          "inkThickness": 3.2,
-          "inkJitter": 0.95,
+          "inkThickness": 2.8,
+          "inkJitter": 0.3,
           "color": "#09090B"
         },
         {
           "type": "chromatic_aberration",
-          "intensity": 0.18
+          "intensity": 0.1
         }
       ],
       "durationBars": 8,
@@ -907,7 +901,7 @@
         "fogColor": "#4C0519",
         "fogDensity": 0.02,
         "terrainType": "mirror_floor",
-        "terrainSpeed": 14,
+        "terrainSpeed": 12,
         "terrainPrimaryColor": "#F43F5E",
         "terrainSecondaryColor": "#22D3EE",
         "lightingPreset": "cyber_neon",
@@ -956,7 +950,7 @@
           "kind": "terrain",
           "terrain": {
             "type": "mirror_floor",
-            "speed": 14,
+            "speed": 12,
             "primaryColor": "#F43F5E",
             "secondaryColor": "#22D3EE"
           }
@@ -986,16 +980,16 @@
       "postFx": {
         "ps1VertexJitter": 0,
         "crtScanlines": 0,
-        "chromaticAberration": 0.12,
+        "chromaticAberration": 0.08,
         "kaleidoscopeSegments": 0,
-        "bloomIntensity": 0.85
+        "bloomIntensity": 0.75
       },
       "camera": {
         "mode": "orbit",
-        "fov": 74,
-        "shakeIntensity": 0.28,
-        "rig": "dolly_zoom_on_kick",
-        "beatCut": true
+        "fov": 72,
+        "shakeIntensity": 0.08,
+        "rig": "orbit_smooth",
+        "beatCut": false
       },
       "audioMapping": {
         "bassTarget": "camera_zoom_and_jump",

@@ -2651,7 +2651,7 @@ function renderV4Actors(
 
   const boilOffset = (salt: number, amt: number): number => {
     if (amt <= 0.01 || reducedMotion) return 0;
-    return Math.sin(boilTick * 12.9898 + salt * 78.233) * amt * 1.8;
+    return Math.sin(boilTick * 12.9898 + salt * 78.233) * amt * 0.65;
   };
 
   const light = getStudioLightConfig(scene.environment.lightingPreset);
@@ -2779,15 +2779,15 @@ function renderV4Actors(
       : rawCol2;
     const mat = actor.material ?? "chrome";
 
-    // MORPHING GÉOMÉTRIQUE (Vertex Lerp) : organic_blob <-> rubber_hose_mesh (ou organic_blob <-> organic_blob)
+    // MORPHING GÉOMÉTRIQUE (Vertex Lerp) : organic_blob <-> rubber_hose_mesh (uniquement pendant la transition inter-scènes mAlpha < 0.999)
     if (
       actor.type === "organic_blob" ||
       (prevActor &&
         prevActor.type === "organic_blob" &&
         actor.type === "rubber_hose_mesh" &&
-        mAlpha < 0.72)
+        mAlpha < 0.999)
     ) {
-      const baseR = Math.min(width, height) * 0.24 * modScale * depthScale;
+      const baseR = Math.min(width, height) * 0.25 * modScale * depthScale;
       ctx.save();
       ctx.translate(cx + boilOffset(aIdx * 5, modBoil), cy + boilOffset(aIdx * 9, modBoil));
       ctx.scale(squashX, squashY);
@@ -2877,7 +2877,7 @@ function renderV4Actors(
           : 0;
       if (targetInk > 0.2) {
         ctx.globalAlpha =
-          actor.type === "rubber_hose_mesh" ? clamp01(mAlpha * 1.25) : 1;
+          actor.type === "rubber_hose_mesh" ? clamp01(mAlpha * 1.15) : 1;
         ctx.strokeStyle = "#09090B";
         ctx.lineWidth = targetInk;
         ctx.stroke();
@@ -2888,23 +2888,29 @@ function renderV4Actors(
         ctx.stroke();
       }
 
-      // Morphing progressif des yeux Pie-Eyes quand organic_blob devient rubber_hose_mesh
-      if (actor.type === "rubber_hose_mesh" && mAlpha > 0.22) {
-        const eyeAlpha = clamp01((mAlpha - 0.22) / 0.5);
+      // Morphing progressif des yeux Pie-Eyes et de la bouche quand organic_blob devient rubber_hose_mesh
+      if (actor.type === "rubber_hose_mesh" && mAlpha > 0.18) {
+        const eyeAlpha = clamp01((mAlpha - 0.18) / 0.75);
         ctx.globalAlpha = eyeAlpha;
         ctx.fillStyle = "#FFFBEB";
         ctx.strokeStyle = "#09090B";
-        ctx.lineWidth = Math.max(2, targetInk * 0.8);
+        ctx.lineWidth = Math.max(2, targetInk * 0.85);
         ctx.beginPath();
-        ctx.ellipse(-baseR * 0.28, -baseR * 0.16, baseR * 0.2, baseR * 0.28 * eyeAlpha, 0, 0, Math.PI * 2);
-        ctx.ellipse(baseR * 0.28, -baseR * 0.16, baseR * 0.2, baseR * 0.28 * eyeAlpha, 0, 0, Math.PI * 2);
+        ctx.ellipse(-baseR * 0.28, -baseR * 0.18, baseR * 0.22, baseR * 0.3 * eyeAlpha, 0, 0, Math.PI * 2);
+        ctx.ellipse(baseR * 0.28, -baseR * 0.18, baseR * 0.22, baseR * 0.3 * eyeAlpha, 0, 0, Math.PI * 2);
         ctx.fill();
         ctx.stroke();
         ctx.fillStyle = "#09090B";
         ctx.beginPath();
-        ctx.arc(-baseR * 0.24, -baseR * 0.16, baseR * 0.11 * eyeAlpha, 0.2 * Math.PI, 1.82 * Math.PI);
-        ctx.arc(baseR * 0.24, -baseR * 0.16, baseR * 0.11 * eyeAlpha, 0.2 * Math.PI, 1.82 * Math.PI);
+        ctx.arc(-baseR * 0.24, -baseR * 0.18, baseR * 0.12 * eyeAlpha, 0.2 * Math.PI, 1.82 * Math.PI);
+        ctx.arc(baseR * 0.24, -baseR * 0.18, baseR * 0.12 * eyeAlpha, 0.2 * Math.PI, 1.82 * Math.PI);
         ctx.fill();
+        ctx.fillStyle = "#FFFBEB";
+        ctx.beginPath();
+        ctx.arc(0, baseR * 0.24, baseR * 0.42 * eyeAlpha, 0.05 * Math.PI, 0.95 * Math.PI);
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
       }
       ctx.restore();
     } else if (actor.type === "wave_terrain") {
@@ -5780,33 +5786,28 @@ export function renderSceneFrame(
   let modePitch = 0;
   let modeDistFactor = 1;
   let cutFovOverride: number | undefined;
+  const hasRichActors = Boolean(scene3d?.actors && scene3d.actors.length > 0);
   if (scene3d) {
     let activeRig = scene3d.camera.rig;
-    // Multi-Caméras & Cuts Rythmiques v6 (`cameraCuts[]`)
+    // Multi-Caméras & Cuts Rythmiques v6 (`cameraCuts[]`) — bascule propre par mesures avec interpolation douce
     if (!reducedMotion && scene3d.cameraCuts && scene3d.cameraCuts.length > 0) {
       const cuts = scene3d.cameraCuts;
       const barFloat = beatFloat / 4;
-      let activeCut = cuts[0];
-      for (let cIdx = 0; cIdx < cuts.length; cIdx++) {
-        const cut = cuts[cIdx];
-        if (cut.onPeakBand === "snare" && audio.transientPulse > 0.36) {
-          activeCut = cut;
-          break;
-        }
-        if (cut.onPeakBand === "kick" && audio.bassEnvelope > 0.58) {
-          activeCut = cut;
-          break;
-        }
-        if (cut.onPeakBand === "bass" && audio.bassEnvelope > 0.45) {
-          activeCut = cut;
-        }
-        if (cut.switchEveryBars && cut.switchEveryBars > 0) {
-          const slot = Math.floor(barFloat / cut.switchEveryBars) % cuts.length;
-          activeCut = cuts[slot];
-        }
-      }
+      const barsPerCut = Math.max(2, cuts[0]?.switchEveryBars ?? 4);
+      const slot = Math.floor(barFloat / barsPerCut) % cuts.length;
+      const activeCut = cuts[slot] ?? cuts[0];
       activeRig = activeCut.rig;
-      cutFovOverride = activeCut.fov;
+      if (activeCut.fov !== undefined) {
+        const nextCut = cuts[(slot + 1) % cuts.length] ?? activeCut;
+        const barPhase = (barFloat % barsPerCut) / barsPerCut;
+        const glideBlend =
+          activeCut.transition === "glide" && barPhase > 0.75
+            ? (barPhase - 0.75) / 0.25
+            : 0;
+        const curFov = activeCut.fov;
+        const nxtFov = nextCut.fov ?? curFov;
+        cutFovOverride = curFov + (nxtFov - curFov) * glideBlend;
+      }
     }
 
     switch (scene3d.camera.mode) {
@@ -5815,8 +5816,8 @@ export function renderSceneFrame(
         modeDistFactor = 0.88;
         break;
       case "orbit":
-        modeYaw = reducedMotion ? 0.25 : Math.sin(input.timeSeconds * 0.65) * 0.48;
-        modePitch = 0.14;
+        modeYaw = reducedMotion ? 0.25 : Math.sin(input.timeSeconds * 0.55) * 0.32;
+        modePitch = 0.12;
         modeDistFactor = 1.02;
         break;
       case "fps_arms":
@@ -5824,8 +5825,8 @@ export function renderSceneFrame(
         modeDistFactor = 0.74;
         break;
       case "dramatic_tilt":
-        modeYaw = reducedMotion ? -0.22 : Math.cos(input.timeSeconds * 0.75) * 0.34;
-        modePitch = 0.24;
+        modeYaw = reducedMotion ? -0.22 : Math.cos(input.timeSeconds * 0.6) * 0.26;
+        modePitch = 0.2;
         modeDistFactor = 0.94;
         break;
     }
@@ -5833,35 +5834,37 @@ export function renderSceneFrame(
     if (!reducedMotion && activeRig) {
       switch (activeRig) {
         case "orbit_smooth":
-          modeYaw = Math.sin(input.timeSeconds * 0.55) * 0.95;
-          modePitch = 0.14 + Math.sin(input.timeSeconds * 0.32) * 0.09;
-          modeDistFactor = 1.04;
+          modeYaw = Math.sin(input.timeSeconds * 0.45) * 0.38;
+          modePitch = 0.1 + Math.sin(input.timeSeconds * 0.28) * 0.06;
+          modeDistFactor = 1.02;
           break;
         case "dolly_zoom_on_kick": {
-          const kickD = audio.bassEnvelope * 0.45 + audio.transientPulse * 0.35;
-          modeDistFactor = 0.85 + kickD * 0.45;
+          const kickD = audio.bassEnvelope * 0.22 + audio.transientPulse * 0.14;
+          modeDistFactor = 0.92 + kickD * 0.22;
           modePitch = 0.06;
           break;
         }
         case "first_person_fly":
-          modeYaw = Math.sin(input.timeSeconds * 0.72) * 0.24;
-          modePitch = -0.04 + Math.cos(input.timeSeconds * 0.88) * 0.07;
-          modeDistFactor = 0.72;
+          modeYaw = Math.sin(input.timeSeconds * 0.55) * 0.18;
+          modePitch = -0.03 + Math.cos(input.timeSeconds * 0.65) * 0.05;
+          modeDistFactor = 0.82;
           break;
         case "top_down_spin":
-          modeYaw = input.timeSeconds * 0.45;
-          modePitch = 0.78;
-          modeDistFactor = 1.12;
+          modeYaw = hasRichActors
+            ? Math.sin(input.timeSeconds * 0.45) * 0.35
+            : input.timeSeconds * 0.45;
+          modePitch = hasRichActors ? 0.22 : 0.78;
+          modeDistFactor = 1.06;
           break;
         case "handheld_shake":
-          modeYaw = Math.sin(input.timeSeconds * 2.1) * 0.14 + Math.sin(input.timeSeconds * 11) * 0.03;
-          modePitch = Math.cos(input.timeSeconds * 1.7) * 0.11 + Math.cos(input.timeSeconds * 13) * 0.025;
-          modeDistFactor = 0.92;
+          modeYaw = Math.sin(input.timeSeconds * 1.4) * 0.09;
+          modePitch = Math.cos(input.timeSeconds * 1.1) * 0.07;
+          modeDistFactor = 0.95;
           break;
       }
     }
 
-    if (!reducedMotion && scene3d.camera.beatCut) {
+    if (!reducedMotion && scene3d.camera.beatCut && !hasRichActors) {
       const beatSlot = Math.floor(
         input.bpmConfig ? (input.timeSeconds * input.bpmConfig.bpm) / 60 : input.timeSeconds * 2
       );
@@ -5871,8 +5874,9 @@ export function renderSceneFrame(
     }
   }
 
+  // Désactiver les vibrations caméra haute fréquence (37 Hz / 43 Hz) sur les scènes d'acteurs V4/V5/V6 pour une image stable et nette
   const shakeMul =
-    !reducedMotion && scene3d
+    !reducedMotion && scene3d && !hasRichActors
       ? scene3d.camera.shakeIntensity *
         (scene3d.audioMapping.fluxTarget === "camera_shake"
           ? audio.transientPulse * 1.45 + audio.bassEnvelope * 0.45

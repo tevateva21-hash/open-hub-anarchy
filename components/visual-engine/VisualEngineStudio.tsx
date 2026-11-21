@@ -538,15 +538,18 @@ export const VisualEngineStudio: React.FC = () => {
             0,
             Math.min(1, slotElapsedSec / slotDurationSec)
           );
-          const morphBeats = activeSlot?.morphTransition?.durationBeats ?? 4;
+          const morphBeats = Math.min(
+            autoSceneSwitchBeats * 0.45,
+            activeSlot?.morphTransition?.durationBeats ?? 3
+          );
           const morphDurationSec = Math.max(
-            0.2,
-            Math.min(slotDurationSec, beatDur * morphBeats)
+            0.25,
+            Math.min(slotDurationSec * 0.5, beatDur * morphBeats)
           );
-          transitionProgress = Math.max(
-            0,
-            Math.min(1, slotElapsedSec / morphDurationSec)
-          );
+          transitionProgress =
+            rawSlotIdx === 0 && elapsedFromAnchor < slotDurationSec
+              ? 1
+              : Math.max(0, Math.min(1, slotElapsedSec / morphDurationSec));
           if (livePackSlotIndexRef.current !== slotIdx) {
             livePackSlotIndexRef.current = slotIdx;
             setLivePackSlotIndex(slotIdx);
@@ -569,16 +572,20 @@ export const VisualEngineStudio: React.FC = () => {
             0,
             Math.min(1, slotElapsedSec / slotDurationSec)
           );
+          // En mode HOLD / sélection manuelle d'une scène, ne morpher que lors d'un clic sur une nouvelle scène (pendant les premiers temps après sceneAnchorSeconds), jamais en boucle à l'intérieur de la scène
+          const elapsedSinceSwitch = Math.max(0, timeSeconds - sceneAnchorSeconds);
           const morphBeats = activeSlot?.morphTransition?.durationBeats;
-          if (morphBeats && morphBeats > 0) {
+          if (morphBeats && morphBeats > 0 && sceneAnchorSeconds > 0.05) {
             const morphDurationSec = Math.max(
-              0.2,
-              Math.min(slotDurationSec, beatDur * morphBeats)
+              0.25,
+              Math.min(2.5, beatDur * morphBeats)
             );
             transitionProgress = Math.max(
               0,
-              Math.min(1, slotElapsedSec / morphDurationSec)
+              Math.min(1, elapsedSinceSwitch / morphDurationSec)
             );
+          } else {
+            transitionProgress = 1;
           }
         }
       }
