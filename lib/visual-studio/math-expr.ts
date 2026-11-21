@@ -12,7 +12,25 @@ export interface MathExprContext {
   mid: number;
   treble: number;
   flux: number;
+  rms?: number;
+  seed?: number;
+  count?: number;
+  u?: number;
+  params?: Record<string, number>;
 }
+
+type BuiltinVarName =
+  | "t"
+  | "beat"
+  | "i"
+  | "bass"
+  | "mid"
+  | "treble"
+  | "flux"
+  | "rms"
+  | "seed"
+  | "count"
+  | "u";
 
 type Token =
   | { type: "num"; value: number }
@@ -24,12 +42,13 @@ type Token =
 
 type RpnOp =
   | { kind: "push_num"; value: number }
-  | { kind: "push_var"; name: keyof MathExprContext }
+  | { kind: "push_var"; name: BuiltinVarName }
+  | { kind: "push_param"; name: string }
   | { kind: "unary_neg" }
   | { kind: "binary"; op: "+" | "-" | "*" | "/" | "%" | "^" }
   | { kind: "call"; name: string; argc: number };
 
-const ALLOWED_VARS = new Set<keyof MathExprContext>([
+const ALLOWED_VARS = new Set<BuiltinVarName>([
   "t",
   "beat",
   "i",
@@ -37,6 +56,18 @@ const ALLOWED_VARS = new Set<keyof MathExprContext>([
   "mid",
   "treble",
   "flux",
+  "rms",
+  "seed",
+  "count",
+  "u",
+]);
+
+const UNSAFE_PARAM_NAMES = new Set([
+  "__proto__",
+  "constructor",
+  "prototype",
+  "toString",
+  "valueOf",
 ]);
 
 const CONSTANTS: Record<string, number> = {
@@ -51,10 +82,22 @@ const FUNCTION_ARITY: Record<string, number> = {
   cos: 1,
   tan: 1,
   abs: 1,
+  floor: 1,
+  ceil: 1,
+  fract: 1,
+  sqrt: 1,
   min: 2,
   max: 2,
+  step: 2,
+  pulse: 2,
+  mod: 2,
+  pow: 2,
+  gt: 2,
+  lt: 2,
   clamp: 3,
   smoothstep: 3,
+  mix: 3,
+  lerp: 3,
 };
 
 const PRECEDENCE: Record<string, number> = {
@@ -155,7 +198,8 @@ function tokenize(expr: string): { ok: true; tokens: Token[] } | { ok: false; er
 }
 
 function compileToRpn(
-  expr: string
+  expr: string,
+  allowedParams?: ReadonlySet<string>
 ): { ok: true; rpn: RpnOp[] } | { ok: false; error: string } {
   const trimmed = expr.trim();
   if (!trimmed) {
@@ -206,17 +250,25 @@ function compileToRpn(
         expectOperand = false;
         continue;
       }
-      if (ALLOWED_VARS.has(tok.value as keyof MathExprContext)) {
+      if (ALLOWED_VARS.has(tok.value as BuiltinVarName)) {
         output.push({
           kind: "push_var",
-          name: tok.value as keyof MathExprContext,
+          name: tok.value as BuiltinVarName,
         });
+        expectOperand = false;
+        continue;
+      }
+      if (
+        allowedParams?.has(tok.value) &&
+        !UNSAFE_PARAM_NAMES.has(tok.value)
+      ) {
+        output.push({ kind: "push_param", name: tok.value });
         expectOperand = false;
         continue;
       }
       return {
         ok: false,
-        error: `Variable inconnue "${tok.value}" (autorisées : t, beat, i, bass, mid, treble, flux)`,
+        error: `Variable inconnue "${tok.value}" (autorisées : t, beat, i, u, count, bass, mid, treble, flux, rms, seed)`,
       };
     }
 
@@ -316,7 +368,11 @@ function compileToRpn(
   // Vérification sèche de l'arité de la pile RPN
   let depth = 0;
   for (const ins of output) {
-    if (ins.kind === "push_num" || ins.kind === "push_var") {
+    if (
+      ins.kind === "push_num" ||
+      ins.kind === "push_var" ||
+      ins.kind === "push_param"
+    ) {
       depth++;
     } else if (ins.kind === "unary_neg") {
       if (depth < 1) return { ok: false, error: "Opérateur unaire '-' invalide." };
@@ -348,9 +404,16 @@ function execRpn(rpn: RpnOp[], ctx: MathExprContext): number {
       case "push_num":
         stack.push(ins.value);
         break;
-      case "push_var":
-        stack.push(ctx[ins.name]);
+      case "push_var": {
+        const val = ctx[ins.name];
+        stack.push(typeof val === "number" && Number.isFinite(val) ? val : 0);
         break;
+      }
+      case "push_param": {
+        const val = ctx.params?.[ins.name];
+        stack.push(typeof val === "number" && Number.isFinite(val) ? val : 0);
+        break;
+      }
       case "unary_neg": {
         const a = stack.pop() ?? 0;
         stack.push(-a);
@@ -388,11 +451,29 @@ function execRpn(rpn: RpnOp[], ctx: MathExprContext): number {
           else if (ins.name === "cos") stack.push(Math.cos(x));
           else if (ins.name === "tan") stack.push(Math.tan(x));
           else if (ins.name === "abs") stack.push(Math.abs(x));
+          else if (ins.name === "floor") stack.push(Math.floor(x));
+          else if (ins.name === "ceil") stack.push(Math.ceil(x));
+          else if (ins.name === "fract") stack.push(x - Math.floor(x));
+          else if (ins.name === "sqrt") stack.push(x > 0 ? Math.sqrt(x) : 0);
         } else if (ins.argc === 2) {
           const b = stack.pop() ?? 0;
           const a = stack.pop() ?? 0;
           if (ins.name === "min") stack.push(Math.min(a, b));
           else if (ins.name === "max") stack.push(Math.max(a, b));
+          else if (ins.name === "step") stack.push(b >= a ? 1 : 0);
+          else if (ins.name === "pulse") {
+            const p = a - Math.floor(a);
+            const w = Math.max(0.01, Math.min(1, b));
+            stack.push(p < w ? 1 - p / w : 0);
+          } else if (ins.name === "mod") {
+            stack.push(Math.abs(b) < 1e-8 ? 0 : ((a % b) + b) % b);
+          } else if (ins.name === "pow") {
+            stack.push(Math.pow(a, b));
+          } else if (ins.name === "gt") {
+            stack.push(a > b ? 1 : 0);
+          } else if (ins.name === "lt") {
+            stack.push(a < b ? 1 : 0);
+          }
         } else if (ins.argc === 3) {
           const c = stack.pop() ?? 0;
           const b = stack.pop() ?? 0;
@@ -409,6 +490,8 @@ function execRpn(rpn: RpnOp[], ctx: MathExprContext): number {
               const t = Math.max(0, Math.min(1, (c - a) / span));
               stack.push(t * t * (3 - 2 * t));
             }
+          } else if (ins.name === "mix" || ins.name === "lerp") {
+            stack.push(a + (b - a) * c);
           }
         }
         break;
@@ -421,33 +504,43 @@ function execRpn(rpn: RpnOp[], ctx: MathExprContext): number {
 
 const COMPILED_CACHE = new Map<string, RpnOp[] | null>();
 
-function getCachedRpn(expr: string): RpnOp[] | null {
-  const key = expr.trim();
+function getCachedRpn(
+  expr: string,
+  allowedParams?: ReadonlySet<string>
+): RpnOp[] | null {
+  const trimmed = expr.trim();
+  const paramSig =
+    allowedParams && allowedParams.size > 0
+      ? `::${Array.from(allowedParams).sort().join(",")}`
+      : "";
+  const key = `${trimmed}${paramSig}`;
   if (COMPILED_CACHE.has(key)) {
     return COMPILED_CACHE.get(key) ?? null;
   }
   if (COMPILED_CACHE.size > 512) {
     COMPILED_CACHE.clear();
   }
-  const res = compileToRpn(key);
+  const res = compileToRpn(trimmed, allowedParams);
   const rpn = res.ok ? res.rpn : null;
   COMPILED_CACHE.set(key, rpn);
   return rpn;
 }
 
 export function validateMathExpression(
-  expr: string
+  expr: string,
+  allowedParams?: ReadonlySet<string>
 ): { ok: true } | { ok: false; error: string } {
-  const res = compileToRpn(expr);
+  const res = compileToRpn(expr, allowedParams);
   return res.ok ? { ok: true } : { ok: false, error: res.error };
 }
 
 export function compileMathExpression(
-  expr: string
+  expr: string,
+  allowedParams?: ReadonlySet<string>
 ):
   | { ok: true; fn: (ctx: MathExprContext) => number }
   | { ok: false; error: string } {
-  const res = compileToRpn(expr);
+  const res = compileToRpn(expr, allowedParams);
   if (!res.ok) return res;
   const rpn = res.rpn;
   return {
@@ -461,7 +554,10 @@ export function evaluateMathExpression(
   ctx: MathExprContext,
   fallback = 0
 ): number {
-  const rpn = getCachedRpn(expr);
+  const paramKeys = ctx.params ? Object.keys(ctx.params) : null;
+  const allowedParams =
+    paramKeys && paramKeys.length > 0 ? new Set(paramKeys) : undefined;
+  const rpn = getCachedRpn(expr, allowedParams);
   if (!rpn) return fallback;
   return execRpn(rpn, ctx);
 }

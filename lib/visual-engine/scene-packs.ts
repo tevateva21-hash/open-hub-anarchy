@@ -13,6 +13,8 @@ import type {
   Anarchy3DSidePropsLayer,
   Anarchy3DSubject,
   Anarchy3DTerrainLayer,
+  Anarchy3DTrigger,
+  Anarchy3DTriggerAction,
   AnarchyBassTarget,
   AnarchyCameraMode,
   AnarchyClonerMode,
@@ -42,8 +44,10 @@ import {
   SUBJECT_MESH_REGISTRY,
   TERRAIN_REGISTRY,
   TREBLE_TARGET_REGISTRY,
+  TRIGGER_ACTION_REGISTRY,
   generateAiPackPromptFromRegistry,
   generateAiPackPromptV3,
+  generateAiPackPromptV4,
 } from "@/lib/visual-studio/registry";
 
 export type {
@@ -62,9 +66,16 @@ export type {
   Anarchy3DCloner,
   Anarchy3DAnimation,
   Anarchy3DAnimationTarget,
+  Anarchy3DTrigger,
+  Anarchy3DTriggerAction,
 };
 
-export { AI_STYLE_PRESETS, JSON_SNIPPETS_3D, generateAiPackPromptV3 };
+export {
+  AI_STYLE_PRESETS,
+  JSON_SNIPPETS_3D,
+  generateAiPackPromptV3,
+  generateAiPackPromptV4,
+};
 
 export type ScenePackSlot = Anarchy3DScene;
 export type ScenePack = Anarchy3DPack;
@@ -77,6 +88,7 @@ export const ANARCHY_SUBJECT_MESH_TYPES = SUBJECT_MESH_REGISTRY;
 export const ANARCHY_PROCEDURAL_PRIMITIVES = PROCEDURAL_PRIMITIVE_REGISTRY;
 export const ANARCHY_CAMERA_MODES = CAMERA_MODE_REGISTRY;
 export const ANARCHY_CLONER_MODES = CLONER_MODE_REGISTRY;
+export const ANARCHY_TRIGGER_ACTIONS = TRIGGER_ACTION_REGISTRY;
 export const ANARCHY_BASS_TARGETS = BASS_TARGET_REGISTRY;
 export const ANARCHY_MID_TARGETS = MID_TARGET_REGISTRY;
 export const ANARCHY_TREBLE_TARGETS = TREBLE_TARGET_REGISTRY;
@@ -107,6 +119,9 @@ const CAMERA_MODE_SET = new Set<AnarchyCameraMode>(
 );
 const CLONER_MODE_SET = new Set<AnarchyClonerMode>(
   CLONER_MODE_REGISTRY.map((c) => c.value)
+);
+const TRIGGER_ACTION_SET = new Set<Anarchy3DTriggerAction>(
+  TRIGGER_ACTION_REGISTRY.map((t) => t.value)
 );
 const ANIMATION_TARGET_SET = new Set<Anarchy3DAnimationTarget>([
   "pos.x",
@@ -1312,7 +1327,52 @@ function sanitizeCloner(raw: unknown): Anarchy3DCloner | undefined {
   };
 }
 
-function sanitizeAnimations(raw: unknown): Anarchy3DAnimation[] | undefined {
+function sanitizeParams(raw: unknown): Record<string, number> | undefined {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return undefined;
+  const out: Record<string, number> = {};
+  let count = 0;
+  for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
+    if (count >= 24) break;
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(k)) continue;
+    if (k === "__proto__" || k === "constructor" || k === "prototype") continue;
+    const num = Number(v);
+    if (!Number.isFinite(num)) continue;
+    out[k] = Math.max(-1000, Math.min(1000, num));
+    count++;
+  }
+  return count > 0 ? out : undefined;
+}
+
+function sanitizeTriggers(
+  raw: unknown,
+  allowedParams?: ReadonlySet<string>
+): Anarchy3DTrigger[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const valid: Anarchy3DTrigger[] = [];
+  for (const item of raw.slice(0, 16)) {
+    if (!item || typeof item !== "object") continue;
+    const obj = item as Record<string, unknown>;
+    const when = typeof obj.when === "string" ? obj.when.trim() : "";
+    const action = obj.action as Anarchy3DTriggerAction;
+    if (!when || !TRIGGER_ACTION_SET.has(action)) continue;
+    if (!validateMathExpression(when, allowedParams).ok) continue;
+    const intensity =
+      obj.intensity !== undefined
+        ? Number(clampNum(obj.intensity, 0, 2, 1).toFixed(2))
+        : undefined;
+    valid.push({
+      when,
+      action,
+      ...(intensity !== undefined ? { intensity } : {}),
+    });
+  }
+  return valid.length > 0 ? valid : undefined;
+}
+
+function sanitizeAnimations(
+  raw: unknown,
+  allowedParams?: ReadonlySet<string>
+): Anarchy3DAnimation[] | undefined {
   if (!Array.isArray(raw)) return undefined;
   const valid: Anarchy3DAnimation[] = [];
   for (const item of raw.slice(0, 24)) {
@@ -1321,7 +1381,7 @@ function sanitizeAnimations(raw: unknown): Anarchy3DAnimation[] | undefined {
     const target = obj.target as Anarchy3DAnimationTarget;
     const expr = typeof obj.expr === "string" ? obj.expr.trim() : "";
     if (!ANIMATION_TARGET_SET.has(target) || !expr) continue;
-    if (!validateMathExpression(expr).ok) continue;
+    if (!validateMathExpression(expr, allowedParams).ok) continue;
     valid.push({ target, expr });
   }
   return valid.length > 0 ? valid : undefined;
@@ -1329,7 +1389,8 @@ function sanitizeAnimations(raw: unknown): Anarchy3DAnimation[] | undefined {
 
 function sanitizeProceduralParts(
   rawParts: unknown,
-  fallbackColor: string
+  fallbackColor: string,
+  allowedParams?: ReadonlySet<string>
 ): AnarchyProceduralPart[] {
   if (!Array.isArray(rawParts)) return [];
   return rawParts
@@ -1343,7 +1404,7 @@ function sanitizeProceduralParts(
         ? (part.primitive as AnarchyProceduralPrimitive)
         : "box";
       const cloner = sanitizeCloner(part.cloner);
-      const animations = sanitizeAnimations(part.animations);
+      const animations = sanitizeAnimations(part.animations, allowedParams);
       return {
         primitive,
         position: sanitizeVec3(part.position, [0, 0, 0], -20, 20),
@@ -1360,7 +1421,8 @@ function sanitizeProceduralParts(
 
 function sanitizeAnarchy3DSubject(
   raw: unknown,
-  fallback: Anarchy3DSubject
+  fallback: Anarchy3DSubject,
+  allowedParams?: ReadonlySet<string>
 ): Anarchy3DSubject {
   const rawSub =
     raw && typeof raw === "object" ? (raw as Record<string, unknown>) : {};
@@ -1377,9 +1439,9 @@ function sanitizeAnarchy3DSubject(
     rawSub.accentColor,
     fallback.accentColor
   );
-  const parts = sanitizeProceduralParts(rawSub.parts, accentColor);
+  const parts = sanitizeProceduralParts(rawSub.parts, accentColor, allowedParams);
   const cloner = sanitizeCloner(rawSub.cloner);
-  const animations = sanitizeAnimations(rawSub.animations);
+  const animations = sanitizeAnimations(rawSub.animations, allowedParams);
 
   return {
     meshType,
@@ -1448,12 +1510,21 @@ function sanitizePostFx(raw: unknown): Anarchy3DPostFx {
  */
 export function sanitizeAnarchy3DScene(
   raw: unknown,
-  idx = 0
+  idx = 0,
+  packParams?: Record<string, number>
 ): Anarchy3DScene {
   const fallback = createDefaultAnarchy3DScene(idx);
   if (!raw || typeof raw !== "object") return fallback;
 
   const item = raw as Record<string, unknown>;
+  const sceneParams = sanitizeParams(item.params);
+  const mergedParams =
+    packParams || sceneParams
+      ? { ...(packParams ?? {}), ...(sceneParams ?? {}) }
+      : undefined;
+  const allowedParams = mergedParams
+    ? new Set(Object.keys(mergedParams))
+    : undefined;
   const rawLayers = Array.isArray(item.layers) ? item.layers : null;
 
   // Extraire d'éventuels calques v2 pour synchroniser environment / subject si omis à la racine
@@ -1559,7 +1630,7 @@ export function sanitizeAnarchy3DScene(
 
   const subjects: Anarchy3DSubject[] = rawSubjectsList
     .slice(0, 8)
-    .map((s) => sanitizeAnarchy3DSubject(s, fallback.subject));
+    .map((s) => sanitizeAnarchy3DSubject(s, fallback.subject, allowedParams));
   const primarySubject = subjects[0] ?? fallback.subject;
 
   // Calques v2 normalisés (convertit automatiquement les scènes v1)
@@ -1738,7 +1809,9 @@ export function sanitizeAnarchy3DScene(
       ? item.label.trim()
       : `0${idx + 1}. Scène 3D`;
 
-  const sceneAnimations = sanitizeAnimations(item.animations);
+  const sceneAnimations = sanitizeAnimations(item.animations, allowedParams);
+  const sceneTriggers = sanitizeTriggers(item.triggers, allowedParams);
+  const hasV4Features = Boolean(mergedParams || sceneTriggers?.length);
   const hasV3Features =
     Boolean(sceneAnimations?.length) ||
     subjects.some(
@@ -1754,7 +1827,9 @@ export function sanitizeAnarchy3DScene(
         ? item.id.trim()
         : `scene-${idx + 1}`,
     name: rawName,
-    version: hasV3Features
+    version: hasV4Features
+      ? 4
+      : hasV3Features
       ? 3
       : rawLayers || item.postFx || item.subjects
       ? 2
@@ -1765,6 +1840,8 @@ export function sanitizeAnarchy3DScene(
     layers,
     postFx,
     ...(sceneAnimations ? { animations: sceneAnimations } : {}),
+    ...(mergedParams ? { params: mergedParams } : {}),
+    ...(sceneTriggers ? { triggers: sceneTriggers } : {}),
     camera,
     audioMapping,
     sceneId: sanitizeSceneId(item.sceneId, inferredSceneId),
@@ -2300,6 +2377,9 @@ export function validateAnarchy3DPackJson(
 
   const warnings: string[] = [];
   const obj = parsed as Record<string, unknown>;
+  const packParams = !Array.isArray(parsed)
+    ? sanitizeParams(obj.params)
+    : undefined;
   const rawScenes = Array.isArray(parsed)
     ? parsed
     : Array.isArray(obj.scenes)
@@ -2433,7 +2513,16 @@ export function validateAnarchy3DPackJson(
         );
       }
 
-      // Validation v3 : animations & cloneurs
+      // Validation v3/v4 : params, animations, triggers & cloneurs
+      const sceneParams = sanitizeParams(scObj.params);
+      const mergedParams =
+        packParams || sceneParams
+          ? { ...(packParams ?? {}), ...(sceneParams ?? {}) }
+          : undefined;
+      const allowedParams = mergedParams
+        ? new Set(Object.keys(mergedParams))
+        : undefined;
+
       const checkAnimations = (anims: unknown, scope: string) => {
         if (!Array.isArray(anims)) return;
         anims.forEach((a, aIdx) => {
@@ -2446,10 +2535,31 @@ export function validateAnarchy3DPackJson(
             );
           }
           const expr = typeof aObj.expr === "string" ? aObj.expr : "";
-          const check = validateMathExpression(expr);
+          const check = validateMathExpression(expr, allowedParams);
           if (!check.ok) {
             warnings.push(
               `Scène #${idx + 1} (${scope}.animations[${aIdx}].expr) : ${check.error}`
+            );
+          }
+        });
+      };
+
+      const checkTriggers = (trigs: unknown) => {
+        if (!Array.isArray(trigs)) return;
+        trigs.forEach((t, tIdx) => {
+          if (!t || typeof t !== "object") return;
+          const tObj = t as Record<string, unknown>;
+          const action = tObj.action as Anarchy3DTriggerAction;
+          if (!TRIGGER_ACTION_SET.has(action)) {
+            warnings.push(
+              `Scène #${idx + 1} (triggers[${tIdx}].action) : action "${String(tObj.action)}" inconnue.`
+            );
+          }
+          const when = typeof tObj.when === "string" ? tObj.when : "";
+          const check = validateMathExpression(when, allowedParams);
+          if (!check.ok) {
+            warnings.push(
+              `Scène #${idx + 1} (triggers[${tIdx}].when) : ${check.error}`
             );
           }
         });
@@ -2466,6 +2576,7 @@ export function validateAnarchy3DPackJson(
       };
 
       checkAnimations(scObj.animations, "scene");
+      checkTriggers(scObj.triggers);
       const rawSubjList = Array.isArray(scObj.subjects)
         ? scObj.subjects
         : scObj.subject
@@ -2486,7 +2597,7 @@ export function validateAnarchy3DPackJson(
         }
       });
     }
-    const sanitized = sanitizeAnarchy3DScene(rawSc, idx);
+    const sanitized = sanitizeAnarchy3DScene(rawSc, idx, packParams);
     // Vérifier le plafond de 256 primitives/instances par scène
     const subjArr = sanitized.subjects ?? [sanitized.subject];
     let totalInstances = 0;
@@ -2537,6 +2648,7 @@ export function validateAnarchy3DPackJson(
       name: finalName,
       author: finalAuthor,
       scenes,
+      ...(packParams ? { params: packParams } : {}),
       bpm: Number(!Array.isArray(parsed) && obj.bpm) || 140,
       beatsPerScene: Number(!Array.isArray(parsed) && obj.beatsPerScene) || 16,
       seed:
@@ -2559,13 +2671,14 @@ export function parseScenePackFromText(
 }
 
 /**
- * Exporte un Pack 3D au format JSON strict `Anarchy3DPack` ("Cartouche / Pack 3D v3").
+ * Exporte un Pack 3D au format JSON strict `Anarchy3DPack` ("Cartouche / Pack 3D v4").
  */
 export function exportScenePackAsJson(pack: Anarchy3DPack): string {
   const cleanExport = {
     packId: pack.packId,
     name: pack.name,
     author: pack.author,
+    ...(pack.params ? { params: pack.params } : {}),
     ...(pack.bpm ? { bpm: pack.bpm } : {}),
     ...(pack.beatsPerScene ? { beatsPerScene: pack.beatsPerScene } : {}),
     scenes: pack.scenes.map((sc, idx) => ({
@@ -2596,6 +2709,8 @@ export function exportScenePackAsJson(pack: Anarchy3DPack): string {
       ...(sc.layers ? { layers: sc.layers } : {}),
       ...(sc.postFx ? { postFx: sc.postFx } : {}),
       ...(sc.animations ? { animations: sc.animations } : {}),
+      ...(sc.params ? { params: sc.params } : {}),
+      ...(sc.triggers ? { triggers: sc.triggers } : {}),
       camera: {
         mode: sc.camera.mode,
         fov: sc.camera.fov,

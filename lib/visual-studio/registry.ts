@@ -4,6 +4,49 @@
  * la validation des Packs 3D JSON et le Prompt IA / documentation dans `/docs/visual-studio`.
  */
 
+export const RETRO_2D_THEME_REGISTRY = [
+  {
+    value: "none",
+    label: "none (Moteur 3D pur)",
+    desc: "Utilise uniquement le moteur 3D Low-Poly sans décor 2D rétro.",
+  },
+  {
+    value: "industrial-city",
+    label: "industrial-city (16-Bit Pixel Art — Usines, Grue & Train)",
+    desc: "Scène originelle 16-bit : usines en parallaxe, grue portuaire, viaduc ferroviaire et éclipse.",
+  },
+  {
+    value: "digital-void",
+    label: "digital-void (16-Bit Pixel Art — Tours Serveurs & Abîme)",
+    desc: "Scène originelle 16-bit : tours monolithiques, passerelles optiques et pluie numérique.",
+  },
+  {
+    value: "arcade-outrun",
+    label: "arcade-outrun (2D Jeu Vidéo — Montagnes Parallaxe & Soleil 16-Bit)",
+    desc: "Décor 2D arcade 16-bit : montagnes en dégradé Bayer, soleil strié pixel-art, palmiers et piste néon.",
+  },
+  {
+    value: "cyber-shogun-2d",
+    label: "cyber-shogun-2d (2D Jeu Vidéo — Toits Dojo, Lune Sanglante & Pluie)",
+    desc: "Décor 2D néo-tokyo 16-bit : pagodes en silhouettes, lune cramoisie tramée, enseignes néon et pluie.",
+  },
+  {
+    value: "ps1-nightmare",
+    label: "ps1-nightmare (32-Bit PS1 — Cour Brutaliste & Obélisque)",
+    desc: "Scène originelle 32-bit PS1 : cour anguleuse, obélisque inversé suspendu et dallage affine.",
+  },
+  {
+    value: "rave-dungeon",
+    label: "rave-dungeon (32-Bit PS1 — Voûte Souterraine & Arches)",
+    desc: "Scène originelle 32-bit PS1 : galerie bétonnée, arches métalliques et sol inondé.",
+  },
+  {
+    value: "techno-therapy",
+    label: "techno-therapy (32-Bit Cyber Lab — Tunnel & Moniteur ECG)",
+    desc: "Scène originelle 32-bit : tunnel octogonal, anneaux rotatifs et électrocardiogramme neural.",
+  },
+] as const;
+
 export const TERRAIN_REGISTRY = [
   {
     value: "infinite_grid",
@@ -264,11 +307,13 @@ export type AnarchyMidTarget = (typeof MID_TARGET_REGISTRY)[number]["value"];
 export type AnarchyTrebleTarget = (typeof TREBLE_TARGET_REGISTRY)[number]["value"];
 export type AnarchyFluxTarget = (typeof FLUX_TARGET_REGISTRY)[number]["value"];
 export type AnarchyClonerMode = (typeof CLONER_MODE_REGISTRY)[number]["value"];
+export type AnarchyRetro2DTheme =
+  (typeof RETRO_2D_THEME_REGISTRY)[number]["value"];
 
 export interface JsonSnippet3D {
   id: string;
   label: string;
-  target: "backdrop" | "subject";
+  target: "backdrop" | "subject" | "retro2d";
   description: string;
   payload: unknown;
 }
@@ -498,10 +543,55 @@ export const JSON_SNIPPETS_3D: readonly JsonSnippet3D[] = [
       ],
     },
   },
+  {
+    id: "quantized-reactor-v4",
+    label: "Réacteur Quantifié (v4)",
+    target: "subject",
+    description: "Couronne radiale v4 utilisant u, pulse(beat), mix() et step()",
+    payload: {
+      meshType: "procedural_group",
+      primaryColor: "#0F172A",
+      accentColor: "#00F0FF",
+      wireframeOverlay: true,
+      scale: 1.0,
+      position: [0, 0.15, -1.2],
+      cloner: {
+        mode: "radial",
+        count: 12,
+        offset: [1.85, 0, 0],
+        stepRotation: [0, 30, 0],
+        stepScale: [1, 1, 1],
+      },
+      animations: [
+        { target: "pos.y", expr: "mix(-0.4, 0.8, pulse(beat + u, 0.35)) * (0.6 + bass)" },
+        { target: "scale", expr: "0.8 + step(0.5, fract(u * 3 + beat)) * 0.45 * bass" },
+        { target: "rot.y", expr: "t * 0.7 + u * tau" },
+      ],
+      parts: [
+        {
+          primitive: "icosahedron",
+          position: [0, 0, 0],
+          rotation: [0, 0, 0],
+          scale: [0.42, 0.75, 0.42],
+          color: "#00F0FF",
+          emissive: true,
+          wireframe: true,
+        },
+      ],
+    },
+  },
 ];
 
+export const TRIGGER_ACTION_REGISTRY = [
+  { value: "boost_fov", label: "boost_fov (Ouverture brusque FOV)" },
+  { value: "flash_sky", label: "flash_sky (Éclair de luminosité)" },
+  { value: "spin_burst", label: "spin_burst (Accélération rotation)" },
+  { value: "jitter_spike", label: "jitter_spike (Pic vertex jitter PS1)" },
+  { value: "emissive_surge", label: "emissive_surge (Surbrillance néon)" },
+] as const;
+
 /**
- * Génère le Prompt IA complet v3 (cloners, animations mathématiques, style & BPM actif).
+ * Génère le Prompt IA complet v4 (cloners, expressions mathématiques étendues, params, triggers, style & BPM actif).
  */
 export function generateAiPackPromptV3(
   styleId?: string,
@@ -513,6 +603,7 @@ export function generateAiPackPromptV3(
   const primitives = PROCEDURAL_PRIMITIVE_REGISTRY.map((p) => `"${p.value}"`).join(" | ");
   const cameras = CAMERA_MODE_REGISTRY.map((c) => `"${c.value}"`).join(" | ");
   const cloners = CLONER_MODE_REGISTRY.map((c) => `"${c.value}"`).join(" | ");
+  const triggers = TRIGGER_ACTION_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
   const bass = BASS_TARGET_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
   const mid = MID_TARGET_REGISTRY.map((m) => `"${m.value}"`).join(" | ");
   const treble = TREBLE_TARGET_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
@@ -521,15 +612,15 @@ export function generateAiPackPromptV3(
   const stylePreset =
     AI_STYLE_PRESETS.find((s) => s.id === styleId) ?? AI_STYLE_PRESETS[0];
 
-  return `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v3 Data-Driven).
-Génère une "Cartouche / Pack 3D v3" au format JSON strict (Anarchy3DPack) contenant 4 à 5 scènes 3D évolutives synchronisées à ${Math.round(activeBpm)} BPM.
+  return `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v4 Data-Driven Intelligent).
+Génère une "Cartouche / Pack 3D v4" au format JSON strict (Anarchy3DPack) contenant 4 à 5 scènes 3D évolutives synchronisées à ${Math.round(activeBpm)} BPM.
 
 DIRECTION ARTISTIQUE DEMANDÉE (${stylePreset.label}) :
 - Palette conseillée : ${stylePreset.paletteHint}
 - Décors & Sujets : ${stylePreset.terrainHint}
 - Post-FX suggérés : ${stylePreset.fxHint}
 
-IMPORTANT — RÈGLES STRICTES v3 :
+IMPORTANT — RÈGLES STRICTES v4 :
 1. Réponds UNIQUEMENT avec un bloc JSON valide (aucun code JS/C++, aucune fonction, aucun \`eval\`).
 2. Valeurs autorisées issues du Registre :
    - terrain.type : ${terrains}
@@ -538,19 +629,26 @@ IMPORTANT — RÈGLES STRICTES v3 :
    - procedural_group parts[].primitive : ${primitives}
    - cloner.mode : ${cloners} (count entre 2 et 64, total < 256 primitives/scène pour 60 FPS)
    - camera.mode : ${cameras}
+   - triggers[].action : ${triggers}
    - audioMapping.bassTarget : ${bass}
    - audioMapping.midTarget : ${mid}
    - audioMapping.trebleTarget : ${treble}
    - audioMapping.fluxTarget : ${flux}
-3. Cloneurs Procéduraux ("cloner") sur n'importe quel sujet de "subjects[]" ou élément de "parts[]" :
+3. Paramètres nommés ("params") au niveau Pack ou Scène :
+   - Ex: "params": { "speed": 2.4, "amp": 0.65 } → réutilisables directement dans animations[] et triggers[].
+4. Cloneurs Procéduraux ("cloner") sur tout sujet ou part :
    - { "mode": "linear"|"radial"|"grid"|"spiral", "count": 12, "offset": [dx, dy, dz], "stepRotation": [rxDeg, ryDeg, rzDeg], "stepScale": [sx, sy, sz] }
-4. Expressions Mathématiques Temps Réel ("animations[]") :
+5. Expressions Mathématiques Temps Réel ("animations[]") :
    - Cibles : "pos.x", "pos.y", "pos.z", "rot.x", "rot.y", "rot.z", "scale", "scale.x", "scale.y", "scale.z", "emissiveIntensity", "fov"
-   - Variables : t (secondes), beat (0..1 phase BPM), i (index du clone), bass, mid, treble, flux (0..1)
-   - Fonctions : sin, cos, tan, abs, min, max, clamp, smoothstep, constantes pi, tau, opérateurs + - * / % ^
-   - Exemple : { "target": "pos.y", "expr": "sin(t * 2 + i * 0.4) * bass * 1.2" }
-5. Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".`;
+   - Variables : t (secondes), beat (0..1 phase BPM), i (index clone), u (0..1 index normalisé), count, bass, mid, treble, flux, rms (0..1), seed + tes variables de params.
+   - Fonctions : sin, cos, tan, abs, floor, ceil, fract, sqrt, min, max, step, pulse, mod, pow, gt, lt, clamp, smoothstep, mix, lerp, constantes pi, tau, opérateurs + - * / % ^
+   - Exemple : { "target": "pos.y", "expr": "mix(-0.4, 0.9, pulse(beat + u, 0.35)) * bass" }
+6. Règles Réactives Conditionnelles ("triggers[]") sur chaque scène :
+   - Ex: { "when": "gt(bass, 0.72)", "action": "boost_fov", "intensity": 0.8 }
+7. Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".`;
 }
+
+export const generateAiPackPromptV4 = generateAiPackPromptV3;
 
 /**
  * Génère automatiquement le Prompt IA complet à partir du registre extensible.

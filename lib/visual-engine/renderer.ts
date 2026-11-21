@@ -1847,6 +1847,11 @@ function buildAnarchy3DScenePolygons(
     mid: clamp01(audio.midEnvelope),
     treble: clamp01(audio.trebleEnvelope),
     flux: clamp01(audio.transientPulse),
+    rms: clamp01(audio.rmsEnvelope),
+    seed: ((scene.seed ?? 1) % 1000) / 1000,
+    count: 1,
+    u: 0,
+    params: scene.params,
   };
 
   interface ClonerTransform {
@@ -1925,10 +1930,17 @@ function buildAnarchy3DScenePolygons(
       rot: [number, number, number];
       scale: [number, number, number];
       emissiveIntensity: number;
-    }
+    },
+    totalCount = 1
   ) => {
     if (!anims || anims.length === 0) return;
-    const ctx = { ...baseExprCtx, i };
+    const safeCount = Math.max(1, totalCount);
+    const ctx = {
+      ...baseExprCtx,
+      i,
+      count: safeCount,
+      u: safeCount > 1 ? i / (safeCount - 1) : 0,
+    };
     for (const anim of anims) {
       const val = evaluateMathExpression(anim.expr, ctx, Number.NaN);
       if (!Number.isFinite(val)) continue;
@@ -2049,6 +2061,21 @@ function buildAnarchy3DScenePolygons(
     return { x: cx + x3, y: cy + y3, z: cz + z2 };
   };
 
+  let triggerEmissive = 0;
+  let triggerSpinBurst = 0;
+  if (scene.triggers?.length) {
+    for (const trig of scene.triggers) {
+      const fired = evaluateMathExpression(trig.when, baseExprCtx, 0) > 0.5;
+      if (!fired) continue;
+      const amt = Math.max(0, Math.min(2, trig.intensity ?? 1));
+      if (trig.action === "emissive_surge" || trig.action === "flash_sky") {
+        triggerEmissive += amt * 0.3;
+      } else if (trig.action === "spin_burst") {
+        triggerSpinBurst += amt * 1.4;
+      }
+    }
+  }
+
   const sceneEmissiveAnim = scene.animations?.find(
     (a) => a.target === "emissiveIntensity"
   );
@@ -2058,11 +2085,13 @@ function buildAnarchy3DScenePolygons(
 
   const emissiveBoost =
     (map.fluxTarget === "glitch_and_emissive" ? audio.transientPulse * 0.25 : 0) +
-    sceneEmissiveExtra;
+    sceneEmissiveExtra +
+    triggerEmissive;
   const wireGlowActive =
     sub.wireframeOverlay ||
     (map.trebleTarget === "wireframe_glow" && audio.trebleEnvelope > 0.22) ||
-    audio.transientPulse > 0.35;
+    audio.transientPulse > 0.35 ||
+    triggerEmissive > 0.15;
 
   const primaryCol =
     map.midTarget === "color_shift"
@@ -2355,7 +2384,12 @@ function buildAnarchy3DScenePolygons(
         scale: [...tr.scale] as [number, number, number],
         emissiveIntensity: baseTone,
       };
-      applyAnimations(part.animations, pIdx + parentInstanceIdx, animState);
+      applyAnimations(
+        part.animations,
+        pIdx + parentInstanceIdx,
+        animState,
+        partTransforms.length
+      );
 
       const px = cx + animState.pos[0] * parentScale;
       const py = cy + animState.pos[1] * parentScale;
@@ -2840,9 +2874,9 @@ function buildAnarchy3DScenePolygons(
       ? 1 + audio.bassEnvelope * 0.65
       : 1 + audio.bassEnvelope * 0.25;
   const rotSpeed =
-    map.midTarget === "subject_rotation"
+    (map.midTarget === "subject_rotation"
       ? 1.8 + audio.midEnvelope * 2.4
-      : 0.95;
+      : 0.95) + triggerSpinBurst;
   const subRotY = timeSeconds * rotSpeed;
   const jumpY =
     map.bassTarget === "camera_zoom_and_jump"
@@ -2886,7 +2920,12 @@ function buildAnarchy3DScenePolygons(
         scale: [...tr.scale] as [number, number, number],
         emissiveIntensity: 0.85,
       };
-      applyAnimations(curSub.animations, instIdx, animState);
+      applyAnimations(
+        curSub.animations,
+        instIdx,
+        animState,
+        subTransforms.length
+      );
       const sc =
         ((animState.scale[0] + animState.scale[1] + animState.scale[2]) / 3) *
         subjectPulse;
@@ -3467,28 +3506,37 @@ export function renderSceneFrame(
     ? Math.max(0.5, Math.min(2.2, 1 / Math.max(0.45, perspCam.distance)))
     : 1;
 
+  const frameExprCtx = {
+    t: input.timeSeconds,
+    beat: beatPhase,
+    i: 0,
+    bass: clamp01(audio.bassEnvelope),
+    mid: clamp01(audio.midEnvelope),
+    treble: clamp01(audio.trebleEnvelope),
+    flux: clamp01(audio.transientPulse),
+    rms: clamp01(audio.rmsEnvelope),
+    seed: ((scene3d?.seed ?? 1) % 1000) / 1000,
+    count: 1,
+    u: 0,
+    params: scene3d?.params,
+  };
+  let triggerFovBoost = 0;
+  if (scene3d?.triggers?.length) {
+    for (const trig of scene3d.triggers) {
+      if (trig.action === "boost_fov" && evaluateMathExpression(trig.when, frameExprCtx, 0) > 0.5) {
+        triggerFovBoost += Math.max(0, Math.min(2, trig.intensity ?? 1)) * 12;
+      }
+    }
+  }
   const sceneFovAnim = scene3d?.animations?.find((a) => a.target === "fov");
-  const animatedFov = sceneFovAnim
-    ? Math.max(
-        40,
-        Math.min(
-          115,
-          evaluateMathExpression(
-            sceneFovAnim.expr,
-            {
-              t: input.timeSeconds,
-              beat: beatPhase,
-              i: 0,
-              bass: clamp01(audio.bassEnvelope),
-              mid: clamp01(audio.midEnvelope),
-              treble: clamp01(audio.trebleEnvelope),
-              flux: clamp01(audio.transientPulse),
-            },
-            scene3d?.camera.fov ?? 75
-          )
-        )
+  const baseAnimFov = sceneFovAnim
+    ? evaluateMathExpression(
+        sceneFovAnim.expr,
+        frameExprCtx,
+        scene3d?.camera.fov ?? 75
       )
     : scene3d?.camera.fov ?? 75;
+  const animatedFov = Math.max(40, Math.min(115, baseAnimFov + triggerFovBoost));
   const cfgFovFactor = scene3d ? animatedFov / 75 : 1;
 
   const camOff: PerspectiveOffsets = {
@@ -3739,35 +3787,42 @@ export function renderSceneFrame(
   ctx.imageSmoothingEnabled = false;
 
   if (offscreen) {
-    // Extension atmosphérique verticale/carrée (ciel + halo + reflets sol)
-    const halfH = Math.floor(targetH * 0.5);
-    const skyGrad = ctx.createLinearGradient(0, 0, 0, halfH);
-    skyGrad.addColorStop(0, palette.sky);
-    skyGrad.addColorStop(1, palette.haze);
-    ctx.fillStyle = skyGrad;
-    ctx.fillRect(0, 0, targetW, halfH);
-
-    const floorGrad = ctx.createLinearGradient(0, halfH, 0, targetH);
-    floorGrad.addColorStop(0, palette.reflection);
-    floorGrad.addColorStop(0.35, palette.structure);
-    floorGrad.addColorStop(1, palette.shadow);
-    ctx.fillStyle = floorGrad;
-    ctx.fillRect(0, halfH, targetW, targetH - halfH);
-
-    // Lignes d'horizon réactives au kick/basse dans les bandes haut/bas
-    const barW = Math.round(targetW * (0.45 + audio.bassEnvelope * 0.45));
-    const barX = Math.floor((targetW - barW) / 2);
-    ctx.fillStyle = palette.glow;
-    ctx.fillRect(barX, Math.floor(targetH * 0.14), barW, 1);
-    ctx.fillStyle = palette.light;
-    ctx.fillRect(barX, Math.floor(targetH * 0.86), barW, 1);
-
     // Blit de la scène 320x180 centrée avec zoom adapté à la largeur cible
     const scale = Math.max(targetW / STUDY_SIZE.width, 0.82);
     const drawW = Math.round(STUDY_SIZE.width * scale);
     const drawH = Math.round(STUDY_SIZE.height * scale);
     const dx = Math.floor((targetW - drawW) / 2);
     const dy = Math.floor((targetH - drawH) / 2);
+
+    // Fond uniforme et continu accordé exactement aux couleurs de la scène active
+    // (évite toute bande de couleur différente en bas en 9:16 TikTok / 4:5 / 1:1)
+    const backdropLayer = scene3d?.layers?.find(
+      (l): l is Extract<NonNullable<Anarchy3DScene["layers"]>[number], { kind: "backdrop" }> =>
+        l.kind === "backdrop"
+    )?.backdrop;
+    const rawTop =
+      colorTransition > 0.01 || !scene3d
+        ? palette.sky
+        : backdropLayer?.skyGradient?.[0] ?? scene3d.environment.skyColor;
+    const rawMid =
+      colorTransition > 0.01 || !scene3d
+        ? palette.haze
+        : backdropLayer?.skyGradient?.[1] ?? scene3d.environment.fogColor;
+    const rawBottom = scene3d
+      ? lerpHexColor(rawMid, "#000000", 0.58)
+      : rawTop;
+
+    const topStop = Math.max(0, Math.min(1, dy / Math.max(1, targetH)));
+    const bottomStop = Math.max(topStop, Math.min(1, (dy + drawH) / Math.max(1, targetH)));
+
+    const unifiedGrad = ctx.createLinearGradient(0, 0, 0, targetH);
+    unifiedGrad.addColorStop(0, rawTop);
+    unifiedGrad.addColorStop(topStop, rawTop);
+    unifiedGrad.addColorStop(bottomStop, rawBottom);
+    unifiedGrad.addColorStop(1, rawBottom);
+    ctx.fillStyle = unifiedGrad;
+    ctx.fillRect(0, 0, targetW, targetH);
+
     ctx.drawImage(offscreen.canvas, dx, dy, drawW, drawH);
   }
 

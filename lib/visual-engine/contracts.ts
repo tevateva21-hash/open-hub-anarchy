@@ -409,10 +409,25 @@ export interface Anarchy3DAudioMapping {
   fluxTarget: AnarchyFluxTarget;
 }
 
+export type Anarchy3DTriggerAction =
+  | "boost_fov"
+  | "flash_sky"
+  | "spin_burst"
+  | "jitter_spike"
+  | "emissive_surge";
+
+export interface Anarchy3DTrigger {
+  /** Expression mathématique conditionnelle (ex: "gt(bass, 0.72)" ou "pulse(beat, 0.25)") */
+  when: string;
+  action: Anarchy3DTriggerAction;
+  /** Intensité [0..2] */
+  intensity?: number;
+}
+
 export interface Anarchy3DScene {
   id: string;
   name: string;
-  version?: 1 | 2 | 3;
+  version?: 1 | 2 | 3 | 4;
   environment: Anarchy3DEnvironment;
   subject: Anarchy3DSubject;
   /** Calques composables v2 (backdrop, terrain, sideProps, subjects) */
@@ -421,8 +436,12 @@ export interface Anarchy3DScene {
   subjects?: Anarchy3DSubject[];
   /** Pipeline Post-Processing par scène */
   postFx?: Anarchy3DPostFx;
-  /** Animations mathématiques globales de scène v3 (ex: fov, emissiveIntensity) */
+  /** Animations mathématiques globales de scène v3/v4 (ex: fov, emissiveIntensity) */
   animations?: Anarchy3DAnimation[];
+  /** Paramètres numériques nommés v4 utilisables dans animations[] et triggers[] */
+  params?: Record<string, number>;
+  /** Règles réactives conditionnelles v4 (zéro eval) */
+  triggers?: Anarchy3DTrigger[];
   camera: Anarchy3DCamera;
   audioMapping: Anarchy3DAudioMapping;
   /** Identifiants optionnels de liaison avec le catalogue interne du moteur 3D */
@@ -436,6 +455,8 @@ export interface Anarchy3DPack {
   name: string;
   author: string;
   scenes: Anarchy3DScene[];
+  /** Paramètres globaux v4 hérités par toutes les scènes du pack */
+  params?: Record<string, number>;
   bpm?: number;
   beatsPerScene?: number;
   seed?: number;
