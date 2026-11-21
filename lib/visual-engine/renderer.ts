@@ -3202,16 +3202,15 @@ function applyV4PostFxStack(
         // 2. Color Grade 1930 (technicolor_30s | sepia_warm | black_and_white_ink | none)
         const grade = step.colorGrade ?? "technicolor_30s";
         if (grade === "black_and_white_ink") {
-          const imgData = ctx.getImageData(0, 0, width, height);
-          const d = imgData.data;
-          for (let i = 0; i < d.length; i += 4) {
-            const lum = d[i] * 0.299 + d[i + 1] * 0.587 + d[i + 2] * 0.114;
-            const contrast = clamp01(((lum / 255) - 0.5) * 1.38 + 0.5) * 255;
-            d[i] = contrast;
-            d[i + 1] = contrast * 0.98;
-            d[i + 2] = contrast * 0.94;
-          }
-          ctx.putImageData(imgData, 0, 0);
+          ctx.save();
+          ctx.globalCompositeOperation = "saturation";
+          ctx.fillStyle = "#000000";
+          ctx.fillRect(0, 0, width, height);
+          ctx.globalCompositeOperation = "soft-light";
+          ctx.globalAlpha = 0.25;
+          ctx.fillStyle = "#1C1917";
+          ctx.fillRect(0, 0, width, height);
+          ctx.restore();
         } else if (grade === "sepia_warm") {
           ctx.save();
           ctx.globalCompositeOperation = "color";
@@ -3307,20 +3306,13 @@ function applyV4PostFxStack(
           ctx.restore();
         }
       } else if (step.type === "chromatic_aberration") {
-        const offsetPx = Math.max(1, Math.round(intensity * (2.5 + audio.transientPulse * 3)));
-        const imgData = ctx.getImageData(0, 0, width, height);
-        const src = new Uint8ClampedArray(imgData.data);
-        const dst = imgData.data;
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const idx = (y * width + x) * 4;
-            const lx = Math.max(0, x - offsetPx);
-            const rx = Math.min(width - 1, x + offsetPx);
-            dst[idx] = Math.max(dst[idx], src[(y * width + lx) * 4]);
-            dst[idx + 2] = Math.max(dst[idx + 2], src[(y * width + rx) * 4 + 2]);
-          }
-        }
-        ctx.putImageData(imgData, 0, 0);
+        const offsetPx = Math.max(1, Math.round(intensity * (2.2 + audio.transientPulse * 2.5)));
+        ctx.save();
+        ctx.globalCompositeOperation = "screen";
+        ctx.globalAlpha = clamp01(intensity * 0.28);
+        ctx.drawImage(ctx.canvas, -offsetPx, 0, width, height);
+        ctx.drawImage(ctx.canvas, offsetPx, 0, width, height);
+        ctx.restore();
       } else if (step.type === "film_grain") {
         ctx.save();
         let gRng = ((Math.floor(timeSeconds * 60) * 1664525) ^ 0x517cc1b7) >>> 0;
@@ -3400,6 +3392,8 @@ function applyOpenHubPostFx(
   height: number = STUDY_SIZE.height,
   postFx?: Anarchy3DPostFx
 ): void {
+  const cw = ctx.canvas?.width || width;
+  const ch = ctx.canvas?.height || height;
   const bloomAmt = Math.max(0, Math.min(2, postFx?.bloomIntensity ?? 0));
   if (bloomAmt > 0.2) {
     ctx.save();
@@ -3411,7 +3405,7 @@ function applyOpenHubPostFx(
 
   const kaleido = postFx?.kaleidoscopeSegments ?? 0;
   if (kaleido > 0) {
-    applyKaleidoscopePass(ctx, kaleido, width, height);
+    applyKaleidoscopePass(ctx, kaleido, cw, ch);
   }
 
   const splitNorm = clamp01(
@@ -3420,23 +3414,14 @@ function applyOpenHubPostFx(
   if (splitNorm > 0.02) {
     const offsetPx = Math.max(
       1,
-      Math.round(splitNorm * (3 + audio.transientPulse * 4))
+      Math.round(splitNorm * (2.5 + audio.transientPulse * 3))
     );
-    const imgData = ctx.getImageData(0, 0, width, height);
-    const src = new Uint8ClampedArray(imgData.data);
-    const dst = imgData.data;
-    const w = width;
-    const h = height;
-    for (let y = 0; y < h; y++) {
-      for (let x = 0; x < w; x++) {
-        const idx = (y * w + x) * 4;
-        const leftX = Math.max(0, x - offsetPx);
-        const rightX = Math.min(w - 1, x + offsetPx);
-        dst[idx] = Math.max(dst[idx], src[(y * w + leftX) * 4]);
-        dst[idx + 2] = Math.max(dst[idx + 2], src[(y * w + rightX) * 4 + 2]);
-      }
-    }
-    ctx.putImageData(imgData, 0, 0);
+    ctx.save();
+    ctx.globalCompositeOperation = "screen";
+    ctx.globalAlpha = clamp01(splitNorm * 0.35);
+    ctx.drawImage(ctx.canvas, -offsetPx, 0, width, height);
+    ctx.drawImage(ctx.canvas, offsetPx, 0, width, height);
+    ctx.restore();
   }
 
   const grainStrength = clamp01(
@@ -5457,18 +5442,37 @@ export function renderSceneFrame(
   const frameIndex = Math.round(effectiveTime * STUDY_FPS);
   const seed = (input.seed ?? 1) >>> 0;
   const aspectSpec = VIDEO_ASPECT_FORMATS[input.aspectRatio ?? "16:9"];
-  const targetW = aspectSpec.width;
-  const targetH = aspectSpec.height;
+  const logicalW = aspectSpec.width;
+  const logicalH = aspectSpec.height;
+  const canvasW = ctx.canvas?.width || logicalW;
+  const canvasH = ctx.canvas?.height || logicalH;
+  const scaleX = canvasW / Math.max(1, logicalW);
+  const scaleY = canvasH / Math.max(1, logicalH);
+  const targetW = logicalW;
+  const targetH = logicalH;
   const isCustomAspect =
     targetW !== STUDY_SIZE.width || targetH !== STUDY_SIZE.height;
   const offscreen = isCustomAspect ? getStageOffscreenContext() : null;
   const sceneCtx = offscreen ? offscreen.ctx : ctx;
+  const isV4OrV5RichScene = Boolean(
+    scene3d?.actors?.length ||
+      scene3d?.environment?.lightingPreset ||
+      scene3d?.environment?.backdropType ||
+      scene3d?.cartoonPhysics ||
+      (scene3d?.renderStyle?.resolutionScale ?? 0) >= 0.85
+  );
 
   sceneCtx.save();
   sceneCtx.resetTransform();
+  if (!offscreen && (scaleX !== 1 || scaleY !== 1)) {
+    sceneCtx.scale(scaleX, scaleY);
+  }
   sceneCtx.globalAlpha = 1;
   sceneCtx.globalCompositeOperation = "source-over";
-  sceneCtx.imageSmoothingEnabled = false;
+  sceneCtx.imageSmoothingEnabled = isV4OrV5RichScene;
+  if (isV4OrV5RichScene && "imageSmoothingQuality" in sceneCtx) {
+    sceneCtx.imageSmoothingQuality = "high";
+  }
 
   if (descriptor.style === "pixel-16") {
     const pendulumPanX =
@@ -5623,6 +5627,9 @@ export function renderSceneFrame(
         tctx.drawImage(sceneCtx.canvas, 0, 0, lowW, lowH);
         sceneCtx.save();
         sceneCtx.resetTransform();
+        if (!offscreen && (scaleX !== 1 || scaleY !== 1)) {
+          sceneCtx.scale(scaleX, scaleY);
+        }
         sceneCtx.imageSmoothingEnabled = false;
         sceneCtx.drawImage(tmp, 0, 0, STUDY_SIZE.width, STUDY_SIZE.height);
         sceneCtx.restore();
@@ -5689,6 +5696,9 @@ export function renderSceneFrame(
   }
 
   sceneCtx.resetTransform();
+  if (!offscreen && (scaleX !== 1 || scaleY !== 1)) {
+    sceneCtx.scale(scaleX, scaleY);
+  }
 
   if ((effects.psychedelic ?? 0) > 0.01) {
     applyPsychedelicPass(
@@ -5704,12 +5714,18 @@ export function renderSceneFrame(
 
   ctx.save();
   ctx.resetTransform();
+  if (scaleX !== 1 || scaleY !== 1) {
+    ctx.scale(scaleX, scaleY);
+  }
   ctx.globalAlpha = 1;
   ctx.globalCompositeOperation = "source-over";
-  ctx.imageSmoothingEnabled = false;
+  ctx.imageSmoothingEnabled = isV4OrV5RichScene;
+  if (isV4OrV5RichScene && "imageSmoothingQuality" in ctx) {
+    ctx.imageSmoothingQuality = "high";
+  }
 
   if (offscreen) {
-    // Blit de la scène 320x180 centrée avec zoom adapté à la largeur cible
+    // Blit de la scène centrée avec zoom adapté à la largeur cible
     const scale = Math.max(targetW / STUDY_SIZE.width, 0.82);
     const drawW = Math.round(STUDY_SIZE.width * scale);
     const drawH = Math.round(STUDY_SIZE.height * scale);
@@ -5725,13 +5741,18 @@ export function renderSceneFrame(
     const rawTop =
       colorTransition > 0.01 || !scene3d
         ? palette.sky
-        : backdropLayer?.skyGradient?.[0] ?? scene3d.environment.skyColor;
+        : scene3d.environment.backdropColors?.[0] ??
+          backdropLayer?.skyGradient?.[0] ??
+          scene3d.environment.skyColor;
     const rawMid =
       colorTransition > 0.01 || !scene3d
         ? palette.haze
-        : backdropLayer?.skyGradient?.[1] ?? scene3d.environment.fogColor;
+        : scene3d.environment.backdropColors?.[1] ??
+          backdropLayer?.skyGradient?.[1] ??
+          scene3d.environment.fogColor;
     const rawBottom = scene3d
-      ? lerpHexColor(rawMid, "#000000", 0.58)
+      ? scene3d.environment.backdropColors?.[2] ??
+        lerpHexColor(rawMid, "#000000", 0.58)
       : rawTop;
 
     const topStop = Math.max(0, Math.min(1, dy / Math.max(1, targetH)));
@@ -5746,6 +5767,39 @@ export function renderSceneFrame(
     ctx.fillRect(0, 0, targetW, targetH);
 
     ctx.drawImage(offscreen.canvas, dx, dy, drawW, drawH);
+
+    // Ré-exécuter les acteurs V4/V5 directement en résolution HD sur le canvas principal
+    if (scene3d && scene3d.actors && scene3d.actors.length > 0) {
+      ctx.save();
+      ctx.translate(dx, dy);
+      ctx.scale(drawW / STUDY_SIZE.width, drawH / STUDY_SIZE.height);
+      if (scene3d.environment.backdropType || scene3d.environment.lightingPreset) {
+        drawV4EnvironmentLayer(
+          ctx,
+          scene3d,
+          audio,
+          input.timeSeconds,
+          STUDY_SIZE.width,
+          STUDY_SIZE.height,
+          scene3d.seed ?? seed,
+          reducedMotion
+        );
+      }
+      renderV4Actors(
+        ctx,
+        scene3d,
+        audio,
+        effectiveTime,
+        STUDY_SIZE.width,
+        STUDY_SIZE.height,
+        scene3d.seed ?? seed,
+        reducedMotion,
+        camOff,
+        input.faderValues,
+        beatPhase
+      );
+      ctx.restore();
+    }
   }
 
   const tools = createRasterTools(ctx);

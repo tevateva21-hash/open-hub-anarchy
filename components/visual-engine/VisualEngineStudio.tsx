@@ -38,6 +38,7 @@ import {
 } from "@/lib/visual-engine/audioAnalysis";
 import { clearAnalysisCache } from "@/lib/visual-engine/cache";
 import { importAudio } from "@/lib/visual-engine/importAudio";
+import { fixRecordedVideoSeekable } from "@/lib/visual-engine/webm-duration-fix";
 import {
   createDefaultStudioProject,
   evaluateSequenceAt,
@@ -342,6 +343,7 @@ export const VisualEngineStudio: React.FC = () => {
   const isRecordingVideoRef = useRef<boolean>(false);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const recordedChunksRef = useRef<Blob[]>([]);
+  const recordingStartTimeRef = useRef<number>(0);
   const recordAutoStopTimerRef = useRef<number | null>(null);
   const localAudioCaptureRef = useRef<{
     el: HTMLAudioElement;
@@ -681,12 +683,16 @@ export const VisualEngineStudio: React.FC = () => {
   const handleExportSnapshot = () => {
     const src = stageCanvasRef.current;
     if (!src) return;
+    // Rendu direct en haute définition (exportWidth × exportHeight, ex: 1280×720 ou 1080×1920)
     const exportCanvas = document.createElement("canvas");
     exportCanvas.width = aspectSpec.exportWidth;
     exportCanvas.height = aspectSpec.exportHeight;
     const ectx = exportCanvas.getContext("2d");
     if (!ectx) return;
-    ectx.imageSmoothingEnabled = false;
+    ectx.imageSmoothingEnabled = true;
+    if ("imageSmoothingQuality" in ectx) {
+      ectx.imageSmoothingQuality = "high";
+    }
     ectx.drawImage(
       src,
       0,
@@ -694,13 +700,16 @@ export const VisualEngineStudio: React.FC = () => {
       aspectSpec.exportWidth,
       aspectSpec.exportHeight
     );
-    const url = exportCanvas.toDataURL("image/png");
+    const url = exportCanvas.toDataURL("image/png", 1.0);
     const a = document.createElement("a");
     a.href = url;
     a.download = `anarchy-visual-${aspectRatio.replace(":", "x")}-${preset.sceneId}-${preset.seed}.png`;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
+    setPresetMessage(
+      `Image PNG Haute Définition (${aspectSpec.exportWidth}×${aspectSpec.exportHeight}) téléchargée !`
+    );
   };
 
   const handleWhisperTranscribe = async () => {
@@ -788,7 +797,8 @@ export const VisualEngineStudio: React.FC = () => {
     }
 
     try {
-      const videoStream = canvas.captureStream(30);
+      // Capture à 60 FPS en résolution HD native (exportWidth × exportHeight)
+      const videoStream = canvas.captureStream(60);
       const tracks: MediaStreamTrack[] = [...videoStream.getVideoTracks()];
       let hasAudioTrack = false;
 
@@ -856,6 +866,7 @@ export const VisualEngineStudio: React.FC = () => {
       const combinedStream = new MediaStream(tracks);
       const candidates = hasAudioTrack
         ? [
+            "video/mp4;codecs=avc1.640028,mp4a.40.2",
             "video/mp4;codecs=avc1.42E01E,mp4a.40.2",
             "video/mp4;codecs=avc1,mp4a",
             "video/mp4",
@@ -864,6 +875,7 @@ export const VisualEngineStudio: React.FC = () => {
             "video/webm",
           ]
         : [
+            "video/mp4;codecs=avc1.640028",
             "video/mp4;codecs=avc1",
             "video/mp4",
             "video/webm;codecs=vp9",
@@ -871,32 +883,42 @@ export const VisualEngineStudio: React.FC = () => {
           ];
       const mimeType =
         candidates.find((t) => MediaRecorder.isTypeSupported(t)) ?? "";
-      const recorder = mimeType
-        ? new MediaRecorder(combinedStream, { mimeType })
-        : new MediaRecorder(combinedStream);
+      const recorderOptions: MediaRecorderOptions = {
+        ...(mimeType ? { mimeType } : {}),
+        videoBitsPerSecond: 16_000_000, // 16 Mbps Haute Qualité HD
+        audioBitsPerSecond: 256_000, // 256 kbps Audio Studio
+      };
+      const recorder = new MediaRecorder(combinedStream, recorderOptions);
 
       recordedChunksRef.current = [];
+      recordingStartTimeRef.current = performance.now();
       recorder.ondataavailable = (ev) => {
         if (ev.data && ev.data.size > 0) {
           recordedChunksRef.current.push(ev.data);
         }
       };
-      recorder.onstop = () => {
+      recorder.onstop = async () => {
+        const elapsedMs = Math.max(
+          500,
+          Math.round(performance.now() - recordingStartTimeRef.current)
+        );
         const finalType = recorder.mimeType || mimeType || "video/webm";
         const ext = finalType.includes("mp4") ? "mp4" : "webm";
-        const blob = new Blob(recordedChunksRef.current, { type: finalType });
-        const url = URL.createObjectURL(blob);
+        const rawBlob = new Blob(recordedChunksRef.current, { type: finalType });
+        // Injecter la durée EBML dans l'en-tête WebM pour rendre la vidéo déplaçable dans le temps (seekable)
+        const seekableBlob = await fixRecordedVideoSeekable(rawBlob, elapsedMs);
+        const url = URL.createObjectURL(seekableBlob);
         const a = document.createElement("a");
         a.href = url;
-        a.download = `anarchy-visual-${clipStartSeconds.toFixed(0)}s-${clipDurationSeconds}s.${ext}`;
+        a.download = `anarchy-visual-${aspectRatio.replace(":", "x")}-${clipStartSeconds.toFixed(0)}s-${clipDurationSeconds}s.${ext}`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        URL.revokeObjectURL(url);
+        window.setTimeout(() => URL.revokeObjectURL(url), 5000);
         isRecordingVideoRef.current = false;
         setIsRecordingVideo(false);
         setPresetMessage(
-          `Extrait vidéo + son exporté (.${ext.toUpperCase()} · ${clipDurationSeconds}s) !`
+          `Vidéo HD (${aspectSpec.exportWidth}×${aspectSpec.exportHeight} · 16 Mbps · Seekable) exportée (.${ext.toUpperCase()}) !`
         );
       };
 
@@ -921,12 +943,12 @@ export const VisualEngineStudio: React.FC = () => {
 
       setPresetError("");
       setPresetMessage(
-        `⏺ Enregistrement de la zone prévisualisée (${clipStartSeconds.toFixed(1)}s → ${(clipStartSeconds + clipDurationSeconds).toFixed(1)}s · ${hasAudioTrack ? "Son inclus" : "Vidéo seule"})...`
+        `⏺ Enregistrement HD ${aspectSpec.exportWidth}×${aspectSpec.exportHeight} (${clipStartSeconds.toFixed(1)}s → ${(clipStartSeconds + clipDurationSeconds).toFixed(1)}s · ${hasAudioTrack ? "Son inclus" : "Vidéo seule"})...`
       );
     } catch {
       isRecordingVideoRef.current = false;
       setIsRecordingVideo(false);
-      setPresetError("Impossible de démarrer l'enregistrement MP4.");
+      setPresetError("Impossible de démarrer l'enregistrement vidéo HD.");
     }
   };
 
@@ -1222,8 +1244,8 @@ export const VisualEngineStudio: React.FC = () => {
               >
                 <canvas
                   ref={stageCanvasRef}
-                  width={aspectSpec.width}
-                  height={aspectSpec.height}
+                  width={aspectSpec.exportWidth}
+                  height={aspectSpec.exportHeight}
                   role="img"
                   aria-label={activeDescriptor.ariaLabel}
                   className={
@@ -1232,7 +1254,6 @@ export const VisualEngineStudio: React.FC = () => {
                       : "w-full h-auto rounded-lg bg-black block"
                   }
                   style={{
-                    imageRendering: "pixelated",
                     aspectRatio: `${aspectSpec.width} / ${aspectSpec.height}`,
                   }}
                 />
