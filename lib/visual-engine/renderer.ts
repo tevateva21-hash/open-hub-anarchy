@@ -7,12 +7,16 @@ import type {
   Anarchy3DCloner,
   Anarchy3DGenerator,
   Anarchy3DPostFx,
+  Anarchy3DPostFxStep,
   Anarchy3DRenderStyle,
   Anarchy3DScene,
   Anarchy3DSidePropsLayer,
   Anarchy3DSubject,
   Anarchy3DTerrainLayer,
   AnarchyProceduralPart,
+  AnarchySceneTransitionType,
+  AnarchyStudioLightingPreset,
+  AnarchyToneMapping,
   AudioAnalysis,
   AudioFeatures,
   PaletteId,
@@ -2085,6 +2089,665 @@ function drawAnarchy3DGeneratorsOverlay(
       }
       ctx.restore();
     }
+  }
+}
+
+/**
+ * Bruit 3D déterministe lisse (Simplex/Value FBM) — zéro eval, 60 FPS.
+ */
+function fbmNoise3D(x: number, y: number, z: number): number {
+  const n1 = Math.sin(x * 1.7 + Math.cos(y * 1.3 + z * 0.9)) * Math.cos(z * 1.5 - x * 0.8);
+  const n2 = Math.sin(x * 3.1 - y * 2.7 + z * 2.3) * 0.5;
+  const n3 = Math.cos(y * 5.3 + z * 4.1 - x * 3.7) * 0.25;
+  return (n1 + n2 + n3) / 1.75;
+}
+
+const V4_SPRITE_IMAGE_CACHE = new Map<string, HTMLImageElement>();
+
+function getStudioLightConfig(preset?: AnarchyStudioLightingPreset): {
+  keyColor: string;
+  rimColor: string;
+  ambient: number;
+  lightDirX: number;
+  lightDirY: number;
+} {
+  switch (preset) {
+    case "studio_clean":
+      return { keyColor: "#FFFFFF", rimColor: "#93C5FD", ambient: 0.45, lightDirX: -0.45, lightDirY: -0.6 };
+    case "cyber_neon":
+      return { keyColor: "#00F0FF", rimColor: "#FF1B6B", ambient: 0.3, lightDirX: 0.5, lightDirY: -0.5 };
+    case "sunset_warm":
+      return { keyColor: "#FDE047", rimColor: "#EA580C", ambient: 0.36, lightDirX: -0.3, lightDirY: -0.7 };
+    case "dark_void":
+    default:
+      return { keyColor: "#E0E7FF", rimColor: "#6366F1", ambient: 0.18, lightDirX: 0.35, lightDirY: -0.65 };
+  }
+}
+
+/**
+ * COUCHE 1 v4 — Environnement, Éclairage Studio virtuel, Fond procédural & Brouillard volumétrique.
+ */
+function drawV4EnvironmentLayer(
+  ctx: CanvasRenderingContext2D,
+  scene: Anarchy3DScene,
+  audio: SceneAudioState,
+  timeSeconds: number,
+  width: number,
+  height: number,
+  seed: number,
+  reducedMotion: boolean
+): void {
+  const env = scene.environment;
+  const cols =
+    env.backdropColors && env.backdropColors.length > 0
+      ? env.backdropColors
+      : [env.skyColor, env.fogColor, env.terrainPrimaryColor];
+  const c0 = cols[0] ?? "#090D16";
+  const c1 = cols[1] ?? c0;
+  const c2 = cols[2] ?? c1;
+  const t = reducedMotion ? 0 : timeSeconds;
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+
+  switch (env.backdropType) {
+    case "solid_color":
+      ctx.fillStyle = c0;
+      ctx.fillRect(0, 0, width, height);
+      break;
+    case "liquid_plasma": {
+      drawProceduralBackdropShader(
+        ctx,
+        { type: "plasma_fluid", colors: [c0, c1, c2], speed: 1.15, audioReactive: 0.85 },
+        audio,
+        timeSeconds,
+        width,
+        height,
+        reducedMotion
+      );
+      break;
+    }
+    case "grid_horizon": {
+      drawProceduralBackdropShader(
+        ctx,
+        { type: "grid_horizon", colors: [c0, c1, c2], speed: 1.0, audioReactive: 0.65 },
+        audio,
+        timeSeconds,
+        width,
+        height,
+        reducedMotion
+      );
+      break;
+    }
+    case "starfield": {
+      const grad = ctx.createLinearGradient(0, 0, 0, height);
+      grad.addColorStop(0, c0);
+      grad.addColorStop(1, c1);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, width, height);
+      let rng = (seed ^ 0x6c8e9cf5) >>> 0;
+      const next = () => {
+        rng = (rng * 1664525 + 1013904223) >>> 0;
+        return rng / 4294967296;
+      };
+      for (let i = 0; i < 95; i++) {
+        const sx = next() * width;
+        const sy = next() * height;
+        const tw = 0.35 + 0.65 * Math.abs(Math.sin(t * (0.8 + (i % 4) * 0.4) + i));
+        const r = i % 9 === 0 ? 1.8 : 0.9;
+        ctx.globalAlpha = clamp01(tw * (0.65 + audio.trebleEnvelope * 0.35));
+        ctx.fillStyle = i % 4 === 0 ? c2 : "#FFFFFF";
+        ctx.beginPath();
+        ctx.arc(sx, sy, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+      break;
+    }
+    case "gradient_sky":
+    default: {
+      const grad = ctx.createLinearGradient(0, 0, 0, height);
+      grad.addColorStop(0, c0);
+      grad.addColorStop(0.55, c1);
+      grad.addColorStop(1, c2);
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, width, height);
+      break;
+    }
+  }
+
+  // Éclairage studio virtuel (halo key-light + rim-light doux)
+  if (env.lightingPreset) {
+    const light = getStudioLightConfig(env.lightingPreset);
+    const keyX = width * (0.5 + light.lightDirX * 0.5);
+    const keyY = height * (0.5 + light.lightDirY * 0.45);
+    const keyGrad = ctx.createRadialGradient(keyX, keyY, 4, keyX, keyY, width * 0.72);
+    keyGrad.addColorStop(0, light.keyColor);
+    keyGrad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.globalAlpha = 0.16 + audio.bassEnvelope * 0.1;
+    ctx.fillStyle = keyGrad;
+    ctx.fillRect(0, 0, width, height);
+
+    const rimX = width * (0.5 - light.lightDirX * 0.55);
+    const rimY = height * 0.72;
+    const rimGrad = ctx.createRadialGradient(rimX, rimY, 4, rimX, rimY, width * 0.65);
+    rimGrad.addColorStop(0, light.rimColor);
+    rimGrad.addColorStop(1, "rgba(0,0,0,0)");
+    ctx.globalAlpha = 0.14 + audio.midEnvelope * 0.12;
+    ctx.fillStyle = rimGrad;
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalAlpha = 1;
+  }
+
+  // Brouillard volumétrique doux
+  if (env.fog?.enabled && (env.fog.density ?? 0) > 0.002) {
+    const fogGrad = ctx.createLinearGradient(0, height * 0.45, 0, height);
+    fogGrad.addColorStop(0, "rgba(0,0,0,0)");
+    fogGrad.addColorStop(1, env.fog.color ?? env.fogColor);
+    ctx.globalAlpha = clamp01((env.fog.density ?? 0.03) * 14);
+    ctx.fillStyle = fogGrad;
+    ctx.fillRect(0, 0, width, height);
+    ctx.globalAlpha = 1;
+  }
+
+  ctx.restore();
+}
+
+function resolveActorModulationValue(
+  source: string,
+  audio: SceneAudioState,
+  faderValues?: Record<string, number>
+): number {
+  switch (source) {
+    case "bass":
+      return audio.bassEnvelope;
+    case "lowMid":
+      return clamp01(audio.bassEnvelope * 0.45 + audio.midEnvelope * 0.55);
+    case "highMid":
+      return clamp01(audio.midEnvelope * 0.55 + audio.trebleEnvelope * 0.45);
+    case "treble":
+      return audio.trebleEnvelope;
+    case "energy":
+      return clamp01((audio.bassEnvelope + audio.midEnvelope + audio.trebleEnvelope) / 2.2);
+    default:
+      if (source.startsWith("fader_") && faderValues) {
+        return clamp01(faderValues[source] ?? 0);
+      }
+      return 0;
+  }
+}
+
+/**
+ * COUCHE 2 v4 — Acteurs Organiques & Hybrides (`actors[]`) avec modulations audio + 19 faders.
+ */
+function renderV4Actors(
+  ctx: CanvasRenderingContext2D,
+  scene: Anarchy3DScene,
+  audio: SceneAudioState,
+  timeSeconds: number,
+  width: number,
+  height: number,
+  seed: number,
+  reducedMotion: boolean,
+  camOff: PerspectiveOffsets,
+  faderValues?: Record<string, number>
+): void {
+  const actors = scene.actors;
+  if (!actors || actors.length === 0) return;
+
+  const t = reducedMotion ? 0 : timeSeconds;
+  const light = getStudioLightConfig(scene.environment.lightingPreset);
+
+  ctx.save();
+  ctx.imageSmoothingEnabled = true;
+
+  for (let aIdx = 0; aIdx < actors.length; aIdx++) {
+    const actor = actors[aIdx];
+    const baseScale =
+      typeof actor.scale === "number"
+        ? actor.scale
+        : Array.isArray(actor.scale)
+        ? (actor.scale[0] + actor.scale[1] + actor.scale[2]) / 3
+        : 1.0;
+
+    let modScale = baseScale;
+    let modNoise = actor.noiseStrength ?? 0.6;
+    let modRotSpeed = actor.speed ?? 1.0;
+    let modEmissive = 0.7;
+    let modPosY = actor.position?.[1] ?? 0;
+
+    if (actor.audioModulation) {
+      for (const m of actor.audioModulation) {
+        const v = resolveActorModulationValue(m.source, audio, faderValues) * m.amount + (m.offset ?? 0);
+        if (m.target === "scale") modScale = Math.max(0.15, modScale + v);
+        else if (m.target === "noiseStrength") modNoise = Math.max(0, modNoise + v);
+        else if (m.target === "rotationSpeed") modRotSpeed += v;
+        else if (m.target === "emissiveIntensity") modEmissive = clamp01(modEmissive + v);
+        else if (m.target === "positionY") modPosY += v;
+      }
+    }
+
+    const posX = actor.position?.[0] ?? 0;
+    const posZ = Math.max(1.8, actor.position?.[2] ?? 5.0);
+    const depthScale = 5.0 / posZ;
+    const cx = width * 0.5 + (posX - camOff.yawRad * 1.4) * (width * 0.16) * depthScale;
+    const cy = height * 0.5 - (modPosY - camOff.pitchRad * 1.1) * (height * 0.22) * depthScale;
+    const col1 = actor.color ?? "#38BDF8";
+    const col2 = actor.secondaryColor ?? "#F472B6";
+    const mat = actor.material ?? "chrome";
+
+    if (actor.type === "organic_blob") {
+      const baseR = Math.min(width, height) * 0.24 * modScale * depthScale;
+      const steps = Math.max(24, Math.min(96, (actor.detail ?? 28) * 2));
+      const freq = actor.noiseFrequency ?? 1.8;
+
+      ctx.save();
+      ctx.beginPath();
+      for (let i = 0; i <= steps; i++) {
+        const ang = (i / steps) * Math.PI * 2;
+        const nx = Math.cos(ang) * freq + t * modRotSpeed * 0.55;
+        const ny = Math.sin(ang) * freq - t * modRotSpeed * 0.42;
+        const nz = t * modRotSpeed * 0.35 + aIdx * 2.1;
+        const disp = fbmNoise3D(nx, ny, nz) * modNoise * 0.36;
+        const r = baseR * (1 + disp);
+        const px = cx + Math.cos(ang) * r;
+        const py = cy + Math.sin(ang) * r;
+        if (i === 0) ctx.moveTo(px, py);
+        else ctx.lineTo(px, py);
+      }
+      ctx.closePath();
+
+      const hlX = cx + light.lightDirX * baseR * 0.55;
+      const hlY = cy + light.lightDirY * baseR * 0.55;
+      const grad = ctx.createRadialGradient(hlX, hlY, baseR * 0.06, cx, cy, baseR * 1.25);
+      if (mat === "chrome") {
+        grad.addColorStop(0, "#FFFFFF");
+        grad.addColorStop(0.28, col1);
+        grad.addColorStop(0.62, lerpHexColor(col2, "#0F172A", 0.55));
+        grad.addColorStop(0.88, col2);
+        grad.addColorStop(1, "#020617");
+      } else if (mat === "frosted_glass") {
+        ctx.globalAlpha = 0.72;
+        grad.addColorStop(0, "#FFFFFF");
+        grad.addColorStop(0.45, col1);
+        grad.addColorStop(1, col2);
+      } else if (mat === "emissive_neon") {
+        grad.addColorStop(0, "#FFFFFF");
+        grad.addColorStop(0.4, col1);
+        grad.addColorStop(1, col2);
+      } else {
+        grad.addColorStop(0, lerpHexColor(col1, light.keyColor, 0.45));
+        grad.addColorStop(0.65, col1);
+        grad.addColorStop(1, lerpHexColor(col2, "#09090B", 0.65));
+      }
+
+      ctx.fillStyle = grad;
+      ctx.fill();
+
+      // Reflet spéculaire interne liquide (Blender studio sheen)
+      if (mat === "chrome" || mat === "frosted_glass") {
+        ctx.globalAlpha = mat === "chrome" ? 0.55 : 0.32;
+        ctx.strokeStyle = "#FFFFFF";
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.ellipse(
+          hlX,
+          hlY,
+          Math.max(4, baseR * 0.34),
+          Math.max(2, baseR * 0.16),
+          -0.45,
+          0,
+          Math.PI * 2
+        );
+        ctx.fillStyle = "rgba(255,255,255,0.45)";
+        ctx.fill();
+      }
+
+      if (mat === "toon_cel_outline") {
+        ctx.globalAlpha = 1;
+        ctx.strokeStyle = "#09090B";
+        ctx.lineWidth = 2.6;
+        ctx.stroke();
+      } else if (mat === "emissive_neon") {
+        ctx.globalAlpha = 0.65 * modEmissive;
+        ctx.strokeStyle = col2;
+        ctx.lineWidth = 2.2;
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else if (actor.type === "wave_terrain") {
+      const layers = Math.max(6, Math.min(18, Math.round((actor.detail ?? 16) * 0.65)));
+      const freq = actor.noiseFrequency ?? 1.2;
+      ctx.save();
+      for (let l = 0; l < layers; l++) {
+        const frac = l / Math.max(1, layers - 1);
+        const yBase = height * (0.48 + frac * 0.48) - modPosY * 18;
+        const amp = (14 + frac * 26) * modScale * (0.5 + modNoise * 0.65);
+        ctx.beginPath();
+        ctx.moveTo(0, height);
+        for (let x = 0; x <= width; x += 6) {
+          const nx = (x / width) * 3.8 * freq;
+          const n = fbmNoise3D(nx, frac * 2.2 + t * modRotSpeed * 0.45, t * 0.3 + l * 0.4);
+          const y = yBase + n * amp;
+          ctx.lineTo(x, y);
+        }
+        ctx.lineTo(width, height);
+        ctx.closePath();
+
+        const layerColor = lerpHexColor(col2, col1, frac);
+        ctx.fillStyle = lerpHexColor(layerColor, "#09090B", (1 - frac) * 0.45);
+        ctx.globalAlpha = 0.32 + frac * 0.62;
+        ctx.fill();
+        ctx.strokeStyle = lerpHexColor(layerColor, light.keyColor, 0.45);
+        ctx.lineWidth = mat === "toon_cel_outline" ? 2.0 : 1.0;
+        ctx.globalAlpha = 0.55 + frac * 0.4;
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else if (actor.type === "spline_ribbons") {
+      const ribbons = Math.max(2, Math.min(14, actor.ribbonCount ?? 6));
+      const thickness = Math.max(0.8, Math.min(6, actor.thickness ?? 2.2));
+      ctx.save();
+      ctx.lineCap = "round";
+      for (let r = 0; r < ribbons; r++) {
+        const rf = r / Math.max(1, ribbons - 1);
+        const rCol = lerpHexColor(col1, col2, rf);
+        ctx.strokeStyle = rCol;
+        ctx.lineWidth = thickness * (0.7 + audio.trebleEnvelope * 0.6);
+        ctx.globalAlpha = clamp01(0.45 + modEmissive * 0.5);
+        ctx.beginPath();
+        const segs = 28;
+        for (let s = 0; s <= segs; s++) {
+          const u = s / segs;
+          const ang = u * Math.PI * 2 + t * modRotSpeed * (0.55 + rf * 0.5) + r * 0.85;
+          const radX = width * (0.22 + rf * 0.22) * modScale * depthScale;
+          const radY = height * (0.14 + Math.sin(u * Math.PI * 3 + t + r) * 0.14) * modScale * depthScale;
+          const px = cx + Math.cos(ang) * radX;
+          const py = cy + Math.sin(ang * 1.5 + r) * radY;
+          if (s === 0) ctx.moveTo(px, py);
+          else ctx.lineTo(px, py);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    } else if (actor.type === "particle_swarm") {
+      // Cap à ~700 particules bokeh dessinées pour rester à 60 FPS fluide tout en représentant 1k-10k
+      const drawCount = Math.max(120, Math.min(720, Math.round((actor.count ?? 3000) * 0.12)));
+      const behavior = actor.behavior ?? "curl_noise_flow";
+      let rng = ((seed + aIdx * 4099) ^ 0x9e3779b9) >>> 0;
+      const next = () => {
+        rng = (rng * 1664525 + 1013904223) >>> 0;
+        return rng / 4294967296;
+      };
+      ctx.save();
+      for (let i = 0; i < drawCount; i++) {
+        const r0 = next();
+        const r1 = next();
+        const r2 = next();
+        let px = cx;
+        let py = cy;
+        if (behavior === "curl_noise_flow") {
+          const bx = (r0 - 0.5) * width * 1.1;
+          const by = (r1 - 0.5) * height * 1.1;
+          const nx = bx * 0.012 + t * modRotSpeed * 0.35;
+          const ny = by * 0.012 - t * modRotSpeed * 0.28;
+          const curlX = fbmNoise3D(nx, ny, r2 * 4) * 52 * modScale;
+          const curlY = fbmNoise3D(ny + 3.1, nx - 1.7, r2 * 4) * 44 * modScale;
+          px = ((cx + bx + curlX) % width + width) % width;
+          py = ((cy + by + curlY) % height + height) % height;
+        } else if (behavior === "vortex") {
+          const ang = r0 * Math.PI * 2 + t * modRotSpeed * (0.7 + r1 * 1.5);
+          const rad = (10 + r1 * width * 0.44) * modScale;
+          px = cx + Math.cos(ang) * rad;
+          py = cy + Math.sin(ang) * rad * 0.64;
+        } else if (behavior === "beat_explosion") {
+          const ang = r0 * Math.PI * 2;
+          const rad = ((t * modRotSpeed * 0.65 + r2) % 1) * width * 0.52 * modScale;
+          px = cx + Math.cos(ang) * rad;
+          py = cy + Math.sin(ang) * rad * 0.72;
+        } else {
+          // floating_dust
+          px = ((r0 * width + Math.sin(t * 0.5 + i) * 18) % width + width) % width;
+          py = ((r1 * height - t * modRotSpeed * (12 + r2 * 18)) % height + height) % height;
+        }
+        const sz = (0.8 + r2 * 2.4) * (behavior === "floating_dust" ? 0.9 : 1.15);
+        ctx.globalAlpha = clamp01((0.32 + r2 * 0.65) * (0.65 + modEmissive * 0.45));
+        ctx.fillStyle = i % 3 === 0 ? col2 : col1;
+        ctx.beginPath();
+        ctx.arc(px, py, sz, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    } else if (actor.type === "glb_model") {
+      // Rendu procédural de sculpture/totem 3D haute lisibilité avec surcharge matériau (chrome, glass, clay, toon_cel_outline, neon)
+      const r = Math.min(width, height) * 0.22 * modScale * depthScale;
+      const rot = t * modRotSpeed * 0.9;
+      ctx.save();
+      ctx.translate(cx, cy);
+      const facets = 6;
+      for (let f = 0; f < facets; f++) {
+        const a0 = rot + (f / facets) * Math.PI * 2;
+        const a1 = rot + ((f + 1) / facets) * Math.PI * 2;
+        const x0 = Math.cos(a0) * r;
+        const x1 = Math.cos(a1) * r;
+        const zAvg = (Math.sin(a0) + Math.sin(a1)) * 0.5;
+        if (zAvg < -0.15) continue;
+        const shade = clamp01(0.35 + zAvg * 0.65);
+        ctx.beginPath();
+        ctx.moveTo(0, -r * 1.15);
+        ctx.lineTo(x0, -r * 0.15);
+        ctx.lineTo(x1, -r * 0.15);
+        ctx.closePath();
+        ctx.fillStyle =
+          mat === "chrome"
+            ? lerpHexColor("#0F172A", "#FFFFFF", shade)
+            : mat === "toon_cel_outline"
+            ? shade > 0.62
+              ? col1
+              : col2
+            : lerpHexColor(col2, col1, shade);
+        ctx.globalAlpha = mat === "frosted_glass" ? 0.68 : 0.95;
+        ctx.fill();
+        if (mat === "toon_cel_outline" || mat === "emissive_neon") {
+          ctx.strokeStyle = mat === "toon_cel_outline" ? "#09090B" : col2;
+          ctx.lineWidth = mat === "toon_cel_outline" ? 2.4 : 1.5;
+          ctx.stroke();
+        }
+
+        ctx.beginPath();
+        ctx.moveTo(0, r * 1.05);
+        ctx.lineTo(x0, -r * 0.15);
+        ctx.lineTo(x1, -r * 0.15);
+        ctx.closePath();
+        ctx.fillStyle = lerpHexColor(col1, "#09090B", 0.35 + (1 - shade) * 0.4);
+        ctx.fill();
+        if (mat === "toon_cel_outline" || mat === "emissive_neon") {
+          ctx.stroke();
+        }
+      }
+      ctx.restore();
+    } else if (actor.type === "sprite_2d") {
+      // Plan 2D parallaxe BD/cartoon dans l'espace 3D (image externe ou mascotte Open Hub à lunettes 3D)
+      const parallax = actor.parallax ?? 1.0;
+      const px = cx - camOff.yawRad * 26 * parallax;
+      const py = cy + Math.sin(t * 2.4) * 5 * modScale;
+      const s = Math.min(width, height) * 0.22 * modScale * depthScale;
+      ctx.save();
+      ctx.translate(px, py);
+
+      let drewImg = false;
+      if (actor.url && typeof Image !== "undefined" && !actor.url.endsWith(".glb")) {
+        let img = V4_SPRITE_IMAGE_CACHE.get(actor.url);
+        if (!img) {
+          img = new Image();
+          img.crossOrigin = "anonymous";
+          img.src = actor.url;
+          V4_SPRITE_IMAGE_CACHE.set(actor.url, img);
+        }
+        if (img.complete && img.naturalWidth > 0) {
+          ctx.drawImage(img, -s, -s, s * 2, s * 2);
+          drewImg = true;
+        }
+      }
+
+      if (!drewImg) {
+        // Illustration BD Cel-Shading Open Hub (personnage à lunettes 3D rouge/cyan)
+        ctx.lineWidth = 2.6;
+        ctx.strokeStyle = "#09090B";
+        // Tête BD
+        ctx.fillStyle = "#FFFBEB";
+        ctx.beginPath();
+        ctx.arc(0, 0, s * 0.85, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        // Monture lunettes 3D
+        ctx.fillStyle = "#FFFFFF";
+        ctx.fillRect(-s * 0.72, -s * 0.24, s * 1.44, s * 0.42);
+        ctx.strokeRect(-s * 0.72, -s * 0.24, s * 1.44, s * 0.42);
+        // Verre gauche Rouge & Verre droit Cyan
+        ctx.fillStyle = col1;
+        ctx.fillRect(-s * 0.62, -s * 0.16, s * 0.54, s * 0.26);
+        ctx.strokeRect(-s * 0.62, -s * 0.16, s * 0.54, s * 0.26);
+        ctx.fillStyle = col2;
+        ctx.fillRect(s * 0.08, -s * 0.16, s * 0.54, s * 0.26);
+        ctx.strokeRect(s * 0.08, -s * 0.16, s * 0.54, s * 0.26);
+        // Sourire expressif réactif aux basses
+        ctx.beginPath();
+        ctx.arc(0, s * 0.28, s * (0.28 + audio.bassEnvelope * 0.12), 0.15 * Math.PI, 0.85 * Math.PI);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
+
+  ctx.restore();
+}
+
+/**
+ * COUCHE 3 v4 — Pile Post-Processing optionnelle & cumulable (`postFX[]`), Tone Mapping & Transitions.
+ */
+function applyV4PostFxStack(
+  ctx: CanvasRenderingContext2D,
+  postFX: readonly Anarchy3DPostFxStep[] | undefined,
+  toneMapping: AnarchyToneMapping | undefined,
+  audio: SceneAudioState,
+  timeSeconds: number,
+  width: number,
+  height: number,
+  transitionType?: AnarchySceneTransitionType,
+  transitionProgress?: number
+): void {
+  if (postFX && postFX.length > 0) {
+    for (const step of postFX) {
+      const intensity = clamp01((step.intensity ?? 0.75) * 0.5) * 2;
+      if (intensity <= 0.01) continue;
+
+      if (step.type === "bloom") {
+        ctx.save();
+        ctx.globalCompositeOperation = "lighter";
+        ctx.globalAlpha = clamp01(intensity * (0.14 + audio.bassEnvelope * 0.1));
+        ctx.drawImage(ctx.canvas, -2, -2, width + 4, height + 4);
+        ctx.restore();
+      } else if (step.type === "depth_of_field") {
+        ctx.save();
+        const rad = Math.max(width, height) * 0.65;
+        const dofGrad = ctx.createRadialGradient(
+          width * 0.5,
+          height * 0.5,
+          rad * 0.38,
+          width * 0.5,
+          height * 0.5,
+          rad
+        );
+        dofGrad.addColorStop(0, "rgba(0,0,0,0)");
+        dofGrad.addColorStop(1, `rgba(6,8,18,${clamp01(intensity * 0.45).toFixed(3)})`);
+        ctx.fillStyle = dofGrad;
+        ctx.fillRect(0, 0, width, height);
+        ctx.restore();
+      } else if (step.type === "toon_outline") {
+        ctx.save();
+        ctx.strokeStyle = step.color ?? "#09090B";
+        ctx.lineWidth = Math.max(2, Math.round(intensity * 3));
+        ctx.strokeRect(2, 2, width - 4, height - 4);
+        ctx.restore();
+      } else if (step.type === "chromatic_aberration") {
+        const offsetPx = Math.max(1, Math.round(intensity * (2.5 + audio.transientPulse * 3)));
+        const imgData = ctx.getImageData(0, 0, width, height);
+        const src = new Uint8ClampedArray(imgData.data);
+        const dst = imgData.data;
+        for (let y = 0; y < height; y++) {
+          for (let x = 0; x < width; x++) {
+            const idx = (y * width + x) * 4;
+            const lx = Math.max(0, x - offsetPx);
+            const rx = Math.min(width - 1, x + offsetPx);
+            dst[idx] = Math.max(dst[idx], src[(y * width + lx) * 4]);
+            dst[idx + 2] = Math.max(dst[idx + 2], src[(y * width + rx) * 4 + 2]);
+          }
+        }
+        ctx.putImageData(imgData, 0, 0);
+      } else if (step.type === "film_grain") {
+        ctx.save();
+        let gRng = ((Math.floor(timeSeconds * 60) * 1664525) ^ 0x517cc1b7) >>> 0;
+        const count = Math.round(width * height * 0.015 * intensity);
+        ctx.fillStyle = "#FFFFFF";
+        ctx.globalAlpha = clamp01(intensity * 0.14);
+        for (let i = 0; i < count; i++) {
+          gRng = (gRng * 1664525 + 1013904223) >>> 0;
+          const gx = (gRng >>> 16) % width;
+          const gy = (gRng & 0xffff) % height;
+          ctx.fillRect(gx, gy, 1, 1);
+        }
+        ctx.restore();
+      } else if (step.type === "pixelate" && typeof document !== "undefined") {
+        const factor = Math.max(2, Math.round(2 + (step.radius ?? 3) * intensity));
+        const pw = Math.max(32, Math.round(width / factor));
+        const ph = Math.max(18, Math.round(height / factor));
+        const tmp = document.createElement("canvas");
+        tmp.width = pw;
+        tmp.height = ph;
+        const tctx = tmp.getContext("2d");
+        if (tctx) {
+          tctx.imageSmoothingEnabled = false;
+          tctx.drawImage(ctx.canvas, 0, 0, pw, ph);
+          ctx.save();
+          ctx.imageSmoothingEnabled = false;
+          ctx.drawImage(tmp, 0, 0, width, height);
+          ctx.restore();
+        }
+      }
+    }
+  }
+
+  // Tone mapping cinéma léger (ACESFilmic / Cineon)
+  if (toneMapping === "aces_filmic" || toneMapping === "cineon") {
+    ctx.save();
+    ctx.globalCompositeOperation = "soft-light";
+    ctx.globalAlpha = toneMapping === "aces_filmic" ? 0.16 : 0.22;
+    ctx.fillStyle = toneMapping === "aces_filmic" ? "#1E293B" : "#1C1917";
+    ctx.fillRect(0, 0, width, height);
+    ctx.restore();
+  }
+
+  // Transitions d'entrée de scène (crossfade, flash)
+  if (
+    transitionType &&
+    transitionType !== "cut" &&
+    transitionProgress !== undefined &&
+    transitionProgress < 1
+  ) {
+    const p = clamp01(transitionProgress);
+    const inv = 1 - p;
+    ctx.save();
+    if (transitionType === "flash") {
+      ctx.fillStyle = "#FFFFFF";
+      ctx.globalAlpha = inv * 0.85;
+      ctx.fillRect(0, 0, width, height);
+    } else if (transitionType === "crossfade") {
+      ctx.fillStyle = "#05070E";
+      ctx.globalAlpha = inv * 0.65;
+      ctx.fillRect(0, 0, width, height);
+    }
+    ctx.restore();
   }
 }
 
@@ -4222,16 +4885,40 @@ export function renderSceneFrame(
       ],
     };
 
-    drawAnarchy3DBackdropLayer(
-      sceneCtx,
-      effectiveBackdrop,
-      audio,
-      input.timeSeconds,
-      STUDY_SIZE.width,
-      STUDY_SIZE.height,
-      scene3d.seed ?? seed,
-      reducedMotion
-    );
+    if (scene3d.environment.backdropType || scene3d.environment.lightingPreset) {
+      drawV4EnvironmentLayer(
+        sceneCtx,
+        scene3d,
+        audio,
+        input.timeSeconds,
+        STUDY_SIZE.width,
+        STUDY_SIZE.height,
+        scene3d.seed ?? seed,
+        reducedMotion
+      );
+    } else {
+      drawAnarchy3DBackdropLayer(
+        sceneCtx,
+        effectiveBackdrop,
+        audio,
+        input.timeSeconds,
+        STUDY_SIZE.width,
+        STUDY_SIZE.height,
+        scene3d.seed ?? seed,
+        reducedMotion
+      );
+    }
+
+    const swoopCamOff: PerspectiveOffsets =
+      input.transitionType === "camera_swoop" &&
+      input.transitionProgress !== undefined &&
+      input.transitionProgress < 1
+        ? {
+            ...camOff,
+            yawRad: camOff.yawRad + (1 - clamp01(input.transitionProgress)) * 1.15,
+            distMul: camOff.distMul * (1 + (1 - clamp01(input.transitionProgress)) * 0.45),
+          }
+        : camOff;
 
     const customPolys = buildAnarchy3DScenePolygons(
       scene3d,
@@ -4245,10 +4932,10 @@ export function renderSceneFrame(
         palette,
         customPolys,
         {
-          yawRad: camOff.yawRad,
-          pitchRad: 0.08 + camOff.pitchRad,
-          distance: Math.max(2.4, 6.4 * camOff.distMul),
-          fovScale: Math.round(188 * camOff.fovMul),
+          yawRad: swoopCamOff.yawRad,
+          pitchRad: 0.08 + swoopCamOff.pitchRad,
+          distance: Math.max(2.4, 6.4 * swoopCamOff.distMul),
+          fovScale: Math.round(188 * swoopCamOff.fovMul),
           targetY: 0,
         },
         effects,
@@ -4256,6 +4943,21 @@ export function renderSceneFrame(
       );
       vertexCount += customCounts.vertexCount;
       triangleCount += customCounts.triangleCount;
+    }
+
+    if (scene3d.actors && scene3d.actors.length > 0) {
+      renderV4Actors(
+        sceneCtx,
+        scene3d,
+        audio,
+        effectiveTime,
+        STUDY_SIZE.width,
+        STUDY_SIZE.height,
+        scene3d.seed ?? seed,
+        reducedMotion,
+        swoopCamOff,
+        input.faderValues
+      );
     }
 
     if (scene3d.generators && scene3d.generators.length > 0) {
@@ -4436,6 +5138,18 @@ export function renderSceneFrame(
     targetW,
     targetH,
     scene3d?.postFx
+  );
+
+  applyV4PostFxStack(
+    ctx,
+    scene3d?.postFX,
+    scene3d?.renderStyle?.toneMapping,
+    audio,
+    input.timeSeconds,
+    targetW,
+    targetH,
+    input.transitionType ?? scene3d?.transition,
+    input.transitionProgress
   );
 
   ctx.restore();

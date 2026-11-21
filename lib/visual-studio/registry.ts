@@ -313,6 +313,116 @@ export type AnarchyParticleBehavior = (typeof PARTICLE_BEHAVIOR_REGISTRY)[number
 export type AnarchyBackdropShader = (typeof BACKDROP_SHADER_REGISTRY)[number]["value"];
 export type AnarchyCameraRig = (typeof CAMERA_RIG_REGISTRY)[number]["value"];
 
+export const STUDIO_LIGHTING_PRESET_REGISTRY = [
+  { value: "studio_clean", label: "studio_clean (Éclairage Studio Blanc Doux)" },
+  { value: "cyber_neon", label: "cyber_neon (Rim-Light Cyan / Magenta)" },
+  { value: "sunset_warm", label: "sunset_warm (Coucher de Soleil Doré)" },
+  { value: "dark_void", label: "dark_void (Clair-Obscur Cinéma)" },
+] as const;
+
+export const V4_BACKDROP_TYPE_REGISTRY = [
+  { value: "liquid_plasma", label: "liquid_plasma (Plasma Liquide Organique)" },
+  { value: "gradient_sky", label: "gradient_sky (Dégradé Studio / Ciel)" },
+  { value: "starfield", label: "starfield (Champ d'Étoiles Profond)" },
+  { value: "grid_horizon", label: "grid_horizon (Horizon Grille Perspective)" },
+  { value: "solid_color", label: "solid_color (Fond Uni Minimaliste)" },
+] as const;
+
+export const TONE_MAPPING_REGISTRY = [
+  { value: "aces_filmic", label: "aces_filmic (Cinéma ACES Filmic)" },
+  { value: "reinhard", label: "reinhard (Doux Équilibré)" },
+  { value: "cineon", label: "cineon (Pellicule Ciné)" },
+  { value: "none", label: "none (Brut Linéaire)" },
+] as const;
+
+export const ACTOR_TYPE_REGISTRY = [
+  { value: "organic_blob", label: "organic_blob (Sphère Organique Déformée 3D)" },
+  { value: "wave_terrain", label: "wave_terrain (Surface d'Ondes Simplex + FFT)" },
+  { value: "spline_ribbons", label: "spline_ribbons (Rubans / Courbes Bézier Fluides)" },
+  { value: "particle_swarm", label: "particle_swarm (Essaim 1k–10k Particules)" },
+  { value: "glb_model", label: "glb_model (Modèle 3D .glb + Surcharge Matériau)" },
+  { value: "sprite_2d", label: "sprite_2d (Plan 2D Illustration BD Parallaxe)" },
+] as const;
+
+export const SWARM_BEHAVIOR_REGISTRY = [
+  { value: "curl_noise_flow", label: "curl_noise_flow (Flux Fluide Curl-Noise)" },
+  { value: "vortex", label: "vortex (Tourbillon Orbital)" },
+  { value: "beat_explosion", label: "beat_explosion (Explosion sur Kick/Beat)" },
+  { value: "floating_dust", label: "floating_dust (Poussière Cinéma Flottante)" },
+] as const;
+
+export const MATERIAL_OVERRIDE_REGISTRY = [
+  { value: "chrome", label: "chrome (Chrome Liquide Réfléchissant)" },
+  { value: "frosted_glass", label: "frosted_glass (Verre Dépoli Translucide)" },
+  { value: "matcap_clay", label: "matcap_clay (Argile Sculptée Matcap)" },
+  { value: "toon_cel_outline", label: "toon_cel_outline (BD Cel-Shading + Contours)" },
+  { value: "emissive_neon", label: "emissive_neon (Néon Émissif Pur)" },
+] as const;
+
+export const MODULATION_SOURCE_REGISTRY = [
+  "bass",
+  "lowMid",
+  "highMid",
+  "treble",
+  "energy",
+  "fader_1",
+  "fader_2",
+  "fader_3",
+  "fader_4",
+  "fader_5",
+  "fader_6",
+  "fader_7",
+  "fader_8",
+  "fader_9",
+  "fader_10",
+  "fader_11",
+  "fader_12",
+  "fader_13",
+  "fader_14",
+  "fader_15",
+  "fader_16",
+  "fader_17",
+  "fader_18",
+  "fader_19",
+] as const;
+
+export const MODULATION_TARGET_REGISTRY = [
+  { value: "scale", label: "scale (Échelle Globale)" },
+  { value: "noiseStrength", label: "noiseStrength (Amplitude Déformation Bruit)" },
+  { value: "rotationSpeed", label: "rotationSpeed (Vitesse de Rotation)" },
+  { value: "emissiveIntensity", label: "emissiveIntensity (Intensité Émissive)" },
+  { value: "positionY", label: "positionY (Élévation Verticale Y)" },
+] as const;
+
+export const POST_FX_STACK_TYPE_REGISTRY = [
+  { value: "bloom", label: "bloom (Halo Lumineux Cinéma)" },
+  { value: "depth_of_field", label: "depth_of_field (Flou de Profondeur Blender)" },
+  { value: "toon_outline", label: "toon_outline (Contours Noirs BD)" },
+  { value: "chromatic_aberration", label: "chromatic_aberration (Aberration Chromatique)" },
+  { value: "film_grain", label: "film_grain (Grain Pellicule 35mm)" },
+  { value: "pixelate", label: "pixelate (Pixelisation Rétro Optionnelle)" },
+] as const;
+
+export const SCENE_TRANSITION_REGISTRY = [
+  { value: "cut", label: "cut (Coupure Franche)" },
+  { value: "crossfade", label: "crossfade (Fondu Enchaîné)" },
+  { value: "camera_swoop", label: "camera_swoop (Mouvement Caméra Rapide)" },
+  { value: "flash", label: "flash (Flash Lumineux au Beat)" },
+] as const;
+
+export const EXTENDED_BARS_OPTIONS = [0, 1, 2, 4, 8, 16, 32, 64] as const;
+
+export type AnarchyStudioLightingPreset = (typeof STUDIO_LIGHTING_PRESET_REGISTRY)[number]["value"];
+export type AnarchyV4BackdropType = (typeof V4_BACKDROP_TYPE_REGISTRY)[number]["value"];
+export type AnarchyToneMapping = (typeof TONE_MAPPING_REGISTRY)[number]["value"];
+export type AnarchyActorType = (typeof ACTOR_TYPE_REGISTRY)[number]["value"];
+export type AnarchySwarmBehavior = (typeof SWARM_BEHAVIOR_REGISTRY)[number]["value"];
+export type AnarchyMaterialOverride = (typeof MATERIAL_OVERRIDE_REGISTRY)[number]["value"];
+export type AnarchyModulationSource = (typeof MODULATION_SOURCE_REGISTRY)[number];
+export type AnarchyModulationTarget = (typeof MODULATION_TARGET_REGISTRY)[number]["value"];
+export type AnarchyPostFxStackType = (typeof POST_FX_STACK_TYPE_REGISTRY)[number]["value"];
+export type AnarchySceneTransitionType = (typeof SCENE_TRANSITION_REGISTRY)[number]["value"];
+
 export const AI_STYLE_PRESETS = [
   {
     id: "hotline-miami",
@@ -663,6 +773,15 @@ export function generateAiPackPromptV3(
   const generatorTypes = GENERATOR_TYPE_REGISTRY.map((g) => `"${g.value}"`).join(" | ");
   const particleBehaviors = PARTICLE_BEHAVIOR_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
   const backdropShaders = BACKDROP_SHADER_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
+  const lightingPresets = STUDIO_LIGHTING_PRESET_REGISTRY.map((l) => `"${l.value}"`).join(" | ");
+  const v4Backdrops = V4_BACKDROP_TYPE_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
+  const toneMappings = TONE_MAPPING_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
+  const actorTypes = ACTOR_TYPE_REGISTRY.map((a) => `"${a.value}"`).join(" | ");
+  const swarmBehaviors = SWARM_BEHAVIOR_REGISTRY.map((s) => `"${s.value}"`).join(" | ");
+  const materials = MATERIAL_OVERRIDE_REGISTRY.map((m) => `"${m.value}"`).join(" | ");
+  const modTargets = MODULATION_TARGET_REGISTRY.map((m) => `"${m.value}"`).join(" | ");
+  const postFxStack = POST_FX_STACK_TYPE_REGISTRY.map((p) => `"${p.value}"`).join(" | ");
+  const transitions = SCENE_TRANSITION_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
   const cloners = CLONER_MODE_REGISTRY.map((c) => `"${c.value}"`).join(" | ");
   const triggers = TRIGGER_ACTION_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
   const bass = BASS_TARGET_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
@@ -673,42 +792,38 @@ export function generateAiPackPromptV3(
   const stylePreset =
     AI_STYLE_PRESETS.find((s) => s.id === styleId) ?? AI_STYLE_PRESETS[0];
 
-  return `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v3/v4 Data-Driven Expressif).
-Génère une "Cartouche / Pack 3D" au format JSON strict (Anarchy3DPack) contenant 4 à 5 scènes 3D radicalement variées synchronisées à ${Math.round(activeBpm)} BPM.
+  return `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v4 Data-Driven Organique & Studio).
+Génère une "Cartouche / Pack 3D" au format JSON strict (Anarchy3DPackV4) contenant 4 à 5 scènes radicalement non-géométriques et variées synchronisées à ${Math.round(activeBpm)} BPM.
 
 DIRECTION ARTISTIQUE DEMANDÉE (${stylePreset.label}) :
 - Palette conseillée : ${stylePreset.paletteHint}
 - Décors & Sujets : ${stylePreset.terrainHint}
 - Post-FX suggérés : ${stylePreset.fxHint}
 
-IMPORTANT — RÈGLES STRICTES :
-1. Réponds UNIQUEMENT avec un bloc JSON valide (aucun code JS/C++, aucune fonction, aucun \`eval\`).
-2. Valeurs autorisées issues du Registre :
-   - renderStyle.shading : ${shadings} (resolutionScale: 0.15..1.0, outlineThickness: 0..6)
-   - compositionMode : ${compositions} (kaleidoAxes: 2..12)
-   - backdrop.shader.type : ${backdropShaders}
-   - generators[].type : ${generatorTypes} (behavior: ${particleBehaviors})
-   - camera.mode : ${cameras} · camera.rig : ${cameraRigs} (beatCut: true|false)
-   - terrain.type : ${terrains}
-   - sideProps.type : ${props}
-   - subject.meshType : ${meshes}
-   - procedural_group parts[].primitive : ${primitives}
-   - cloner.mode : ${cloners} (count entre 2 et 64, total < 256 primitives/scène pour 60 FPS)
-   - triggers[].action : ${triggers}
-   - audioMapping.bassTarget : ${bass}
-   - audioMapping.midTarget : ${mid}
-   - audioMapping.trebleTarget : ${treble}
-   - audioMapping.fluxTarget : ${flux}
-3. CRT / scanlines / aberration chromatique sont strictement optionnels (0 par défaut) : ne les active que si le style le demande.
-4. Paramètres nommés ("params") au niveau Pack ou Scène :
-   - Ex: "params": { "speed": 2.4, "amp": 0.65 } → réutilisables directement dans animations[] et triggers[].
-5. Expressions Mathématiques Temps Réel ("animations[]") :
-   - Cibles : "pos.x", "pos.y", "pos.z", "rot.x", "rot.y", "rot.z", "scale", "scale.x", "scale.y", "scale.z", "emissiveIntensity", "fov"
-   - Variables : t, beat, i, u, count, bass, mid, treble, flux, rms, seed + tes params.
-   - Fonctions : sin, cos, tan, abs, floor, ceil, fract, sqrt, min, max, step, pulse, mod, pow, gt, lt, clamp, smoothstep, mix, lerp, pi, tau.
-6. Règles Réactives Conditionnelles ("triggers[]") :
-   - Ex: { "when": "gt(bass, 0.72)", "action": "boost_fov", "intensity": 0.8 }
-7. Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".`;
+ARCHITECTURE MODULAIRE EN 3 COUCHES (Anarchy3DPackV4) :
+1. COUCHE 1 — ENVIRONNEMENT & ÉCLAIRAGE STUDIO ("environment" & "renderStyle") :
+   - environment.lightingPreset : ${lightingPresets}
+   - environment.backdropType : ${v4Backdrops} (avec backdropColors: ["#...", "#...", "#..."])
+   - environment.fog : { "enabled": true, "color": "#...", "density": 0.03 }
+   - renderStyle : { "resolutionScale": 0.2..1.0 (1.0 = HD net), "toneMapping": ${toneMappings}, "shading": ${shadings}, "outlineThickness": 0..6 }
+   - Aucun rendu pixelisé/CRT par défaut : n'active "pixelate" ou CRT que si explicitement voulu.
+
+2. COUCHE 2 — ACTEURS ORGANIQUES & HYBRIDES ("actors[]") :
+   - actors[].type : ${actorTypes}
+   - actors[].material : ${materials}
+   - actors[].behavior (particle_swarm, count 1000..10000) : ${swarmBehaviors}
+   - actors[].audioModulation[] : relie source ("bass" | "lowMid" | "highMid" | "treble" | "energy" | "fader_1".."fader_19") à target (${modTargets}) avec { "amount": 0.5, "offset": 0 }.
+   - Ex: organic_blob chrome déformé par Simplex 3D + spline_ribbons réagissant aux aigus + sprite_2d BD parallaxe + glb_model.
+
+3. COUCHE 3 — POST-PROCESSING CUMULABLE & HORLOGE ÉTENDUE ("postFX[]", "durationBars", "transition") :
+   - postFX[] : pile d'objets { "type": ${postFxStack}, "intensity": 0..2, "radius"?: number }
+   - durationBars : 1 | 2 | 4 | 8 | 16 | 32 | 64 mesures par scène
+   - transition : ${transitions}
+
+RÈGLES STRICTES & RÉTROCOMPATIBILITÉ (v1/v2/v3) :
+- Réponds UNIQUEMENT avec un bloc JSON valide (zéro JS, zéro fonction, zéro \`eval\`).
+- Champs v2/v3 toujours supportés : compositionMode (${compositions}), backdrop.shader (${backdropShaders}), generators[] (${generatorTypes}, behavior: ${particleBehaviors}), camera.mode (${cameras}), camera.rig (${cameraRigs}, beatCut), terrain (${terrains}), sideProps (${props}), subject (${meshes}, primitives: ${primitives}), cloner.mode (${cloners}), triggers[].action (${triggers}), audioMapping (bass: ${bass}; mid: ${mid}; treble: ${treble}; flux: ${flux}).
+- Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".`;
 }
 
 export const generateAiPackPromptV4 = generateAiPackPromptV3;

@@ -1930,11 +1930,14 @@ export const VisualEngineStudio: React.FC = () => {
                           className="px-2 py-1 rounded border border-black bg-brand-white text-[11px] font-bold"
                           aria-label="Switch scènes par mesures"
                         >
-                          <option value={0}>Switch : Manuel</option>
+                          <option value={0}>Switch : HOLD (Manuel)</option>
                           <option value={4}>Switch : 1 mesure (4T)</option>
                           <option value={8}>Switch : 2 mesures (8T)</option>
                           <option value={16}>Switch : 4 mesures (16T)</option>
                           <option value={32}>Switch : 8 mesures (32T)</option>
+                          <option value={64}>Switch : 16 mesures (64T)</option>
+                          <option value={128}>Switch : 32 mesures (128T)</option>
+                          <option value={256}>Switch : 64 mesures (256T)</option>
                         </select>
                       </div>
 

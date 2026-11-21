@@ -1857,6 +1857,21 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                   </code>{" "}
                   · <code>particle_field | ribbon_trails | audio_wave_mesh | instanced_array</code>
                 </p>
+                <p className="text-[11px]">
+                  • <strong>Couche 1–3 Organique (v4)</strong> :{" "}
+                  <code>
+                    lightingPreset (studio_clean | cyber_neon | sunset_warm | dark_void)
+                  </code>{" "}
+                  ·{" "}
+                  <code>
+                    actors[] (organic_blob | wave_terrain | spline_ribbons | particle_swarm | glb_model | sprite_2d)
+                  </code>{" "}
+                  ·{" "}
+                  <code>
+                    postFX[] (bloom | depth_of_field | toon_outline | chromatic_aberration | film_grain | pixelate)
+                  </code>{" "}
+                  · <code>durationBars (1..64)</code> · <code>transition (cut | crossfade | camera_swoop | flash)</code>
+                </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-brand-pearl border-2 border-black space-y-1.5">

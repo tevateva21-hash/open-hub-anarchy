@@ -20,6 +20,16 @@ import type {
   AnarchyParticleBehavior,
   AnarchyBackdropShader,
   AnarchyCameraRig,
+  AnarchyStudioLightingPreset,
+  AnarchyV4BackdropType,
+  AnarchyToneMapping,
+  AnarchyActorType,
+  AnarchySwarmBehavior,
+  AnarchyMaterialOverride,
+  AnarchyModulationSource,
+  AnarchyModulationTarget,
+  AnarchyPostFxStackType,
+  AnarchySceneTransitionType,
 } from "@/lib/visual-studio/registry";
 
 export type {
@@ -39,6 +49,16 @@ export type {
   AnarchyParticleBehavior,
   AnarchyBackdropShader,
   AnarchyCameraRig,
+  AnarchyStudioLightingPreset,
+  AnarchyV4BackdropType,
+  AnarchyToneMapping,
+  AnarchyActorType,
+  AnarchySwarmBehavior,
+  AnarchyMaterialOverride,
+  AnarchyModulationSource,
+  AnarchyModulationTarget,
+  AnarchyPostFxStackType,
+  AnarchySceneTransitionType,
 };
 
 export const PRESET_SCHEMA_VERSION = 1 as const;
@@ -344,6 +364,18 @@ export interface Anarchy3DEnvironment {
   terrainSpeed: number;
   terrainPrimaryColor: string;
   terrainSecondaryColor: string;
+  /** Couche 1 v4 : Preset d'éclairage studio / HDRI virtuel */
+  lightingPreset?: AnarchyStudioLightingPreset;
+  /** Couche 1 v4 : Fond procédural sans code */
+  backdropType?: AnarchyV4BackdropType;
+  /** Couche 1 v4 : Palette de couleurs pour le fond procédural */
+  backdropColors?: string[];
+  /** Couche 1 v4 : Brouillard volumétrique configurable */
+  fog?: {
+    enabled?: boolean;
+    color?: string;
+    density?: number;
+  };
 }
 
 export interface Anarchy3DSubject {
@@ -422,6 +454,64 @@ export interface Anarchy3DRenderStyle {
   shading?: AnarchyShadingMode;
   /** Épaisseur des contours noirs BD/cel-shading [0..6] */
   outlineThickness?: number;
+  /** Couche 1 v4 : Tone mapping cinéma (ACESFilmic, Reinhard, Cineon, None) */
+  toneMapping?: AnarchyToneMapping;
+}
+
+export interface Anarchy3DAudioModulation {
+  source: AnarchyModulationSource;
+  target: AnarchyModulationTarget;
+  /** Amplitude de modulation [-5..5] */
+  amount: number;
+  /** Décalage constant optionnel */
+  offset?: number;
+}
+
+export interface Anarchy3DActor {
+  id?: string;
+  type: AnarchyActorType;
+  position?: [number, number, number];
+  rotation?: [number, number, number];
+  scale?: number | [number, number, number];
+  color?: string;
+  secondaryColor?: string;
+  material?: AnarchyMaterialOverride;
+  /** Niveau de subdivision pour organic_blob / wave_terrain [8..48] */
+  detail?: number;
+  /** Intensité du bruit Simplex/Perlin 3D [0..2.5] */
+  noiseStrength?: number;
+  /** Fréquence spatiale du bruit [0.2..6] */
+  noiseFrequency?: number;
+  /** Vitesse d'animation propre à l'acteur */
+  speed?: number;
+  /** Nombre de particules pour particle_swarm [1000..10000] */
+  count?: number;
+  /** Comportement organique de l'essaim */
+  behavior?: AnarchySwarmBehavior;
+  /** Nombre de rubans pour spline_ribbons [2..16] */
+  ribbonCount?: number;
+  /** Épaisseur des rubans [0.5..8] */
+  thickness?: number;
+  /** Chemin /public/models/...glb ou URL image pour sprite_2d */
+  url?: string;
+  /** Libellé ou variante d'illustration BD pour sprite_2d */
+  label?: string;
+  /** Facteur parallaxe 2D/3D pour sprite_2d [0..2] */
+  parallax?: number;
+  /** Modulations audio (bass/lowMid/highMid/treble/energy) ou fader_1..fader_19 */
+  audioModulation?: Anarchy3DAudioModulation[];
+}
+
+export interface Anarchy3DPostFxStep {
+  type: AnarchyPostFxStackType;
+  /** Intensité de l'effet [0..2] */
+  intensity?: number;
+  /** Rayon (ex: depth_of_field, bloom, pixelate) */
+  radius?: number;
+  /** Seuil lumineux (ex: bloom) */
+  threshold?: number;
+  /** Couleur de contour optionnelle (ex: toon_outline) */
+  color?: string;
 }
 
 export interface Anarchy3DGenerator {
@@ -478,15 +568,23 @@ export interface Anarchy3DScene {
   compositionMode?: AnarchyCompositionMode;
   /** Nombre d'axes pour kaleido_mandala (défaut 6) */
   kaleidoAxes?: number;
-  /** Générateurs procéduraux avancés (particules, rubans, vagues FFT, réseaux) */
+  /** Générateurs procéduraux avancés v3 (particules, rubans, vagues FFT, réseaux) */
   generators?: Anarchy3DGenerator[];
+  /** Couche 2 v4 : Acteurs organiques & hybrides libres */
+  actors?: Anarchy3DActor[];
+  /** Couche 3 v4 : Pile d'effets post-processing optionnels et cumulables */
+  postFX?: Anarchy3DPostFxStep[];
+  /** Couche 3 v4 : Durée individuelle de la scène en mesures (1, 2, 4, 8, 16, 32, 64) */
+  durationBars?: number;
+  /** Couche 3 v4 : Transition d'entrée de la scène */
+  transition?: AnarchySceneTransitionType;
   environment: Anarchy3DEnvironment;
   subject: Anarchy3DSubject;
   /** Calques composables v2 (backdrop, terrain, sideProps, subjects) */
   layers?: Anarchy3DLayer[];
   /** Sujets multiples rendus simultanément (raccourci ou miroir du calque subjects) */
   subjects?: Anarchy3DSubject[];
-  /** Pipeline Post-Processing par scène */
+  /** Pipeline Post-Processing par scène (v2/v3) */
   postFx?: Anarchy3DPostFx;
   /** Animations mathématiques globales de scène v3/v4 (ex: fov, emissiveIntensity) */
   animations?: Anarchy3DAnimation[];
@@ -517,6 +615,8 @@ export interface Anarchy3DPack {
 
 export type Anarchy3DSceneV3 = Anarchy3DScene;
 export type Anarchy3DPackV3 = Anarchy3DPack;
+export type Anarchy3DSceneV4 = Anarchy3DScene;
+export type Anarchy3DPackV4 = Anarchy3DPack;
 
 export interface SceneFrameInput {
   sceneId: SceneId;
@@ -536,6 +636,12 @@ export interface SceneFrameInput {
   aspectRatio?: VideoAspectRatio;
   /** Configuration 3D Data-Driven (JSON) de la scène active. */
   anarchy3dScene?: Anarchy3DScene;
+  /** Valeurs normalisées [0..1] des 19 faders live pour audioModulation[] (fader_1..fader_19) */
+  faderValues?: Record<string, number>;
+  /** Progression de la transition de scène [0..1] (0 = début transition, 1 = terminée) */
+  transitionProgress?: number;
+  /** Type de transition de scène active */
+  transitionType?: AnarchySceneTransitionType;
 }
 
 export type TransitionKind = "cut" | "dither-dissolve";

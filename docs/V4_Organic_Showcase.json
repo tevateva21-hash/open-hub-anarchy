@@ -1,0 +1,758 @@
+{
+  "packId": "v4-organic-showcase",
+  "name": "V4 Organic // Studio & Blender Temps Réel",
+  "author": "Anarchy Visual Studio",
+  "bpm": 128,
+  "beatsPerScene": 16,
+  "scenes": [
+    {
+      "id": "v4-liquid-chrome",
+      "name": "01. Sphère Liquide Chrome & Rubans Néon",
+      "version": 4,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "chrome_reflective",
+        "outlineThickness": 0,
+        "toneMapping": "aces_filmic"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "liquid-chrome-core",
+          "type": "organic_blob",
+          "position": [
+            0,
+            0.1,
+            4.8
+          ],
+          "scale": 1.35,
+          "color": "#F8FAFC",
+          "secondaryColor": "#38BDF8",
+          "material": "chrome",
+          "detail": 28,
+          "noiseStrength": 0.65,
+          "noiseFrequency": 1.8,
+          "speed": 1.3,
+          "audioModulation": [
+            {
+              "source": "bass",
+              "target": "scale",
+              "amount": 0.45,
+              "offset": 0
+            },
+            {
+              "source": "lowMid",
+              "target": "noiseStrength",
+              "amount": 0.7,
+              "offset": 0
+            },
+            {
+              "source": "fader_1",
+              "target": "scale",
+              "amount": 0.35,
+              "offset": 0
+            }
+          ]
+        },
+        {
+          "id": "neon-silk-ribbons",
+          "type": "spline_ribbons",
+          "position": [
+            0,
+            0,
+            5.2
+          ],
+          "scale": 1.2,
+          "color": "#38BDF8",
+          "secondaryColor": "#F472B6",
+          "material": "emissive_neon",
+          "ribbonCount": 7,
+          "thickness": 2.5,
+          "speed": 1.6,
+          "audioModulation": [
+            {
+              "source": "highMid",
+              "target": "scale",
+              "amount": 0.5,
+              "offset": 0
+            },
+            {
+              "source": "treble",
+              "target": "emissiveIntensity",
+              "amount": 0.85,
+              "offset": 0.2
+            }
+          ]
+        }
+      ],
+      "postFX": [
+        {
+          "type": "bloom",
+          "intensity": 0.85,
+          "threshold": 0.55
+        },
+        {
+          "type": "chromatic_aberration",
+          "intensity": 0.12
+        }
+      ],
+      "durationBars": 4,
+      "transition": "crossfade",
+      "environment": {
+        "skyColor": "#0B0E17",
+        "fogColor": "#141B2D",
+        "fogDensity": 0.02,
+        "terrainType": "mirror_floor",
+        "terrainSpeed": 6,
+        "terrainPrimaryColor": "#E2E8F0",
+        "terrainSecondaryColor": "#38BDF8",
+        "lightingPreset": "studio_clean",
+        "backdropType": "gradient_sky",
+        "backdropColors": [
+          "#090D16",
+          "#1E293B",
+          "#0F172A"
+        ],
+        "fog": {
+          "enabled": true,
+          "color": "#0F172A",
+          "density": 0.025
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#E2E8F0",
+        "accentColor": "#38BDF8",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#0B0E17",
+              "#141B2D"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#38BDF8",
+              "colorBottom": "#E2E8F0",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#E2E8F0"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "mirror_floor",
+            "speed": 6,
+            "primaryColor": "#E2E8F0",
+            "secondaryColor": "#38BDF8"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#E2E8F0",
+            "secondaryColor": "#38BDF8"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#E2E8F0",
+              "accentColor": "#38BDF8",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 0.75
+      },
+      "camera": {
+        "mode": "orbit",
+        "fov": 64,
+        "shakeIntensity": 0.12,
+        "rig": "orbit_smooth",
+        "beatCut": false
+      },
+      "audioMapping": {
+        "bassTarget": "subject_pulse",
+        "midTarget": "color_shift",
+        "trebleTarget": "particles_burst",
+        "fluxTarget": "glitch_and_emissive"
+      }
+    },
+    {
+      "id": "v4-curl-storm",
+      "name": "02. Tempête Curl-Noise & Flou Cinéma",
+      "version": 4,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "neon_glow",
+        "outlineThickness": 0,
+        "toneMapping": "cineon"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "curl-swarm-main",
+          "type": "particle_swarm",
+          "position": [
+            0,
+            0,
+            5
+          ],
+          "scale": 1.3,
+          "color": "#38BDF8",
+          "secondaryColor": "#EC4899",
+          "count": 5500,
+          "behavior": "curl_noise_flow",
+          "speed": 1.4,
+          "audioModulation": [
+            {
+              "source": "energy",
+              "target": "rotationSpeed",
+              "amount": 1.2,
+              "offset": 0.2
+            },
+            {
+              "source": "bass",
+              "target": "scale",
+              "amount": 0.55,
+              "offset": 0
+            }
+          ]
+        },
+        {
+          "id": "floating-cinema-dust",
+          "type": "particle_swarm",
+          "position": [
+            0,
+            0,
+            3.8
+          ],
+          "scale": 1,
+          "color": "#FDE68A",
+          "secondaryColor": "#FFFFFF",
+          "count": 1800,
+          "behavior": "floating_dust",
+          "speed": 0.7,
+          "audioModulation": [
+            {
+              "source": "treble",
+              "target": "emissiveIntensity",
+              "amount": 0.9,
+              "offset": 0.1
+            }
+          ]
+        }
+      ],
+      "postFX": [
+        {
+          "type": "depth_of_field",
+          "intensity": 0.75,
+          "radius": 3.5
+        },
+        {
+          "type": "bloom",
+          "intensity": 0.9,
+          "threshold": 0.45
+        },
+        {
+          "type": "film_grain",
+          "intensity": 0.28
+        }
+      ],
+      "durationBars": 8,
+      "transition": "camera_swoop",
+      "environment": {
+        "skyColor": "#04050A",
+        "fogColor": "#090D1A",
+        "fogDensity": 0.03,
+        "terrainType": "infinite_grid",
+        "terrainSpeed": 8,
+        "terrainPrimaryColor": "#6366F1",
+        "terrainSecondaryColor": "#EC4899",
+        "lightingPreset": "dark_void",
+        "backdropType": "starfield",
+        "backdropColors": [
+          "#03040A",
+          "#0F172A",
+          "#1E1B4B"
+        ],
+        "fog": {
+          "enabled": true,
+          "color": "#050712",
+          "density": 0.035
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#818CF8",
+        "accentColor": "#F472B6",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#04050A",
+              "#090D1A"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#EC4899",
+              "colorBottom": "#6366F1",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#6366F1"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "infinite_grid",
+            "speed": 8,
+            "primaryColor": "#6366F1",
+            "secondaryColor": "#EC4899"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#6366F1",
+            "secondaryColor": "#EC4899"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#818CF8",
+              "accentColor": "#F472B6",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 0.85
+      },
+      "camera": {
+        "mode": "dramatic_tilt",
+        "fov": 70,
+        "shakeIntensity": 0.22,
+        "rig": "dolly_zoom_on_kick",
+        "beatCut": false
+      },
+      "audioMapping": {
+        "bassTarget": "camera_zoom_and_jump",
+        "midTarget": "camera_sway",
+        "trebleTarget": "particles_burst",
+        "fluxTarget": "fov_kick"
+      }
+    },
+    {
+      "id": "v4-organic-dunes",
+      "name": "03. Dunes Organiques & Plasma Solaire",
+      "version": 4,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "flat",
+        "outlineThickness": 0,
+        "toneMapping": "aces_filmic"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "simplex-bass-dunes",
+          "type": "wave_terrain",
+          "position": [
+            0,
+            -0.9,
+            4.6
+          ],
+          "scale": 1.35,
+          "color": "#FB923C",
+          "secondaryColor": "#FDE047",
+          "material": "matcap_clay",
+          "detail": 22,
+          "noiseStrength": 0.85,
+          "noiseFrequency": 1.2,
+          "speed": 1.25,
+          "audioModulation": [
+            {
+              "source": "bass",
+              "target": "noiseStrength",
+              "amount": 1.15,
+              "offset": 0
+            },
+            {
+              "source": "lowMid",
+              "target": "positionY",
+              "amount": 0.35,
+              "offset": 0
+            }
+          ]
+        },
+        {
+          "id": "solar-glass-orb",
+          "type": "organic_blob",
+          "position": [
+            0,
+            0.95,
+            6.2
+          ],
+          "scale": 0.85,
+          "color": "#FDE047",
+          "secondaryColor": "#F97316",
+          "material": "frosted_glass",
+          "detail": 20,
+          "noiseStrength": 0.35,
+          "noiseFrequency": 1.4,
+          "speed": 0.9,
+          "audioModulation": [
+            {
+              "source": "energy",
+              "target": "scale",
+              "amount": 0.35,
+              "offset": 0
+            }
+          ]
+        }
+      ],
+      "postFX": [
+        {
+          "type": "bloom",
+          "intensity": 0.7,
+          "threshold": 0.5
+        },
+        {
+          "type": "film_grain",
+          "intensity": 0.16
+        }
+      ],
+      "durationBars": 4,
+      "transition": "crossfade",
+      "environment": {
+        "skyColor": "#1A0B12",
+        "fogColor": "#7C2D12",
+        "fogDensity": 0.032,
+        "terrainType": "lowpoly_mountains",
+        "terrainSpeed": 10,
+        "terrainPrimaryColor": "#F97316",
+        "terrainSecondaryColor": "#FDE047",
+        "lightingPreset": "sunset_warm",
+        "backdropType": "liquid_plasma",
+        "backdropColors": [
+          "#1C0A14",
+          "#EA580C",
+          "#FACC15"
+        ],
+        "fog": {
+          "enabled": true,
+          "color": "#9A3412",
+          "density": 0.03
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#FB923C",
+        "accentColor": "#FDE047",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#1A0B12",
+              "#7C2D12"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#FDE047",
+              "colorBottom": "#F97316",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#F97316"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "lowpoly_mountains",
+            "speed": 10,
+            "primaryColor": "#F97316",
+            "secondaryColor": "#FDE047"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#F97316",
+            "secondaryColor": "#FDE047"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#FB923C",
+              "accentColor": "#FDE047",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 0.65
+      },
+      "camera": {
+        "mode": "chase_low",
+        "fov": 74,
+        "shakeIntensity": 0.18,
+        "rig": "first_person_fly",
+        "beatCut": false
+      },
+      "audioMapping": {
+        "bassTarget": "pillar_slam",
+        "midTarget": "terrain_wave_height",
+        "trebleTarget": "sky_flash",
+        "fluxTarget": "camera_shake"
+      }
+    },
+    {
+      "id": "v4-hybrid-cel-comic",
+      "name": "04. Hybride Modèle 3D & BD Cel-Shading",
+      "version": 4,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "toon_cel",
+        "outlineThickness": 3,
+        "toneMapping": "reinhard"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "anarchy-bust-glb",
+          "type": "glb_model",
+          "url": "/models/anarchy-totem.glb",
+          "position": [
+            -0.85,
+            -0.1,
+            5
+          ],
+          "scale": 1.15,
+          "color": "#FF1B24",
+          "secondaryColor": "#00F0FF",
+          "material": "toon_cel_outline",
+          "speed": 1.1,
+          "audioModulation": [
+            {
+              "source": "bass",
+              "target": "scale",
+              "amount": 0.35,
+              "offset": 0
+            },
+            {
+              "source": "highMid",
+              "target": "rotationSpeed",
+              "amount": 0.9,
+              "offset": 0.2
+            }
+          ]
+        },
+        {
+          "id": "openhub-comic-mascot",
+          "type": "sprite_2d",
+          "label": "3d_glasses_character",
+          "position": [
+            0.95,
+            0.05,
+            4.4
+          ],
+          "scale": 1.1,
+          "color": "#FF1B24",
+          "secondaryColor": "#00F0FF",
+          "parallax": 1.25,
+          "audioModulation": [
+            {
+              "source": "bass",
+              "target": "positionY",
+              "amount": 0.4,
+              "offset": 0
+            },
+            {
+              "source": "fader_2",
+              "target": "scale",
+              "amount": 0.3,
+              "offset": 0
+            }
+          ]
+        }
+      ],
+      "postFX": [
+        {
+          "type": "toon_outline",
+          "intensity": 1.2,
+          "color": "#09090B"
+        },
+        {
+          "type": "chromatic_aberration",
+          "intensity": 0.14
+        }
+      ],
+      "durationBars": 8,
+      "transition": "flash",
+      "environment": {
+        "skyColor": "#FEF08A",
+        "fogColor": "#FDE047",
+        "fogDensity": 0.01,
+        "terrainType": "infinite_grid",
+        "terrainSpeed": 9,
+        "terrainPrimaryColor": "#FF1B24",
+        "terrainSecondaryColor": "#00F0FF",
+        "lightingPreset": "cyber_neon",
+        "backdropType": "grid_horizon",
+        "backdropColors": [
+          "#FFFBEB",
+          "#FF1B24",
+          "#00B4D8"
+        ],
+        "fog": {
+          "enabled": false,
+          "color": "#FFFBEB",
+          "density": 0
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#FF1B24",
+        "accentColor": "#00F0FF",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#FEF08A",
+              "#FDE047"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#00F0FF",
+              "colorBottom": "#FF1B24",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#FF1B24"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "infinite_grid",
+            "speed": 9,
+            "primaryColor": "#FF1B24",
+            "secondaryColor": "#00F0FF"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#FF1B24",
+            "secondaryColor": "#00F0FF"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#FF1B24",
+              "accentColor": "#00F0FF",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 0.35
+      },
+      "camera": {
+        "mode": "orbit",
+        "fov": 68,
+        "shakeIntensity": 0.25,
+        "rig": "handheld_shake",
+        "beatCut": true
+      },
+      "audioMapping": {
+        "bassTarget": "subject_pulse",
+        "midTarget": "subject_rotation",
+        "trebleTarget": "wireframe_glow",
+        "fluxTarget": "camera_shake"
+      }
+    }
+  ]
+}

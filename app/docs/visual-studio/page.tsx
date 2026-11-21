@@ -422,6 +422,15 @@ export default function VisualStudioDocsPage() {
                     <code>ribbon_trails</code>, <code>audio_wave_mesh</code>,{" "}
                     <code>instanced_array</code> (<code>grid | spiral | ring | fractal</code>)
                   </li>
+                  <li>
+                    <strong>Couche 1–3 Organique (Anarchy3DPackV4)</strong> :{" "}
+                    <code>environment.lightingPreset</code> (<code>studio_clean | cyber_neon | sunset_warm | dark_void</code>),{" "}
+                    <code>backdropType</code> (<code>liquid_plasma | gradient_sky | starfield | grid_horizon | solid_color</code>),{" "}
+                    <code>renderStyle.toneMapping</code> (<code>aces_filmic | reinhard | cineon | none</code>),{" "}
+                    <code>actors[]</code> (<code>organic_blob | wave_terrain | spline_ribbons | particle_swarm | glb_model | sprite_2d</code> + <code>audioModulation[]</code> sur <code>bass/lowMid/highMid/treble/energy/fader_1..19</code>),{" "}
+                    <code>postFX[]</code> cumulable (<code>bloom | depth_of_field | toon_outline | chromatic_aberration | film_grain | pixelate</code>),{" "}
+                    <code>durationBars</code> (<code>1..64</code> + <code>HOLD</code>) &amp; <code>transition</code> (<code>cut | crossfade | camera_swoop | flash</code>).
+                  </li>
                 </ul>
               </div>
 

@@ -126,3 +126,17 @@ Dans le panneau **`PACK DE SCÈNES // ENCHAÎNEMENT BPM`** :
   - **`backdrop.shader`** : `none | plasma_fluid | voronoi_cells | radial_sunburst | grid_horizon | noise_fog`.
   - **`camera.rig` & `beatCut`** : `orbit_smooth | dolly_zoom_on_kick | first_person_fly | top_down_spin | handheld_shake`.
 
+## 7. Moteur v4 : Architecture Modulaire en 3 Couches (`Anarchy3DPackV4`)
+
+1. **Couche 1 — Environnement & Éclairage Studio (`environment` & `renderStyle`)** :
+   - `lightingPreset` : `studio_clean | cyber_neon | sunset_warm | dark_void`
+   - `backdropType` : `liquid_plasma | gradient_sky | starfield | grid_horizon | solid_color` (+ `backdropColors[]` & `fog`)
+   - `renderStyle.toneMapping` : `aces_filmic | reinhard | cineon | none` (zéro pixelisation/CRT par défaut).
+2. **Couche 2 — Acteurs Organiques & Hybrides (`actors[]`)** :
+   - Types : `organic_blob`, `wave_terrain`, `spline_ribbons`, `particle_swarm` (`curl_noise_flow | vortex | beat_explosion | floating_dust`), `glb_model`, `sprite_2d`.
+   - Matériaux : `chrome | frosted_glass | matcap_clay | toon_cel_outline | emissive_neon`.
+   - `audioModulation[]` : relie `bass | lowMid | highMid | treble | energy | fader_1..fader_19` à `scale | noiseStrength | rotationSpeed | emissiveIntensity | positionY`.
+3. **Couche 3 — Post-Processing Cumulable & Horloge Étendue (`postFX[]`, `durationBars`, `transition`)** :
+   - `postFX[]` : `bloom`, `depth_of_field`, `toon_outline`, `chromatic_aberration`, `film_grain`, `pixelate`.
+   - Horloge BPM : `HOLD (Manuel)`, `1, 2, 4, 8, 16, 32, 64` mesures + `durationBars` par scène & transitions (`cut | crossfade | camera_swoop | flash`).
+

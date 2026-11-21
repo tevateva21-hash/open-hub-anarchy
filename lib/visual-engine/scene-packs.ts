@@ -1,7 +1,9 @@
 import type {
+  Anarchy3DActor,
   Anarchy3DAnimation,
   Anarchy3DAnimationTarget,
   Anarchy3DAudioMapping,
+  Anarchy3DAudioModulation,
   Anarchy3DBackdropLayer,
   Anarchy3DBackdropShaderConfig,
   Anarchy3DCamera,
@@ -11,15 +13,19 @@ import type {
   Anarchy3DLayer,
   Anarchy3DPack,
   Anarchy3DPackV3,
+  Anarchy3DPackV4,
   Anarchy3DPostFx,
+  Anarchy3DPostFxStep,
   Anarchy3DRenderStyle,
   Anarchy3DScene,
   Anarchy3DSceneV3,
+  Anarchy3DSceneV4,
   Anarchy3DSidePropsLayer,
   Anarchy3DSubject,
   Anarchy3DTerrainLayer,
   Anarchy3DTrigger,
   Anarchy3DTriggerAction,
+  AnarchyActorType,
   AnarchyBackdropShader,
   AnarchyBassTarget,
   AnarchyCameraMode,
@@ -28,21 +34,31 @@ import type {
   AnarchyCompositionMode,
   AnarchyFluxTarget,
   AnarchyGeneratorType,
+  AnarchyMaterialOverride,
   AnarchyMidTarget,
+  AnarchyModulationSource,
+  AnarchyModulationTarget,
   AnarchyParticleBehavior,
+  AnarchyPostFxStackType,
   AnarchyProceduralPart,
   AnarchyProceduralPrimitive,
+  AnarchySceneTransitionType,
   AnarchyShadingMode,
   AnarchySidePropType,
+  AnarchyStudioLightingPreset,
   AnarchySubjectMeshType,
+  AnarchySwarmBehavior,
   AnarchyTerrainType,
+  AnarchyToneMapping,
   AnarchyTrebleTarget,
+  AnarchyV4BackdropType,
   PaletteId,
   SceneId,
 } from "@/lib/visual-engine/contracts";
 import { PALETTE_IDS, SCENE_IDS } from "@/lib/visual-engine/presets";
 import { validateMathExpression } from "@/lib/visual-studio/math-expr";
 import {
+  ACTOR_TYPE_REGISTRY,
   AI_STYLE_PRESETS,
   BACKDROP_SHADER_REGISTRY,
   BASS_TARGET_REGISTRY,
@@ -50,18 +66,28 @@ import {
   CAMERA_RIG_REGISTRY,
   CLONER_MODE_REGISTRY,
   COMPOSITION_MODE_REGISTRY,
+  EXTENDED_BARS_OPTIONS,
   FLUX_TARGET_REGISTRY,
   GENERATOR_TYPE_REGISTRY,
   JSON_SNIPPETS_3D,
+  MATERIAL_OVERRIDE_REGISTRY,
   MID_TARGET_REGISTRY,
+  MODULATION_SOURCE_REGISTRY,
+  MODULATION_TARGET_REGISTRY,
   PARTICLE_BEHAVIOR_REGISTRY,
+  POST_FX_STACK_TYPE_REGISTRY,
   PROCEDURAL_PRIMITIVE_REGISTRY,
+  SCENE_TRANSITION_REGISTRY,
   SHADING_MODE_REGISTRY,
   SIDE_PROPS_REGISTRY,
+  STUDIO_LIGHTING_PRESET_REGISTRY,
   SUBJECT_MESH_REGISTRY,
+  SWARM_BEHAVIOR_REGISTRY,
   TERRAIN_REGISTRY,
+  TONE_MAPPING_REGISTRY,
   TREBLE_TARGET_REGISTRY,
   TRIGGER_ACTION_REGISTRY,
+  V4_BACKDROP_TYPE_REGISTRY,
   generateAiPackPromptFromRegistry,
   generateAiPackPromptV3,
   generateAiPackPromptV4,
@@ -70,10 +96,15 @@ import {
 export type {
   Anarchy3DPack,
   Anarchy3DPackV3,
+  Anarchy3DPackV4,
   Anarchy3DScene,
   Anarchy3DSceneV3,
+  Anarchy3DSceneV4,
   Anarchy3DEnvironment,
   Anarchy3DSubject,
+  Anarchy3DActor,
+  Anarchy3DAudioModulation,
+  Anarchy3DPostFxStep,
   Anarchy3DCamera,
   Anarchy3DAudioMapping,
   Anarchy3DLayer,
@@ -95,6 +126,7 @@ export type {
 export {
   AI_STYLE_PRESETS,
   JSON_SNIPPETS_3D,
+  EXTENDED_BARS_OPTIONS,
   generateAiPackPromptV3,
   generateAiPackPromptV4,
 };
@@ -115,6 +147,15 @@ export const ANARCHY_COMPOSITION_MODES = COMPOSITION_MODE_REGISTRY;
 export const ANARCHY_GENERATOR_TYPES = GENERATOR_TYPE_REGISTRY;
 export const ANARCHY_PARTICLE_BEHAVIORS = PARTICLE_BEHAVIOR_REGISTRY;
 export const ANARCHY_BACKDROP_SHADERS = BACKDROP_SHADER_REGISTRY;
+export const ANARCHY_STUDIO_LIGHTING_PRESETS = STUDIO_LIGHTING_PRESET_REGISTRY;
+export const ANARCHY_V4_BACKDROP_TYPES = V4_BACKDROP_TYPE_REGISTRY;
+export const ANARCHY_TONE_MAPPINGS = TONE_MAPPING_REGISTRY;
+export const ANARCHY_ACTOR_TYPES = ACTOR_TYPE_REGISTRY;
+export const ANARCHY_SWARM_BEHAVIORS = SWARM_BEHAVIOR_REGISTRY;
+export const ANARCHY_MATERIAL_OVERRIDES = MATERIAL_OVERRIDE_REGISTRY;
+export const ANARCHY_MODULATION_TARGETS = MODULATION_TARGET_REGISTRY;
+export const ANARCHY_POST_FX_STACK_TYPES = POST_FX_STACK_TYPE_REGISTRY;
+export const ANARCHY_SCENE_TRANSITIONS = SCENE_TRANSITION_REGISTRY;
 export const ANARCHY_CLONER_MODES = CLONER_MODE_REGISTRY;
 export const ANARCHY_TRIGGER_ACTIONS = TRIGGER_ACTION_REGISTRY;
 export const ANARCHY_BASS_TARGETS = BASS_TARGET_REGISTRY;
@@ -129,6 +170,37 @@ export const DEFAULT_POST_FX: Required<Anarchy3DPostFx> = {
   kaleidoscopeSegments: 0,
   bloomIntensity: 0.45,
 };
+
+const STUDIO_LIGHTING_SET = new Set<AnarchyStudioLightingPreset>(
+  STUDIO_LIGHTING_PRESET_REGISTRY.map((x) => x.value)
+);
+const V4_BACKDROP_SET = new Set<AnarchyV4BackdropType>(
+  V4_BACKDROP_TYPE_REGISTRY.map((x) => x.value)
+);
+const TONE_MAPPING_SET = new Set<AnarchyToneMapping>(
+  TONE_MAPPING_REGISTRY.map((x) => x.value)
+);
+const ACTOR_TYPE_SET = new Set<AnarchyActorType>(
+  ACTOR_TYPE_REGISTRY.map((x) => x.value)
+);
+const SWARM_BEHAVIOR_SET = new Set<AnarchySwarmBehavior>(
+  SWARM_BEHAVIOR_REGISTRY.map((x) => x.value)
+);
+const MATERIAL_OVERRIDE_SET = new Set<AnarchyMaterialOverride>(
+  MATERIAL_OVERRIDE_REGISTRY.map((x) => x.value)
+);
+const MODULATION_SOURCE_SET = new Set<AnarchyModulationSource>(
+  MODULATION_SOURCE_REGISTRY
+);
+const MODULATION_TARGET_SET = new Set<AnarchyModulationTarget>(
+  MODULATION_TARGET_REGISTRY.map((x) => x.value)
+);
+const POST_FX_STACK_SET = new Set<AnarchyPostFxStackType>(
+  POST_FX_STACK_TYPE_REGISTRY.map((x) => x.value)
+);
+const SCENE_TRANSITION_SET = new Set<AnarchySceneTransitionType>(
+  SCENE_TRANSITION_REGISTRY.map((x) => x.value)
+);
 
 const TERRAIN_SET = new Set<AnarchyTerrainType>(
   TERRAIN_REGISTRY.map((t) => t.value)
@@ -286,6 +358,10 @@ export function createDefaultAnarchy3DScene(
     compositionMode?: AnarchyCompositionMode;
     kaleidoAxes?: number;
     generators?: Anarchy3DGenerator[];
+    actors?: Anarchy3DActor[];
+    postFX?: Anarchy3DPostFxStep[];
+    durationBars?: number;
+    transition?: AnarchySceneTransitionType;
     environment?: Partial<Anarchy3DEnvironment>;
     subject?: Partial<Anarchy3DSubject>;
     subjects?: Anarchy3DSubject[];
@@ -361,6 +437,10 @@ export function createDefaultAnarchy3DScene(
     ...(overrides?.compositionMode ? { compositionMode: overrides.compositionMode } : {}),
     ...(overrides?.kaleidoAxes !== undefined ? { kaleidoAxes: overrides.kaleidoAxes } : {}),
     ...(overrides?.generators ? { generators: overrides.generators } : {}),
+    ...(overrides?.actors ? { actors: overrides.actors } : {}),
+    ...(overrides?.postFX ? { postFX: overrides.postFX } : {}),
+    ...(overrides?.durationBars !== undefined ? { durationBars: overrides.durationBars } : {}),
+    ...(overrides?.transition ? { transition: overrides.transition } : {}),
     environment,
     subject: subjects[0] ?? subject,
     subjects,
@@ -2671,6 +2751,382 @@ export const DEFAULT_SCENE_PACKS: Anarchy3DPack[] = [
       }),
     ],
   },
+  {
+    packId: "v4-organic-showcase",
+    name: "V4 Organic // Studio & Blender Temps Réel",
+    author: "Anarchy Visual Studio",
+    bpm: 128,
+    beatsPerScene: 16,
+    seed: 40404,
+    scenes: [
+      createDefaultAnarchy3DScene(0, {
+        id: "v4-liquid-chrome",
+        name: "01. Sphère Liquide Chrome & Rubans Néon",
+        version: 4,
+        durationBars: 4,
+        transition: "crossfade",
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "chrome_reflective",
+          outlineThickness: 0,
+          toneMapping: "aces_filmic",
+        },
+        environment: {
+          skyColor: "#0B0E17",
+          fogColor: "#141B2D",
+          fogDensity: 0.02,
+          terrainType: "mirror_floor",
+          terrainSpeed: 6.0,
+          terrainPrimaryColor: "#E2E8F0",
+          terrainSecondaryColor: "#38BDF8",
+          lightingPreset: "studio_clean",
+          backdropType: "gradient_sky",
+          backdropColors: ["#090D16", "#1E293B", "#0F172A"],
+          fog: { enabled: true, color: "#0F172A", density: 0.025 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#E2E8F0",
+          accentColor: "#38BDF8",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "liquid-chrome-core",
+            type: "organic_blob",
+            position: [0, 0.1, 4.8],
+            scale: 1.35,
+            color: "#F8FAFC",
+            secondaryColor: "#38BDF8",
+            material: "chrome",
+            detail: 28,
+            noiseStrength: 0.65,
+            noiseFrequency: 1.8,
+            speed: 1.3,
+            audioModulation: [
+              { source: "bass", target: "scale", amount: 0.45, offset: 0 },
+              { source: "lowMid", target: "noiseStrength", amount: 0.7, offset: 0 },
+              { source: "fader_1", target: "scale", amount: 0.35, offset: 0 },
+            ],
+          },
+          {
+            id: "neon-silk-ribbons",
+            type: "spline_ribbons",
+            position: [0, 0, 5.2],
+            scale: 1.2,
+            color: "#38BDF8",
+            secondaryColor: "#F472B6",
+            material: "emissive_neon",
+            ribbonCount: 7,
+            thickness: 2.5,
+            speed: 1.6,
+            audioModulation: [
+              { source: "highMid", target: "scale", amount: 0.5, offset: 0 },
+              { source: "treble", target: "emissiveIntensity", amount: 0.85, offset: 0.2 },
+            ],
+          },
+        ],
+        postFX: [
+          { type: "bloom", intensity: 0.85, threshold: 0.55 },
+          { type: "chromatic_aberration", intensity: 0.12 },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.75,
+        },
+        camera: {
+          mode: "orbit",
+          rig: "orbit_smooth",
+          beatCut: false,
+          fov: 64,
+          shakeIntensity: 0.12,
+        },
+        audioMapping: {
+          bassTarget: "subject_pulse",
+          midTarget: "color_shift",
+          trebleTarget: "particles_burst",
+          fluxTarget: "glitch_and_emissive",
+        },
+      }),
+      createDefaultAnarchy3DScene(1, {
+        id: "v4-curl-storm",
+        name: "02. Tempête Curl-Noise & Flou Cinéma",
+        version: 4,
+        durationBars: 8,
+        transition: "camera_swoop",
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "neon_glow",
+          outlineThickness: 0,
+          toneMapping: "cineon",
+        },
+        environment: {
+          skyColor: "#04050A",
+          fogColor: "#090D1A",
+          fogDensity: 0.03,
+          terrainType: "infinite_grid",
+          terrainSpeed: 8.0,
+          terrainPrimaryColor: "#6366F1",
+          terrainSecondaryColor: "#EC4899",
+          lightingPreset: "dark_void",
+          backdropType: "starfield",
+          backdropColors: ["#03040A", "#0F172A", "#1E1B4B"],
+          fog: { enabled: true, color: "#050712", density: 0.035 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#818CF8",
+          accentColor: "#F472B6",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "curl-swarm-main",
+            type: "particle_swarm",
+            position: [0, 0, 5.0],
+            scale: 1.3,
+            color: "#38BDF8",
+            secondaryColor: "#EC4899",
+            count: 5500,
+            behavior: "curl_noise_flow",
+            speed: 1.4,
+            audioModulation: [
+              { source: "energy", target: "rotationSpeed", amount: 1.2, offset: 0.2 },
+              { source: "bass", target: "scale", amount: 0.55, offset: 0 },
+            ],
+          },
+          {
+            id: "floating-cinema-dust",
+            type: "particle_swarm",
+            position: [0, 0, 3.8],
+            scale: 1.0,
+            color: "#FDE68A",
+            secondaryColor: "#FFFFFF",
+            count: 1800,
+            behavior: "floating_dust",
+            speed: 0.7,
+            audioModulation: [
+              { source: "treble", target: "emissiveIntensity", amount: 0.9, offset: 0.1 },
+            ],
+          },
+        ],
+        postFX: [
+          { type: "depth_of_field", intensity: 0.75, radius: 3.5 },
+          { type: "bloom", intensity: 0.9, threshold: 0.45 },
+          { type: "film_grain", intensity: 0.28 },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.85,
+        },
+        camera: {
+          mode: "dramatic_tilt",
+          rig: "dolly_zoom_on_kick",
+          beatCut: false,
+          fov: 70,
+          shakeIntensity: 0.22,
+        },
+        audioMapping: {
+          bassTarget: "camera_zoom_and_jump",
+          midTarget: "camera_sway",
+          trebleTarget: "particles_burst",
+          fluxTarget: "fov_kick",
+        },
+      }),
+      createDefaultAnarchy3DScene(2, {
+        id: "v4-organic-dunes",
+        name: "03. Dunes Organiques & Plasma Solaire",
+        version: 4,
+        durationBars: 4,
+        transition: "crossfade",
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "flat",
+          outlineThickness: 0,
+          toneMapping: "aces_filmic",
+        },
+        environment: {
+          skyColor: "#1A0B12",
+          fogColor: "#7C2D12",
+          fogDensity: 0.032,
+          terrainType: "lowpoly_mountains",
+          terrainSpeed: 10.0,
+          terrainPrimaryColor: "#F97316",
+          terrainSecondaryColor: "#FDE047",
+          lightingPreset: "sunset_warm",
+          backdropType: "liquid_plasma",
+          backdropColors: ["#1C0A14", "#EA580C", "#FACC15"],
+          fog: { enabled: true, color: "#9A3412", density: 0.03 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#FB923C",
+          accentColor: "#FDE047",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "simplex-bass-dunes",
+            type: "wave_terrain",
+            position: [0, -0.9, 4.6],
+            scale: 1.35,
+            color: "#FB923C",
+            secondaryColor: "#FDE047",
+            material: "matcap_clay",
+            detail: 22,
+            noiseStrength: 0.85,
+            noiseFrequency: 1.2,
+            speed: 1.25,
+            audioModulation: [
+              { source: "bass", target: "noiseStrength", amount: 1.15, offset: 0 },
+              { source: "lowMid", target: "positionY", amount: 0.35, offset: 0 },
+            ],
+          },
+          {
+            id: "solar-glass-orb",
+            type: "organic_blob",
+            position: [0, 0.95, 6.2],
+            scale: 0.85,
+            color: "#FDE047",
+            secondaryColor: "#F97316",
+            material: "frosted_glass",
+            detail: 20,
+            noiseStrength: 0.35,
+            noiseFrequency: 1.4,
+            speed: 0.9,
+            audioModulation: [
+              { source: "energy", target: "scale", amount: 0.35, offset: 0 },
+            ],
+          },
+        ],
+        postFX: [
+          { type: "bloom", intensity: 0.7, threshold: 0.5 },
+          { type: "film_grain", intensity: 0.16 },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.65,
+        },
+        camera: {
+          mode: "chase_low",
+          rig: "first_person_fly",
+          beatCut: false,
+          fov: 74,
+          shakeIntensity: 0.18,
+        },
+        audioMapping: {
+          bassTarget: "pillar_slam",
+          midTarget: "terrain_wave_height",
+          trebleTarget: "sky_flash",
+          fluxTarget: "camera_shake",
+        },
+      }),
+      createDefaultAnarchy3DScene(3, {
+        id: "v4-hybrid-cel-comic",
+        name: "04. Hybride Modèle 3D & BD Cel-Shading",
+        version: 4,
+        durationBars: 8,
+        transition: "flash",
+        compositionMode: "void_orbital",
+        renderStyle: {
+          resolutionScale: 1.0,
+          shading: "toon_cel",
+          outlineThickness: 3,
+          toneMapping: "reinhard",
+        },
+        environment: {
+          skyColor: "#FEF08A",
+          fogColor: "#FDE047",
+          fogDensity: 0.01,
+          terrainType: "infinite_grid",
+          terrainSpeed: 9.0,
+          terrainPrimaryColor: "#FF1B24",
+          terrainSecondaryColor: "#00F0FF",
+          lightingPreset: "cyber_neon",
+          backdropType: "grid_horizon",
+          backdropColors: ["#FFFBEB", "#FF1B24", "#00B4D8"],
+          fog: { enabled: false, color: "#FFFBEB", density: 0 },
+        },
+        subject: {
+          meshType: "none",
+          primaryColor: "#FF1B24",
+          accentColor: "#00F0FF",
+          wireframeOverlay: false,
+          scale: 1.0,
+        },
+        actors: [
+          {
+            id: "anarchy-bust-glb",
+            type: "glb_model",
+            url: "/models/anarchy-totem.glb",
+            position: [-0.85, -0.1, 5.0],
+            scale: 1.15,
+            color: "#FF1B24",
+            secondaryColor: "#00F0FF",
+            material: "toon_cel_outline",
+            speed: 1.1,
+            audioModulation: [
+              { source: "bass", target: "scale", amount: 0.35, offset: 0 },
+              { source: "highMid", target: "rotationSpeed", amount: 0.9, offset: 0.2 },
+            ],
+          },
+          {
+            id: "openhub-comic-mascot",
+            type: "sprite_2d",
+            label: "3d_glasses_character",
+            position: [0.95, 0.05, 4.4],
+            scale: 1.1,
+            color: "#FF1B24",
+            secondaryColor: "#00F0FF",
+            parallax: 1.25,
+            audioModulation: [
+              { source: "bass", target: "positionY", amount: 0.4, offset: 0 },
+              { source: "fader_2", target: "scale", amount: 0.3, offset: 0 },
+            ],
+          },
+        ],
+        postFX: [
+          { type: "toon_outline", intensity: 1.2, color: "#09090B" },
+          { type: "chromatic_aberration", intensity: 0.14 },
+        ],
+        postFx: {
+          ps1VertexJitter: 0,
+          crtScanlines: 0,
+          chromaticAberration: 0,
+          kaleidoscopeSegments: 0,
+          bloomIntensity: 0.35,
+        },
+        camera: {
+          mode: "orbit",
+          rig: "handheld_shake",
+          beatCut: true,
+          fov: 68,
+          shakeIntensity: 0.25,
+        },
+        audioMapping: {
+          bassTarget: "subject_pulse",
+          midTarget: "subject_rotation",
+          trebleTarget: "wireframe_glow",
+          fluxTarget: "camera_shake",
+        },
+      }),
+    ],
+  },
 ];
 
 function mulberry32(seed: number) {
@@ -2948,11 +3404,161 @@ function sanitizeRenderStyle(raw: unknown): Anarchy3DRenderStyle | undefined {
     rs.outlineThickness !== undefined
       ? Number(clampNum(rs.outlineThickness, 0, 6, 0).toFixed(2))
       : undefined;
+  const toneMapping: AnarchyToneMapping | undefined = TONE_MAPPING_SET.has(
+    rs.toneMapping as AnarchyToneMapping
+  )
+    ? (rs.toneMapping as AnarchyToneMapping)
+    : undefined;
   return {
     ...(resolutionScale !== undefined ? { resolutionScale } : {}),
     shading,
     ...(outlineThickness !== undefined ? { outlineThickness } : {}),
+    ...(toneMapping ? { toneMapping } : {}),
   };
+}
+
+function sanitizeAudioModulations(
+  raw: unknown
+): Anarchy3DAudioModulation[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const valid: Anarchy3DAudioModulation[] = [];
+  for (const item of raw.slice(0, 12)) {
+    if (!item || typeof item !== "object") continue;
+    const m = item as Record<string, unknown>;
+    const source: AnarchyModulationSource = MODULATION_SOURCE_SET.has(
+      m.source as AnarchyModulationSource
+    )
+      ? (m.source as AnarchyModulationSource)
+      : "bass";
+    const target: AnarchyModulationTarget = MODULATION_TARGET_SET.has(
+      m.target as AnarchyModulationTarget
+    )
+      ? (m.target as AnarchyModulationTarget)
+      : "scale";
+    valid.push({
+      source,
+      target,
+      amount: Number(clampNum(m.amount, -5, 5, 0.5).toFixed(2)),
+      ...(m.offset !== undefined
+        ? { offset: Number(clampNum(m.offset, -5, 5, 0).toFixed(2)) }
+        : {}),
+    });
+  }
+  return valid.length > 0 ? valid : undefined;
+}
+
+function sanitizeActors(raw: unknown): Anarchy3DActor[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const valid: Anarchy3DActor[] = [];
+  for (let i = 0; i < Math.min(raw.length, 10); i++) {
+    const item = raw[i];
+    if (!item || typeof item !== "object") continue;
+    const a = item as Record<string, unknown>;
+    const type: AnarchyActorType = ACTOR_TYPE_SET.has(a.type as AnarchyActorType)
+      ? (a.type as AnarchyActorType)
+      : "organic_blob";
+    const material: AnarchyMaterialOverride | undefined = MATERIAL_OVERRIDE_SET.has(
+      a.material as AnarchyMaterialOverride
+    )
+      ? (a.material as AnarchyMaterialOverride)
+      : undefined;
+    const behavior: AnarchySwarmBehavior | undefined = SWARM_BEHAVIOR_SET.has(
+      a.behavior as AnarchySwarmBehavior
+    )
+      ? (a.behavior as AnarchySwarmBehavior)
+      : type === "particle_swarm"
+      ? "curl_noise_flow"
+      : undefined;
+    const scaleVal: number | [number, number, number] = Array.isArray(a.scale)
+      ? [
+          Number(clampNum(a.scale[0], 0.1, 8, 1).toFixed(2)),
+          Number(clampNum(a.scale[1], 0.1, 8, 1).toFixed(2)),
+          Number(clampNum(a.scale[2], 0.1, 8, 1).toFixed(2)),
+        ]
+      : Number(clampNum(a.scale, 0.1, 8, 1).toFixed(2));
+    const position: [number, number, number] | undefined = Array.isArray(a.position)
+      ? [
+          Number(clampNum(a.position[0], -12, 12, 0).toFixed(2)),
+          Number(clampNum(a.position[1], -12, 12, 0).toFixed(2)),
+          Number(clampNum(a.position[2], 1, 20, 5).toFixed(2)),
+        ]
+      : undefined;
+    const rotation: [number, number, number] | undefined = Array.isArray(a.rotation)
+      ? [
+          Number(clampNum(a.rotation[0], -Math.PI * 2, Math.PI * 2, 0).toFixed(2)),
+          Number(clampNum(a.rotation[1], -Math.PI * 2, Math.PI * 2, 0).toFixed(2)),
+          Number(clampNum(a.rotation[2], -Math.PI * 2, Math.PI * 2, 0).toFixed(2)),
+        ]
+      : undefined;
+    const audioModulation = sanitizeAudioModulations(a.audioModulation);
+    valid.push({
+      ...(typeof a.id === "string" && a.id.trim() ? { id: a.id.trim() } : { id: `actor-${i + 1}` }),
+      type,
+      ...(position ? { position } : {}),
+      ...(rotation ? { rotation } : {}),
+      scale: scaleVal,
+      color: sanitizeHexColor(a.color, "#38BDF8"),
+      ...(a.secondaryColor !== undefined
+        ? { secondaryColor: sanitizeHexColor(a.secondaryColor, "#F472B6") }
+        : {}),
+      ...(material ? { material } : {}),
+      ...(a.detail !== undefined
+        ? { detail: Math.round(clampNum(a.detail, 8, 48, 22)) }
+        : {}),
+      ...(a.noiseStrength !== undefined
+        ? { noiseStrength: Number(clampNum(a.noiseStrength, 0, 2.5, 0.6).toFixed(2)) }
+        : {}),
+      ...(a.noiseFrequency !== undefined
+        ? { noiseFrequency: Number(clampNum(a.noiseFrequency, 0.2, 6, 1.5).toFixed(2)) }
+        : {}),
+      ...(a.speed !== undefined
+        ? { speed: Number(clampNum(a.speed, 0, 8, 1.2).toFixed(2)) }
+        : {}),
+      ...(a.count !== undefined
+        ? { count: Math.round(clampNum(a.count, 1000, 10000, 3000)) }
+        : {}),
+      ...(behavior ? { behavior } : {}),
+      ...(a.ribbonCount !== undefined
+        ? { ribbonCount: Math.round(clampNum(a.ribbonCount, 2, 16, 6)) }
+        : {}),
+      ...(a.thickness !== undefined
+        ? { thickness: Number(clampNum(a.thickness, 0.5, 8, 2.2).toFixed(2)) }
+        : {}),
+      ...(typeof a.url === "string" && a.url.trim() ? { url: a.url.trim() } : {}),
+      ...(typeof a.label === "string" && a.label.trim() ? { label: a.label.trim() } : {}),
+      ...(a.parallax !== undefined
+        ? { parallax: Number(clampNum(a.parallax, 0, 2, 1).toFixed(2)) }
+        : {}),
+      ...(audioModulation ? { audioModulation } : {}),
+    });
+  }
+  return valid.length > 0 ? valid : undefined;
+}
+
+function sanitizePostFxStack(raw: unknown): Anarchy3DPostFxStep[] | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const valid: Anarchy3DPostFxStep[] = [];
+  for (const item of raw.slice(0, 8)) {
+    if (!item || typeof item !== "object") continue;
+    const fx = item as Record<string, unknown>;
+    if (!POST_FX_STACK_SET.has(fx.type as AnarchyPostFxStackType)) continue;
+    valid.push({
+      type: fx.type as AnarchyPostFxStackType,
+      ...(fx.intensity !== undefined
+        ? { intensity: Number(clampNum(fx.intensity, 0, 2, 0.8).toFixed(2)) }
+        : {}),
+      ...(fx.radius !== undefined
+        ? { radius: Number(clampNum(fx.radius, 0.5, 16, 3).toFixed(2)) }
+        : {}),
+      ...(fx.threshold !== undefined
+        ? { threshold: Number(clampNum(fx.threshold, 0, 1, 0.5).toFixed(2)) }
+        : {}),
+      ...(fx.color !== undefined
+        ? { color: sanitizeHexColor(fx.color, "#09090B") }
+        : {}),
+    });
+  }
+  return valid.length > 0 ? valid : undefined;
 }
 
 function sanitizeBackdropShader(
@@ -3099,6 +3705,32 @@ export function sanitizeAnarchy3DScene(
     ? (layerBackdropRaw?.skyGradient as unknown[])
     : null;
 
+  const lightingPreset: AnarchyStudioLightingPreset | undefined =
+    STUDIO_LIGHTING_SET.has(rawEnv.lightingPreset as AnarchyStudioLightingPreset)
+      ? (rawEnv.lightingPreset as AnarchyStudioLightingPreset)
+      : undefined;
+  const backdropType: AnarchyV4BackdropType | undefined = V4_BACKDROP_SET.has(
+    rawEnv.backdropType as AnarchyV4BackdropType
+  )
+    ? (rawEnv.backdropType as AnarchyV4BackdropType)
+    : undefined;
+  const backdropColors = Array.isArray(rawEnv.backdropColors)
+    ? rawEnv.backdropColors
+        .slice(0, 4)
+        .map((c) => sanitizeHexColor(c, fallback.environment.skyColor))
+    : undefined;
+  const rawFog =
+    rawEnv.fog && typeof rawEnv.fog === "object"
+      ? (rawEnv.fog as Record<string, unknown>)
+      : undefined;
+  const v4Fog = rawFog
+    ? {
+        enabled: typeof rawFog.enabled === "boolean" ? rawFog.enabled : true,
+        color: sanitizeHexColor(rawFog.color, fallback.environment.fogColor),
+        density: Number(clampNum(rawFog.density, 0, 0.25, 0.03).toFixed(4)),
+      }
+    : undefined;
+
   const environment: Anarchy3DEnvironment = {
     skyColor: sanitizeHexColor(
       rawEnv.skyColor ?? backdropSkyGrad?.[0],
@@ -3133,6 +3765,10 @@ export function sanitizeAnarchy3DScene(
       rawEnv.terrainSecondaryColor ?? layerTerrainRaw?.secondaryColor,
       fallback.environment.terrainSecondaryColor
     ),
+    ...(lightingPreset ? { lightingPreset } : {}),
+    ...(backdropType ? { backdropType } : {}),
+    ...(backdropColors && backdropColors.length > 0 ? { backdropColors } : {}),
+    ...(v4Fog ? { fog: v4Fog } : {}),
   };
 
   // Sujets multiples (layers[kind="subjects"] ou item.subjects ou item.subject v1)
@@ -3347,10 +3983,29 @@ export function sanitizeAnarchy3DScene(
       ? Math.round(clampNum(item.kaleidoAxes, 2, 12, 6))
       : undefined;
   const generators = sanitizeGenerators(item.generators);
+  const actors = sanitizeActors(item.actors);
+  const postFX = sanitizePostFxStack(item.postFX);
+  const durationBars =
+    item.durationBars !== undefined
+      ? Math.round(clampNum(item.durationBars, 1, 64, 4))
+      : undefined;
+  const transition: AnarchySceneTransitionType | undefined =
+    SCENE_TRANSITION_SET.has(item.transition as AnarchySceneTransitionType)
+      ? (item.transition as AnarchySceneTransitionType)
+      : undefined;
 
   const sceneAnimations = sanitizeAnimations(item.animations, allowedParams);
   const sceneTriggers = sanitizeTriggers(item.triggers, allowedParams);
-  const hasV4Features = Boolean(mergedParams || sceneTriggers?.length);
+  const hasV4Features = Boolean(
+    mergedParams ||
+      sceneTriggers?.length ||
+      actors?.length ||
+      postFX?.length ||
+      durationBars !== undefined ||
+      transition ||
+      environment.lightingPreset ||
+      environment.backdropType
+  );
   const hasV3Features =
     Boolean(
       sceneAnimations?.length ||
@@ -3382,6 +4037,10 @@ export function sanitizeAnarchy3DScene(
     ...(compositionMode ? { compositionMode } : {}),
     ...(kaleidoAxes !== undefined ? { kaleidoAxes } : {}),
     ...(generators ? { generators } : {}),
+    ...(actors ? { actors } : {}),
+    ...(postFX ? { postFX } : {}),
+    ...(durationBars !== undefined ? { durationBars } : {}),
+    ...(transition ? { transition } : {}),
     environment,
     subject: primarySubject,
     subjects,
@@ -4237,6 +4896,10 @@ export function exportScenePackAsJson(pack: Anarchy3DPack): string {
       ...(sc.compositionMode ? { compositionMode: sc.compositionMode } : {}),
       ...(sc.kaleidoAxes !== undefined ? { kaleidoAxes: sc.kaleidoAxes } : {}),
       ...(sc.generators ? { generators: sc.generators } : {}),
+      ...(sc.actors ? { actors: sc.actors } : {}),
+      ...(sc.postFX ? { postFX: sc.postFX } : {}),
+      ...(sc.durationBars !== undefined ? { durationBars: sc.durationBars } : {}),
+      ...(sc.transition ? { transition: sc.transition } : {}),
       environment: {
         skyColor: sc.environment.skyColor,
         fogColor: sc.environment.fogColor,
@@ -4245,6 +4908,10 @@ export function exportScenePackAsJson(pack: Anarchy3DPack): string {
         terrainSpeed: sc.environment.terrainSpeed,
         terrainPrimaryColor: sc.environment.terrainPrimaryColor,
         terrainSecondaryColor: sc.environment.terrainSecondaryColor,
+        ...(sc.environment.lightingPreset ? { lightingPreset: sc.environment.lightingPreset } : {}),
+        ...(sc.environment.backdropType ? { backdropType: sc.environment.backdropType } : {}),
+        ...(sc.environment.backdropColors ? { backdropColors: sc.environment.backdropColors } : {}),
+        ...(sc.environment.fog ? { fog: sc.environment.fog } : {}),
       },
       subject: {
         meshType: sc.subject.meshType,
