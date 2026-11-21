@@ -477,45 +477,57 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
 
   return (
     <Card
-      moduleTitle="PACK DE SCÈNES // ENCHAÎNEMENT BPM (MOTEUR 3D DATA-DRIVEN JSON)"
-      moduleMeta={`${currentPack.name} (${currentPack.packId}) · ${currentPack.scenes.length} SCÈNES 3D`}
+      moduleTitle="PACKS DE SCÈNES 3D"
+      moduleMeta={`${currentPack.scenes.length} SCÈNES · ${bpm} BPM`}
       activeIndicator
     >
-      <div className="space-y-3.5">
-        {/* Barre principale : Sélecteur Pack 3D + Génération + Éditer/Voir le JSON + Importer/Exporter + Doc/Prompt IA */}
+      <div className="space-y-3">
+        {/* Barre d'outils principale : Pack, Création & Édition */}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <select
               aria-label="Choisir un pack de scènes 3D"
               value={currentPack.packId}
               onChange={(e) => {
                 const found = packs.find((p) => p.packId === e.target.value);
                 if (found) {
-                  // ISOLATION STRICTE : changer de Pack 3D ne modifie aucun fader ni le BPM
                   setSelectedPackId(found.packId);
                   onPackChange(found);
                   onSelectSlot(0, found.scenes[0], found);
                   setFeedback(
-                    `Pack 3D "${found.name}" chargé (Faders & BPM intacts).`
+                    `Pack "${found.name}" chargé.`
                   );
                 }
               }}
-              className="px-2.5 py-1.5 rounded border-2 border-black bg-brand-white font-mono text-xs font-bold"
+              className="px-2.5 py-1.5 rounded-lg border-2 border-black bg-brand-white font-mono text-xs font-bold"
             >
               {packs.map((p) => (
                 <option key={p.packId} value={p.packId}>
                   {favoritePackIds.includes(p.packId) ? "★ " : ""}
-                  {p.name} ({p.scenes.length} scènes)
+                  {p.name}
                 </option>
               ))}
             </select>
+
+            <button
+              type="button"
+              onClick={handleToggleFavoritePack}
+              className={`px-2.5 py-1.5 rounded-lg border font-mono text-xs font-bold transition-all ${
+                favoritePackIds.includes(currentPack.packId)
+                  ? "border-amber-500 bg-amber-100 text-amber-900"
+                  : "border-neutral-300 bg-brand-pearl hover:border-black text-brand-black"
+              }`}
+              title="Sauvegarder ce pack dans tes favoris"
+            >
+              {favoritePackIds.includes(currentPack.packId) ? "★ Favori" : "☆ Favori"}
+            </button>
 
             <input
               type="text"
               value={customPackName}
               onChange={(e) => setCustomPackName(e.target.value)}
-              placeholder="Nom optionnel..."
-              className="w-36 px-2 py-1.5 rounded border border-neutral-400 bg-brand-white font-mono text-[11px]"
+              placeholder="Nom du pack..."
+              className="w-32 px-2.5 py-1.5 rounded-lg border border-neutral-300 bg-brand-white font-mono text-[11px] focus:border-black focus:outline-none"
             />
 
             <Button
@@ -524,42 +536,27 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
               size="sm"
               onClick={handleGenerateNewPack}
             >
-              🎲 GÉNÉRER UN PACK 3D
+              🎲 Nouveau Pack
             </Button>
 
             <button
               type="button"
               onClick={handleDuplicatePack}
-              className="px-2.5 py-1.5 rounded border-2 border-black bg-brand-pearl hover:bg-brand-white font-mono text-[11px] font-bold"
+              className="px-2.5 py-1.5 rounded-lg border border-neutral-300 bg-brand-pearl hover:border-black font-mono text-[11px] font-bold transition-colors"
               title="Dupliquer ce pack 3D pour le modifier librement"
             >
-              ⎘ Dupliquer Pack
-            </button>
-
-            <button
-              type="button"
-              onClick={handleToggleFavoritePack}
-              className={`px-2.5 py-1.5 rounded border-2 font-mono text-[11px] font-bold transition-all ${
-                favoritePackIds.includes(currentPack.packId)
-                  ? "border-amber-600 bg-amber-100 text-amber-900"
-                  : "border-black bg-brand-white hover:bg-brand-pearl text-brand-black"
-              }`}
-              title="Sauvegarder ce pack dans tes favoris (localStorage)"
-            >
-              {favoritePackIds.includes(currentPack.packId) ? "★ Favori" : "☆ Favori"}
+              ⎘ Dupliquer
             </button>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Button
               type="button"
               variant={showJsonEditor ? "comic" : "clinical"}
               size="sm"
               onClick={() => setShowJsonEditor((v) => !v)}
             >
-              {showJsonEditor
-                ? "✕ FERMER ÉDITEUR JSON"
-                : "{ } ÉDITER / VOIR LE JSON"}
+              {showJsonEditor ? "✕ Fermer JSON" : "{ } Éditer JSON"}
             </Button>
 
             <Button
@@ -571,7 +568,7 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                 setShowImportExportModal(true);
               }}
             >
-              ⇄ IMPORTER / EXPORTER UN PACK (.JSON / COPIER LE CODE)
+              ⇄ Import / Export
             </Button>
 
             <Button
@@ -580,17 +577,14 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
               size="sm"
               onClick={() => setShowDocModal(true)}
             >
-              📖 DOC / GÉNÉRER AVEC UNE IA
+              🤖 Doc &amp; IA
             </Button>
           </div>
         </div>
 
-        {/* Pastilles des Scènes 3D + Bouton + Ajouter une scène + Cadence BPM (2 ou 4 mesures) */}
-        <div className="flex flex-wrap items-center justify-between gap-2 p-2.5 rounded-xl bg-brand-pearl border-2 border-black">
+        {/* Piste des Scènes 3D & Cadence BPM */}
+        <div className="flex flex-wrap items-center justify-between gap-2.5 p-2.5 rounded-xl bg-brand-pearl border border-neutral-300">
           <div className="flex flex-wrap items-center gap-1.5">
-            <span className="font-mono text-[10px] font-bold uppercase text-neutral-600 mr-1">
-              SCÈNES 3D ({currentPack.scenes.length}) :
-            </span>
             {currentPack.scenes.map((scene, idx) => {
               const isActive = safeSlotIndex === idx;
               return (
@@ -599,10 +593,10 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                   type="button"
                   onClick={() => onSelectSlot(idx, scene, currentPack)}
                   title={`${scene.name} — Terrain: ${scene.environment.terrainType} · Sujet: ${scene.subject.meshType} · Caméra: ${scene.camera.mode}`}
-                  className={`px-3 py-1 rounded-full border-2 font-mono text-[11px] font-bold transition-all ${
+                  className={`px-3 py-1 rounded-full border font-mono text-[11px] font-bold transition-all ${
                     isActive
-                      ? "border-black bg-brand-red text-white shadow-comic-sm scale-105"
-                      : "border-black bg-brand-white hover:bg-brand-pearl text-brand-black"
+                      ? "border-black bg-brand-red text-white shadow-comic-sm"
+                      : "border-neutral-300 bg-brand-white hover:border-black text-brand-black"
                   }`}
                 >
                   {scene.name || `0${idx + 1}. Scène 3D`}
@@ -613,31 +607,31 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
             <button
               type="button"
               onClick={handleAddSceneSlot}
-              className="px-2.5 py-1 rounded-full border-2 border-dashed border-black bg-brand-white hover:bg-brand-pearl font-mono text-[11px] font-bold text-brand-black"
+              className="px-2.5 py-1 rounded-full border border-dashed border-neutral-400 bg-brand-white hover:border-black font-mono text-[11px] font-bold text-neutral-700 hover:text-brand-black transition-colors"
               title="Ajouter une nouvelle scène 3D au pack"
             >
-              + Ajouter une scène
+              + Scène
             </button>
           </div>
 
           {onChangeBeatsPerScene && (
             <div className="flex items-center gap-1 font-mono text-[10px]">
-              <span className="font-bold text-neutral-600 uppercase mr-1">
-                CADENCE ({bpm} BPM) :
+              <span className="font-bold text-neutral-500 uppercase mr-1">
+                Cadence :
               </span>
               {[
-                { beats: 8, label: "2 Mesures (8T)" },
-                { beats: 16, label: "4 Mesures (16T)" },
-                { beats: 0, label: "Manuel 🔒" },
+                { beats: 8, label: "2 mes. (8T)" },
+                { beats: 16, label: "4 mes. (16T)" },
+                { beats: 0, label: "Manuel" },
               ].map((opt) => (
                 <button
                   key={opt.beats}
                   type="button"
                   onClick={() => onChangeBeatsPerScene(opt.beats)}
-                  className={`px-2 py-0.5 rounded border font-bold ${
+                  className={`px-2 py-1 rounded-md border font-bold transition-colors ${
                     beatsPerScene === opt.beats
                       ? "bg-brand-black text-white border-black"
-                      : "bg-brand-white text-brand-black border-neutral-300 hover:border-black"
+                      : "bg-brand-white text-neutral-700 border-neutral-300 hover:border-black"
                   }`}
                 >
                   {opt.label}
@@ -647,54 +641,43 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
           )}
         </div>
 
-        {/* Résumé en 1 ligne des paramètres JSON de la scène 3D active */}
+        {/* Résumé compact & visuel de la scène active */}
         {activeScene && (
-          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-brand-white border border-neutral-300 font-mono text-[10px] text-neutral-700">
+          <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 rounded-lg bg-brand-white border border-neutral-200 font-mono text-[10px] text-neutral-600">
             <div className="flex flex-wrap items-center gap-2">
               <span className="font-bold text-brand-black">
-                [{activeScene.id}] {activeScene.name}
+                {activeScene.name}
               </span>
-              <span>·</span>
-              <span>
-                terrain: <strong>{activeScene.environment.terrainType}</strong> (
-                {activeScene.environment.terrainSpeed}×)
+              <span className="px-1.5 py-0.5 rounded bg-brand-pearl border border-neutral-200">
+                Terrain : <strong className="text-brand-black">{activeScene.environment.terrainType}</strong>
               </span>
-              <span>·</span>
-              <span>
-                subject: <strong>{activeScene.subject.meshType}</strong> (scale{" "}
-                {activeScene.subject.scale}×)
+              <span className="px-1.5 py-0.5 rounded bg-brand-pearl border border-neutral-200">
+                Sujet : <strong className="text-brand-black">{activeScene.subject.meshType}</strong>
               </span>
-              <span>·</span>
-              <span>
-                camera: <strong>{activeScene.camera.mode}</strong> (FOV{" "}
-                {activeScene.camera.fov}°)
-              </span>
-              <span>·</span>
-              <span>
-                audio: <strong>{activeScene.audioMapping.bassTarget}</strong> /{" "}
-                <strong>{activeScene.audioMapping.midTarget}</strong>
+              <span className="px-1.5 py-0.5 rounded bg-brand-pearl border border-neutral-200">
+                Caméra : <strong className="text-brand-black">{activeScene.camera.mode}</strong>
               </span>
             </div>
             <div className="flex items-center gap-1.5">
               <span
-                className="inline-block w-3 h-3 rounded-sm border border-black"
+                className="inline-block w-3 h-3 rounded-sm border border-neutral-400"
                 style={{ backgroundColor: activeScene.environment.skyColor }}
                 title={`skyColor: ${activeScene.environment.skyColor}`}
               />
               <span
-                className="inline-block w-3 h-3 rounded-sm border border-black"
+                className="inline-block w-3 h-3 rounded-sm border border-neutral-400"
                 style={{
                   backgroundColor: activeScene.environment.terrainPrimaryColor,
                 }}
                 title={`terrainPrimaryColor: ${activeScene.environment.terrainPrimaryColor}`}
               />
               <span
-                className="inline-block w-3 h-3 rounded-sm border border-black"
+                className="inline-block w-3 h-3 rounded-sm border border-neutral-400"
                 style={{ backgroundColor: activeScene.subject.primaryColor }}
                 title={`subject.primaryColor: ${activeScene.subject.primaryColor}`}
               />
               <span
-                className="inline-block w-3 h-3 rounded-sm border border-black"
+                className="inline-block w-3 h-3 rounded-sm border border-neutral-400"
                 style={{ backgroundColor: activeScene.subject.accentColor }}
                 title={`subject.accentColor: ${activeScene.subject.accentColor}`}
               />
@@ -1592,12 +1575,12 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
         )}
 
         {feedback && (
-          <div className="px-3 py-1.5 rounded bg-brand-black text-brand-white font-mono text-[11px] flex items-center justify-between">
+          <div className="px-3 py-1.5 rounded-lg bg-brand-pearl border-l-4 border-brand-black text-brand-black font-mono text-[11px] flex items-center justify-between">
             <span>✓ {feedback}</span>
             <button
               type="button"
               onClick={() => setFeedback("")}
-              className="text-neutral-400 hover:text-white ml-2"
+              className="text-neutral-500 hover:text-brand-black ml-2"
             >
               ✕
             </button>
