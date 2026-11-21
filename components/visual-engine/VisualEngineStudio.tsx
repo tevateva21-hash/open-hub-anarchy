@@ -54,6 +54,7 @@ import {
 
 type AudioSourceMode = "LIVE_HUB" | "LOCAL_FILE";
 type BankFilter = "ALL" | "AUDIO" | "FX" | "CAMERA";
+type StudioControlTab = "faders" | "audio" | "variations" | "lyrics";
 
 const ZERO_FEATURES: AudioFeatures = {
   rms: 0,
@@ -173,19 +174,46 @@ export const VisualEngineStudio: React.FC = () => {
   const [clipActive, setClipActive] = useState<boolean>(true);
   const [clipLoop, setClipLoop] = useState<boolean>(true);
 
-  // Fenêtres / Onglets fermables et modulables
-  const [showAudioPanel, setShowAudioPanel] = useState<boolean>(true);
-  const [showStagePanel, setShowStagePanel] = useState<boolean>(true);
-  const [showMatrixPanel, setShowMatrixPanel] = useState<boolean>(true);
-  const [showFadersPanel, setShowFadersPanel] = useState<boolean>(true);
-  const [showLyricsPanel, setShowLyricsPanel] = useState<boolean>(true);
+  // Interface épurée par onglets + Mode Plein Écran
+  const [activeTab, setActiveTab] = useState<StudioControlTab>("faders");
+  const [showAllPanels, setShowAllPanels] = useState<boolean>(false);
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
+  const stageContainerRef = useRef<HTMLDivElement | null>(null);
   const stageCanvasRef = useRef<HTMLCanvasElement | null>(null);
   const localAudioRef = useRef<HTMLAudioElement | null>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
   const prevFreqRef = useRef<Uint8Array>(new Uint8Array(128));
   const smoothedFeaturesRef = useRef<AudioFeatures>({ ...ZERO_FEATURES });
   const timeAccumRef = useRef<number>(0);
+
+  useEffect(() => {
+    const onFsChange = () => {
+      const fsEl = document.fullscreenElement;
+      setIsFullscreen(Boolean(fsEl && fsEl === stageContainerRef.current));
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
+  const toggleFullscreen = useCallback(async () => {
+    const el = stageContainerRef.current;
+    if (!el) return;
+    try {
+      if (document.fullscreenElement === el) {
+        await document.exitFullscreen();
+        setIsFullscreen(false);
+      } else if (typeof el.requestFullscreen === "function") {
+        await el.requestFullscreen();
+        setIsFullscreen(true);
+      } else {
+        setIsFullscreen((v) => !v);
+      }
+    } catch {
+      // Fallback plein écran CSS si l'API Fullscreen est bloquée (ex: iframe)
+      setIsFullscreen((v) => !v);
+    }
+  }, []);
 
   const preset = project.activePreset;
   const activeDescriptor = getSceneDescriptor(
@@ -1004,145 +1032,707 @@ export const VisualEngineStudio: React.FC = () => {
 
   const isLowPoly = preset.render.style === "lowpoly-32";
 
-  return (
-    <div className="space-y-8">
-      {/* 1. Bandeau En-tête Anarchy Visual Design */}
-      <Card
-        moduleTitle="ANARCHY_VISUAL_DESIGN // STUDIO_10_FADERS"
-        moduleMeta={`${activeDescriptor.badge} // 10_CONSOLE_FADERS`}
-        activeIndicator={isPlaying || sourceMode === "LOCAL_FILE"}
-      >
-        <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-6">
-          <div className="flex items-start gap-4">
-            <AvatarBD
-              name="Visual Synth"
-              expression="glitch"
-              size="lg"
-              badgeText="FX"
-              anaglyphRing
-              audioReactive={isPlaying || liveFeatures.rms > 0.08}
-            />
-            <div className="space-y-1.5">
-              <div className="inline-flex flex-wrap items-center gap-2 font-mono text-[11px] font-bold uppercase text-brand-red">
-                <span className="px-2 py-0.5 rounded bg-brand-pearl border-2 border-black shadow-comic-sm text-brand-black">
-                  TEVATEVA21 / ANARCHY-VISUAL-ENGINE v2.0
-                </span>
-                <span>{"// 320x180 NEAREST-NEIGHBOR + 32-BIT PS1 + 10 FADERS"}</span>
-              </div>
-              <h1 className="text-2xl sm:text-3xl font-bold tracking-tight text-brand-black">
-                Anarchy Visual Design{" "}
-                <span className="text-brand-red underline decoration-4 underline-offset-4">
-                  Studio
-                </span>
-              </h1>
-              <p className="text-sm text-neutral-600 max-w-2xl">
-                Packs de scènes 3D profondes personnalisables (JSON / JS 3D), flash strobe aigu sur clap,
-                psychédélie &amp; caméra, et export MP4 avec son sur votre extrait audio.
-              </p>
-            </div>
-          </div>
+  const showFaders = showAllPanels || activeTab === "faders";
+  const showAudio = showAllPanels || activeTab === "audio";
+  const showVariations = showAllPanels || activeTab === "variations";
+  const showLyrics = showAllPanels || activeTab === "lyrics";
 
-          <div className="flex flex-wrap items-center gap-2 shrink-0 font-mono text-[11px]">
-            <Link
-              href="/docs/visual-studio"
-              className="px-2.5 py-1 rounded border-2 border-black bg-brand-red text-white font-bold shadow-comic-sm hover:bg-black transition-colors"
-            >
-              📖 DOCS STUDIO
-            </Link>
-            <span className="px-2.5 py-1 rounded border-2 border-black bg-brand-pearl text-brand-black font-bold">
-              SEED #{preset.seed}
-            </span>
-            <span className="px-2.5 py-1 rounded border-2 border-black bg-brand-white text-brand-red font-bold">
-              {bpm} BPM · {clipStartSeconds.toFixed(1)}s → {(clipStartSeconds + clipDurationSeconds).toFixed(1)}s
-            </span>
+  return (
+    <div className="space-y-5">
+      {/* Élément audio local toujours monté pour ne jamais couper la lecture lors du changement d'onglet */}
+      {localUrl && (
+        <audio
+          ref={localAudioRef}
+          src={localUrl}
+          data-track-title={fileName || "Visual Studio"}
+          onTimeUpdate={(e) => {
+            const t = e.currentTarget.currentTime;
+            setLocalTime(t);
+            applyClipFadeVolume(e.currentTarget, t);
+          }}
+          onSeeked={(e) => setLocalTime(e.currentTarget.currentTime)}
+          className="hidden"
+          aria-hidden="true"
+        />
+      )}
+
+      {/* 1. En-tête Studio épuré & barre de transport */}
+      <header className="flex flex-wrap items-center justify-between gap-3 px-4 py-3 rounded-xl bg-brand-white border-2 border-black shadow-comic-sm">
+        <div className="flex items-center gap-3">
+          <AvatarBD
+            name="Visual Synth"
+            expression="glitch"
+            size="sm"
+            badgeText="3D"
+            anaglyphRing
+            audioReactive={isPlaying || liveFeatures.rms > 0.08}
+          />
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-lg sm:text-xl font-bold tracking-tight text-brand-black">
+                Anarchy Visual <span className="text-brand-red">Studio</span>
+              </h1>
+              <span className="hidden sm:inline-block px-2 py-0.5 rounded-full bg-brand-pearl border border-neutral-300 font-mono text-[10px] font-bold text-neutral-700">
+                {activeDescriptor.name} · {bpm} BPM
+              </span>
+            </div>
+            <p className="text-xs text-neutral-500">
+              {sourceMode === "LOCAL_FILE" && fileName
+                ? `Piste locale : ${fileName}`
+                : isPlaying && currentTrack
+                ? `Open Hub : ${currentTrack.title}`
+                : "Prêt — importe un MP3/WAV ou lance le lecteur Open Hub"}
+            </p>
           </div>
         </div>
-      </Card>
 
-      {/* Barre de fenêtres modulables & fermables */}
-      <div className="flex flex-wrap items-center gap-2 p-2.5 rounded-xl bg-brand-pearl border-2 border-black shadow-comic-sm font-mono text-xs">
-        <span className="font-bold text-brand-red uppercase mr-1">
-          {"// FENÊTRES :"}
-        </span>
-        {[
-          { label: "🎵 AUDIO & EXTRAIT 30S", open: showAudioPanel, toggle: () => setShowAudioPanel((v) => !v) },
-          { label: "📺 MONITEUR VIDÉO", open: showStagePanel, toggle: () => setShowStagePanel((v) => !v) },
-          { label: "🎨 COULEURS & VARIATIONS", open: showMatrixPanel, toggle: () => setShowMatrixPanel((v) => !v) },
-          { label: "🎚 CONSOLE 10 FADERS", open: showFadersPanel, toggle: () => setShowFadersPanel((v) => !v) },
-          { label: "🎤 PAROLES & MICRO", open: showLyricsPanel, toggle: () => setShowLyricsPanel((v) => !v) },
-        ].map((win) => (
+        <div className="flex flex-wrap items-center gap-2 font-mono text-xs">
+          <Button
+            variant={isPlaying ? "clinical" : "primary"}
+            size="sm"
+            onClick={
+              sourceMode === "LOCAL_FILE" && analysis
+                ? isPlaying
+                  ? handlePauseSiteMusic
+                  : handlePlayClipExtract
+                : togglePlay
+            }
+          >
+            {isPlaying ? "❚❚ Pause" : "▶ Lecture"}
+          </Button>
+          <Button
+            id="btn-ve-fullscreen-top"
+            variant="comic"
+            size="sm"
+            onClick={() => void toggleFullscreen()}
+          >
+            {isFullscreen ? "✕ Quitter Plein Écran" : "⛶ Plein Écran"}
+          </Button>
           <button
-            key={win.label}
             type="button"
-            onClick={win.toggle}
-            className={`px-3 py-1.5 rounded-lg border-2 font-bold transition-all ${
-              win.open
-                ? "bg-brand-black text-white border-black shadow-comic-sm"
-                : "bg-brand-white text-neutral-500 border-neutral-300 hover:border-black"
+            onClick={() => setShowAllPanels((v) => !v)}
+            className={`px-2.5 py-1.5 rounded-lg border text-[11px] font-bold transition-colors ${
+              showAllPanels
+                ? "bg-brand-black text-white border-black"
+                : "bg-brand-pearl text-neutral-700 border-neutral-300 hover:border-black"
             }`}
+            title="Basculer entre la vue épurée par onglets et tous les panneaux ouverts"
           >
-            {win.open ? "✓ " : "+ "}
-            {win.label}
+            {showAllPanels ? "Vue épurée" : "Tout afficher"}
           </button>
-        ))}
-      </div>
-
-      {showAudioPanel && (
-      <div className="space-y-4">
-          <Card
-            moduleTitle="AUDIO_LAB // FFT_24KHZ_&_OPENHUB_SYNC"
-            moduleMeta="MONO / STÉRÉO · INDEXEDDB (MAX 5)"
+          <Link
+            href="/docs/visual-studio"
+            className="px-2.5 py-1.5 rounded-lg border border-neutral-300 bg-brand-pearl text-brand-black hover:border-black text-[11px] font-bold transition-colors"
           >
-            <div className="space-y-4">
-              {/* Choix source : Lecteur Open Hub persistant OU Piste MP3/WAV locale */}
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setSourceMode("LIVE_HUB")}
-                    className={`px-3 py-1.5 rounded-lg border-2 font-mono text-xs font-bold transition-all ${
-                      sourceMode === "LIVE_HUB"
-                        ? "bg-brand-red text-white border-black shadow-comic-sm"
-                        : "bg-brand-pearl text-brand-charcoal border-neutral-300"
-                    }`}
-                  >
-                    SYNCHRO LECTEUR OPEN HUB
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setSourceMode("LOCAL_FILE")}
-                    disabled={!analysis}
-                    className={`px-3 py-1.5 rounded-lg border-2 font-mono text-xs font-bold transition-all disabled:opacity-50 ${
-                      sourceMode === "LOCAL_FILE"
-                        ? "bg-black text-white border-black shadow-comic-sm"
-                        : "bg-brand-pearl text-brand-charcoal border-neutral-300"
-                    }`}
-                  >
-                    PISTE LOCALE ANALYSÉE
-                  </button>
-                </div>
+            Docs
+          </Link>
+        </div>
+      </header>
 
-                {sourceMode === "LIVE_HUB" && (
-                  <Button
-                    variant="clinical"
-                    size="sm"
-                    onClick={togglePlay}
-                  >
-                    {isPlaying
-                      ? `❚❚ PAUSE (${currentTrack?.title ?? "SIGNAL"})`
-                      : "▶ PLAY LECTEUR OPEN HUB"}
-                  </Button>
+      {/* 2. Cockpit principal : Moniteur Vidéo 3D (gauche) + Contrôles par onglets (droite) */}
+      <div className="grid grid-cols-1 xl:grid-cols-12 gap-5 items-start">
+        {/* COLONNE GAUCHE : MONITEUR VIDÉO + PLEIN ÉCRAN + EXPORT */}
+        <div className="xl:col-span-7 space-y-3">
+          <div className="rounded-xl border-2 border-black bg-brand-white p-3 sm:p-4 shadow-comic-sm space-y-3">
+            {/* Barre du moniteur : Format & Plein écran */}
+            <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[11px]">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(["16:9", "9:16", "4:5", "1:1"] as const).map((ratio) => {
+                  const spec = VIDEO_ASPECT_FORMATS[ratio];
+                  const active = aspectRatio === ratio;
+                  return (
+                    <button
+                      key={ratio}
+                      type="button"
+                      id={`btn-aspect-${ratio.replace(":", "x")}`}
+                      onClick={() => setAspectRatio(ratio)}
+                      title={spec.label}
+                      className={`px-2.5 py-1 rounded-md border font-bold transition-all ${
+                        active
+                          ? "bg-brand-black text-white border-black"
+                          : "bg-brand-pearl text-neutral-700 border-neutral-300 hover:border-black"
+                      }`}
+                    >
+                      {spec.shortLabel}
+                    </button>
+                  );
+                })}
+                {(aspectRatio === "9:16" || aspectRatio === "4:5") && (
+                  <label className="ml-2 inline-flex items-center gap-1.5 font-bold text-neutral-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={showSafeZone}
+                      onChange={(e) => setShowSafeZone(e.target.checked)}
+                      className="accent-brand-red"
+                    />
+                    <span>Safe Zone</span>
+                  </label>
                 )}
               </div>
 
-              {/* Zone upload + bouton Démo WAV 1-clic */}
-              <div className="p-4 rounded-xl bg-brand-pearl border-2 border-dashed border-neutral-400 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-                <div>
+              <div className="flex items-center gap-2">
+                <span className="hidden sm:inline text-[10px] text-neutral-500">
+                  {aspectSpec.width}×{aspectSpec.height}
+                  {isLowPoly && renderReport
+                    ? ` · ${renderReport.triangleCount} tri`
+                    : ""}
+                </span>
+                <button
+                  type="button"
+                  id="btn-ve-fullscreen"
+                  onClick={() => void toggleFullscreen()}
+                  className="px-2.5 py-1 rounded-md border border-black bg-brand-pearl hover:bg-brand-red hover:text-white font-bold transition-colors"
+                  title="Afficher le rendu 3D en plein écran"
+                >
+                  {isFullscreen ? "✕ Quitter" : "⛶ Plein écran"}
+                </button>
+              </div>
+            </div>
+
+            {/* Cadre Moniteur Vidéo (devient conteneur plein écran natif) */}
+            <div
+              ref={stageContainerRef}
+              onDoubleClick={() => void toggleFullscreen()}
+              className={
+                isFullscreen
+                  ? "fixed inset-0 z-50 bg-black flex items-center justify-center p-0 group"
+                  : "relative rounded-xl border-2 border-black bg-[#07080b] p-2 flex justify-center group"
+              }
+            >
+              <div
+                className={
+                  isFullscreen
+                    ? "relative w-full h-full flex items-center justify-center"
+                    : "relative"
+                }
+                style={
+                  isFullscreen
+                    ? undefined
+                    : {
+                        width:
+                          aspectRatio === "9:16"
+                            ? "min(100%, 270px)"
+                            : aspectRatio === "4:5"
+                            ? "min(100%, 340px)"
+                            : aspectRatio === "1:1"
+                            ? "min(100%, 360px)"
+                            : "100%",
+                      }
+                }
+              >
+                <canvas
+                  ref={stageCanvasRef}
+                  width={aspectSpec.width}
+                  height={aspectSpec.height}
+                  role="img"
+                  aria-label={activeDescriptor.ariaLabel}
+                  className={
+                    isFullscreen
+                      ? "max-w-full max-h-full w-auto h-full object-contain bg-black block"
+                      : "w-full h-auto rounded-lg bg-black block"
+                  }
+                  style={{
+                    imageRendering: "pixelated",
+                    aspectRatio: `${aspectSpec.width} / ${aspectSpec.height}`,
+                  }}
+                />
+                {showSafeZone &&
+                  !isFullscreen &&
+                  (aspectRatio === "9:16" || aspectRatio === "4:5") && (
+                    <div
+                      aria-hidden="true"
+                      className="pointer-events-none absolute inset-0 rounded-lg border-2 border-dashed border-[#00E5FF]/60"
+                    >
+                      <div className="absolute top-[11%] left-[6%] right-[16%] bottom-[22%] border border-dashed border-brand-red/70 rounded">
+                        <span className="inline-block bg-black/75 text-[#00E5FF] font-mono text-[8px] px-1">
+                          SAFE ZONE {aspectRatio}
+                        </span>
+                      </div>
+                    </div>
+                  )}
+              </div>
+
+              {/* Overlay discret en mode Plein Écran */}
+              {isFullscreen && (
+                <div className="absolute bottom-5 left-1/2 -translate-x-1/2 flex items-center gap-3 px-4 py-2 rounded-full bg-black/75 backdrop-blur-md border border-white/20 text-white font-mono text-xs opacity-90 hover:opacity-100 transition-opacity">
+                  <span className="text-neutral-300">
+                    {activeDescriptor.name} · {bpm} BPM
+                  </span>
+                  <button
+                    type="button"
+                    onClick={
+                      sourceMode === "LOCAL_FILE" && analysis
+                        ? isPlaying
+                          ? handlePauseSiteMusic
+                          : handlePlayClipExtract
+                        : togglePlay
+                    }
+                    className="px-3 py-1 rounded-full bg-white/15 hover:bg-white/25 font-bold"
+                  >
+                    {isPlaying ? "❚❚ Pause" : "▶ Lecture"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void toggleFullscreen()}
+                    className="px-3 py-1 rounded-full bg-brand-red hover:bg-red-600 font-bold"
+                  >
+                    ✕ Quitter
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Barre d'actions & Export MP4 compacte */}
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+              <div className="flex items-center gap-1.5">
+                <Button
+                  id="btn-ve-undo"
+                  variant="clinical"
+                  size="sm"
+                  disabled={historyPast.length === 0}
+                  onClick={handleUndo}
+                >
+                  ↶ Undo
+                </Button>
+                <Button
+                  id="btn-ve-redo"
+                  variant="clinical"
+                  size="sm"
+                  disabled={historyFuture.length === 0}
+                  onClick={handleRedo}
+                >
+                  ↷ Redo
+                </Button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <Button
+                  id="btn-ve-snapshot"
+                  variant="clinical"
+                  size="sm"
+                  onClick={handleExportSnapshot}
+                >
+                  ⬇ PNG
+                </Button>
+                <Button
+                  id="btn-ve-video"
+                  variant={isRecordingVideo ? "comic" : "primary"}
+                  size="sm"
+                  onClick={() => void handleToggleVideoExport()}
+                >
+                  {isRecordingVideo
+                    ? "⏹ Stop & Sauver MP4"
+                    : `🎬 Exporter MP4 (${clipDurationSeconds}s)`}
+                </Button>
+              </div>
+            </div>
+
+            {presetMessage && (
+              <p
+                role="status"
+                className="px-3 py-2 rounded-lg bg-brand-pearl border-l-4 border-[#00E5FF] font-mono text-[11px] text-brand-black"
+              >
+                {presetMessage}
+              </p>
+            )}
+            {presetError && (
+              <p
+                role="alert"
+                className="px-3 py-2 rounded-lg bg-red-50 border-l-4 border-brand-red font-mono text-[11px] text-brand-red font-bold"
+              >
+                {presetError}
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* COLONNE DROITE : PANNEAU DE CONTRÔLE À ONGLETS ÉPURÉS */}
+        <div className="xl:col-span-5 space-y-4">
+          {!showAllPanels && (
+            <nav
+              aria-label="Onglets de contrôle du studio"
+              className="grid grid-cols-4 gap-1.5 p-1.5 rounded-xl bg-brand-pearl border-2 border-black font-mono text-[11px]"
+            >
+              {(
+                [
+                  { id: "faders", label: "🎚 Faders" },
+                  { id: "audio", label: "🎵 Audio" },
+                  { id: "variations", label: "🎨 Styles" },
+                  { id: "lyrics", label: "🎤 Paroles" },
+                ] as const
+              ).map((tab) => {
+                const active = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setActiveTab(tab.id)}
+                    className={`py-2 px-2 rounded-lg font-bold transition-all text-center ${
+                      active
+                        ? "bg-brand-black text-white shadow-comic-sm"
+                        : "text-neutral-600 hover:text-brand-black hover:bg-brand-white"
+                    }`}
+                  >
+                    {tab.label}
+                  </button>
+                );
+              })}
+            </nav>
+          )}
+
+          {/* ONGLET 1 : CONSOLE 10 FADERS */}
+          {showFaders && (
+            <Card
+              moduleTitle="CONSOLE // 10_FADERS"
+              moduleMeta="DOUBLE-CLIC = RESET"
+              activeIndicator
+            >
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center gap-1.5 font-mono text-[11px]">
+                  {(
+                    [
+                      { id: "ALL", label: "Tous (10)" },
+                      { id: "AUDIO", label: "Audio (3)" },
+                      { id: "FX", label: "FX & Strobe (5)" },
+                      { id: "CAMERA", label: "Caméra (2)" },
+                    ] as const
+                  ).map((tab) => (
+                    <button
+                      key={tab.id}
+                      type="button"
+                      onClick={() => setBankFilter(tab.id)}
+                      className={[
+                        "px-2.5 py-1 rounded-md font-bold border transition-all",
+                        bankFilter === tab.id
+                          ? "bg-brand-black text-white border-black"
+                          : "bg-brand-pearl text-neutral-700 border-neutral-300 hover:border-black",
+                      ].join(" ")}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {(bankFilter === "ALL" || bankFilter === "AUDIO") && (
+                  <div className="space-y-2">
+                    <div className="font-mono text-[10px] font-bold uppercase text-neutral-500">
+                      Audio &amp; Puissance
+                    </div>
+                    <div className="grid grid-cols-3 gap-2">
+                      <ConsoleFader
+                        id="fader-bass"
+                        shortTag="BASS"
+                        label="Basses"
+                        value={bassGain}
+                        min={0}
+                        max={250}
+                        defaultValue={110}
+                        unit="%"
+                        accent="red"
+                        compact
+                        liveMeter={Math.min(1, Math.sqrt(liveFeatures.bass))}
+                        onChange={setBassGain}
+                      />
+                      <ConsoleFader
+                        id="fader-treble"
+                        shortTag="CLAP"
+                        label="Aigus"
+                        value={trebleGain}
+                        min={0}
+                        max={250}
+                        defaultValue={125}
+                        unit="%"
+                        accent="cyan"
+                        compact
+                        liveMeter={Math.min(
+                          1,
+                          Math.max(
+                            Math.sqrt(liveFeatures.treble),
+                            Math.sqrt(liveFeatures.spectralFlux) * 2
+                          )
+                        )}
+                        onChange={setTrebleGain}
+                      />
+                      <ConsoleFader
+                        id="fader-intensity"
+                        shortTag="MSTR"
+                        label="Master"
+                        value={Math.round(preset.intensity * 100)}
+                        min={0}
+                        max={100}
+                        defaultValue={75}
+                        unit="%"
+                        accent="red"
+                        compact
+                        locked={Boolean(preset.locks["intensity"])}
+                        liveMeter={liveFeatures.rms}
+                        onToggleLock={() => toggleLock("intensity")}
+                        onChange={(val) =>
+                          updatePreset((curr) => ({ ...curr, intensity: val / 100 }))
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {(bankFilter === "ALL" || bankFilter === "FX") && (
+                  <div className="space-y-2 pt-2 border-t border-neutral-200">
+                    <div className="font-mono text-[10px] font-bold uppercase text-neutral-500">
+                      Strobe, Blackout &amp; Psyché
+                    </div>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      <ConsoleFader
+                        id="fader-strobe"
+                        shortTag="FLASH"
+                        label="Strobe"
+                        value={Math.round((preset.effects.strobeGlow ?? 0.45) * 100)}
+                        min={0}
+                        max={100}
+                        defaultValue={45}
+                        unit="%"
+                        accent="red"
+                        compact
+                        locked={Boolean(preset.locks["effects.strobeGlow"])}
+                        liveMeter={Math.min(
+                          1,
+                          Math.max(
+                            Math.sqrt(liveFeatures.treble),
+                            Math.sqrt(liveFeatures.spectralFlux) * 2
+                          )
+                        )}
+                        onToggleLock={() => toggleLock("effects.strobeGlow")}
+                        onChange={(val) =>
+                          updatePreset((curr) => ({
+                            ...curr,
+                            effects: { ...curr.effects, strobeGlow: val / 100 },
+                          }))
+                        }
+                      />
+                      <ConsoleFader
+                        id="fader-blackout"
+                        shortTag="KICK"
+                        label="Blackout"
+                        value={Math.round((preset.effects.kickBlackout ?? 0) * 100)}
+                        min={0}
+                        max={100}
+                        defaultValue={0}
+                        unit="%"
+                        accent="red"
+                        compact
+                        locked={Boolean(preset.locks["effects.kickBlackout"])}
+                        onToggleLock={() => toggleLock("effects.kickBlackout")}
+                        onChange={(val) =>
+                          updatePreset((curr) => ({
+                            ...curr,
+                            effects: { ...curr.effects, kickBlackout: val / 100 },
+                          }))
+                        }
+                      />
+                      <ConsoleFader
+                        id="fader-psyche"
+                        shortTag="PSYCHE"
+                        label="Psyché"
+                        value={Math.round((preset.effects.psychedelic ?? 0) * 100)}
+                        min={0}
+                        max={100}
+                        defaultValue={0}
+                        unit="%"
+                        accent="cyan"
+                        compact
+                        locked={Boolean(preset.locks["effects.psychedelic"])}
+                        onToggleLock={() => toggleLock("effects.psychedelic")}
+                        onChange={(val) =>
+                          updatePreset((curr) => ({
+                            ...curr,
+                            effects: { ...curr.effects, psychedelic: val / 100 },
+                          }))
+                        }
+                      />
+                      <ConsoleFader
+                        id="fader-morph"
+                        shortTag="MORPH"
+                        label="Morph"
+                        value={Math.round((preset.effects.colorTransition ?? 0) * 100)}
+                        min={0}
+                        max={100}
+                        defaultValue={0}
+                        unit="%"
+                        accent="cyan"
+                        compact
+                        locked={Boolean(preset.locks["effects.colorTransition"])}
+                        onToggleLock={() => toggleLock("effects.colorTransition")}
+                        onChange={(val) =>
+                          updatePreset((curr) => ({
+                            ...curr,
+                            effects: { ...curr.effects, colorTransition: val / 100 },
+                          }))
+                        }
+                      />
+                      <ConsoleFader
+                        id="fader-anaglyph"
+                        shortTag="3D-FX"
+                        label="Anaglyph"
+                        value={Math.round((preset.effects.anaglyphSplit ?? 0.16) * 100)}
+                        min={0}
+                        max={100}
+                        defaultValue={16}
+                        unit="%"
+                        accent="red"
+                        compact
+                        locked={Boolean(preset.locks["effects.anaglyphSplit"])}
+                        onToggleLock={() => toggleLock("effects.anaglyphSplit")}
+                        onChange={(val) =>
+                          updatePreset((curr) => ({
+                            ...curr,
+                            effects: { ...curr.effects, anaglyphSplit: val / 100 },
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {(bankFilter === "ALL" || bankFilter === "CAMERA") && (
+                  <div className="space-y-2 pt-2 border-t border-neutral-200">
+                    <div className="font-mono text-[10px] font-bold uppercase text-neutral-500">
+                      Caméra
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <ConsoleFader
+                        id="fader-cam-zoom"
+                        shortTag="ZOOM"
+                        label="Zoom"
+                        value={
+                          preset.render.camera.kind === "orthographic"
+                            ? Math.round(preset.render.camera.zoom * 100)
+                            : Math.round(
+                                (1 / Math.max(0.45, preset.render.camera.distance)) *
+                                  100
+                              )
+                        }
+                        min={50}
+                        max={220}
+                        defaultValue={100}
+                        unit="%"
+                        accent="cyan"
+                        compact
+                        locked={Boolean(
+                          preset.render.camera.kind === "orthographic"
+                            ? preset.locks["render.camera.zoom"]
+                            : preset.locks["render.camera.distance"]
+                        )}
+                        onToggleLock={() =>
+                          toggleLock(
+                            preset.render.camera.kind === "orthographic"
+                              ? "render.camera.zoom"
+                              : "render.camera.distance"
+                          )
+                        }
+                        onChange={(val) =>
+                          updatePreset((curr) =>
+                            curr.render.style === "pixel-16"
+                              ? {
+                                  ...curr,
+                                  render: {
+                                    ...curr.render,
+                                    camera: {
+                                      ...curr.render.camera,
+                                      zoom: val / 100,
+                                    },
+                                  },
+                                }
+                              : {
+                                  ...curr,
+                                  render: {
+                                    ...curr.render,
+                                    camera: {
+                                      ...curr.render.camera,
+                                      distance: 100 / Math.max(50, val),
+                                    },
+                                  },
+                                }
+                          )
+                        }
+                      />
+                      <ConsoleFader
+                        id="fader-pendulum"
+                        shortTag="SWAY"
+                        label="Pendule"
+                        value={Math.round(
+                          (preset.effects.pendulumSwing ?? 0.25) * 100
+                        )}
+                        min={0}
+                        max={100}
+                        defaultValue={25}
+                        unit="%"
+                        accent="cyan"
+                        compact
+                        locked={Boolean(preset.locks["effects.pendulumSwing"])}
+                        onToggleLock={() => toggleLock("effects.pendulumSwing")}
+                        onChange={(val) =>
+                          updatePreset((curr) => ({
+                            ...curr,
+                            effects: { ...curr.effects, pendulumSwing: val / 100 },
+                          }))
+                        }
+                      />
+                    </div>
+                  </div>
+                )}
+              </div>
+            </Card>
+          )}
+
+          {/* ONGLET 2 : AUDIO & BPM */}
+          {showAudio && (
+            <Card
+              moduleTitle="AUDIO_&_BPM // SOURCE_&_EXTRAIT"
+              moduleMeta="MP3 / WAV (70 MO) · SYNC"
+            >
+              <div className="space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-1.5 font-mono text-[11px]">
+                    <button
+                      type="button"
+                      onClick={() => setSourceMode("LIVE_HUB")}
+                      className={`px-2.5 py-1 rounded-md border font-bold ${
+                        sourceMode === "LIVE_HUB"
+                          ? "bg-brand-red text-white border-black"
+                          : "bg-brand-pearl text-neutral-700 border-neutral-300"
+                      }`}
+                    >
+                      Lecteur Hub
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setSourceMode("LOCAL_FILE")}
+                      disabled={!analysis}
+                      className={`px-2.5 py-1 rounded-md border font-bold disabled:opacity-40 ${
+                        sourceMode === "LOCAL_FILE"
+                          ? "bg-brand-black text-white border-black"
+                          : "bg-brand-pearl text-neutral-700 border-neutral-300"
+                      }`}
+                    >
+                      Fichier local
+                    </button>
+                  </div>
+                  <Button
+                    id="btn-load-demo-wav"
+                    variant="comic"
+                    size="sm"
+                    disabled={busy}
+                    onClick={() => void handleFileLoad(createSyntheticDemoWavFile())}
+                  >
+                    ⚡ Démo WAV
+                  </Button>
+                </div>
+
+                <div className="p-3 rounded-lg bg-brand-pearl border border-neutral-300">
                   <label
                     htmlFor="ve-audio-file"
-                    className="block font-mono text-xs font-bold uppercase text-brand-black mb-1.5"
+                    className="block font-mono text-[11px] font-bold text-brand-black mb-1.5"
                   >
-                    Importer MP3 ou WAV (max 70 Mio · 8 min)
+                    Importer MP3 ou WAV (max 70 Mio)
                   </label>
                   <input
                     id="ve-audio-file"
@@ -1154,118 +1744,78 @@ export const VisualEngineStudio: React.FC = () => {
                       e.target.value = "";
                       if (f) void handleFileLoad(f);
                     }}
-                    className="font-mono text-xs file:mr-3 file:px-3 file:py-1.5 file:rounded file:border-2 file:border-black file:bg-brand-white file:font-mono file:text-xs file:font-bold file:cursor-pointer"
+                    className="w-full font-mono text-[11px] file:mr-2 file:px-2.5 file:py-1 file:rounded file:border file:border-black file:bg-brand-white file:text-[11px] file:font-bold file:cursor-pointer"
                   />
-                </div>
-                <Button
-                  id="btn-load-demo-wav"
-                  variant="comic"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => void handleFileLoad(createSyntheticDemoWavFile())}
-                >
-                  ⚡ PISTE DÉMO (WAV 120 BPM)
-                </Button>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
-                <p role="status" aria-live="polite" className="text-brand-charcoal">
-                  {importStatus}
-                </p>
-                {busy && (
-                  <Button
-                    variant="clinical"
-                    size="sm"
-                    onClick={() => {
-                      abortControllerRef.current?.abort();
-                      setBusy(false);
-                      setImportStatus("Import annulé.");
-                    }}
-                  >
-                    Annuler
-                  </Button>
-                )}
-              </div>
-
-              {importError && (
-                <p role="alert" className="font-mono text-xs text-brand-red font-bold">
-                  {importError}
-                </p>
-              )}
-              {importWarning && (
-                <p className="font-mono text-xs text-amber-700">
-                  {importWarning}
-                </p>
-              )}
-
-              {analysis && (
-                <div className="space-y-4 pt-2 border-t border-neutral-200">
-                  <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-xs">
-                    <strong className="text-brand-black">{fileName}</strong>
-                    <span className="text-neutral-500">
-                      {analysis.durationSeconds.toFixed(2)}s ·{" "}
-                      {analysis.sampleRateHz}Hz · {analysis.timestamps.length}{" "}
-                      fenêtres
-                    </span>
-                  </div>
-                  <WaveformCanvas
-                    analysis={analysis}
-                    time={localTime}
-                    onSeek={seekLocalAudio}
-                    clipActive={clipActive}
-                    clipStartSeconds={clipStartSeconds}
-                    clipDurationSeconds={clipDurationSeconds}
-                    fadeInSeconds={fadeInSeconds}
-                    fadeOutSeconds={fadeOutSeconds}
-                    onClipStartChange={setClipStartSeconds}
-                  />
-
-                  {localUrl && (
-                    <audio
-                      ref={localAudioRef}
-                      src={localUrl}
-                      data-track-title={fileName || "Visual Studio"}
-                      onTimeUpdate={(e) => {
-                        const t = e.currentTarget.currentTime;
-                        setLocalTime(t);
-                        applyClipFadeVolume(e.currentTarget, t);
+                  <p role="status" aria-live="polite" className="mt-1.5 font-mono text-[11px] text-neutral-600">
+                    {importStatus}
+                  </p>
+                  {busy && (
+                    <Button
+                      variant="clinical"
+                      size="sm"
+                      onClick={() => {
+                        abortControllerRef.current?.abort();
+                        setBusy(false);
+                        setImportStatus("Import annulé.");
                       }}
-                      onSeeked={(e) => setLocalTime(e.currentTarget.currentTime)}
-                      className="hidden"
-                      aria-hidden="true"
-                    />
+                    >
+                      Annuler
+                    </Button>
                   )}
+                  {importError && (
+                    <p role="alert" className="mt-1 font-mono text-[11px] text-brand-red font-bold">
+                      {importError}
+                    </p>
+                  )}
+                  {importWarning && (
+                    <p className="mt-1 font-mono text-[11px] text-amber-700">
+                      {importWarning}
+                    </p>
+                  )}
+                </div>
 
-                  {/* Calage Extrait 30s + Fondu Entrée / Sortie + Synchro BPM */}
-                  <div className="p-3.5 rounded-xl bg-brand-pearl border-2 border-black space-y-3">
+                {analysis && (
+                  <div className="space-y-3 pt-2 border-t border-neutral-200">
+                    <WaveformCanvas
+                      analysis={analysis}
+                      time={localTime}
+                      onSeek={seekLocalAudio}
+                      clipActive={clipActive}
+                      clipStartSeconds={clipStartSeconds}
+                      clipDurationSeconds={clipDurationSeconds}
+                      fadeInSeconds={fadeInSeconds}
+                      fadeOutSeconds={fadeOutSeconds}
+                      onClipStartChange={setClipStartSeconds}
+                    />
+
                     <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="flex flex-wrap items-center gap-3">
-                        <label className="inline-flex items-center gap-2 font-mono text-xs font-bold text-brand-black cursor-pointer">
+                      <div className="flex items-center gap-3 font-mono text-[11px]">
+                        <label className="inline-flex items-center gap-1.5 font-bold cursor-pointer">
                           <input
                             type="checkbox"
                             checked={clipActive}
                             onChange={(e) => setClipActive(e.target.checked)}
                             className="accent-brand-red"
                           />
-                          <span>✂ EXTRAIT ({clipDurationSeconds}s) + FONDUS</span>
+                          <span>Extrait ({clipDurationSeconds}s)</span>
                         </label>
-                        <label className="inline-flex items-center gap-1.5 font-mono text-xs font-bold text-brand-red cursor-pointer">
+                        <label className="inline-flex items-center gap-1.5 font-bold text-brand-red cursor-pointer">
                           <input
                             type="checkbox"
                             checked={clipLoop}
                             onChange={(e) => setClipLoop(e.target.checked)}
                             className="accent-brand-red"
                           />
-                          <span>🔁 BOUCLE</span>
+                          <span>Boucle</span>
                         </label>
                       </div>
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex items-center gap-1.5">
                         <Button
                           variant="comic"
                           size="sm"
                           onClick={handlePlayClipExtract}
                         >
-                          ▶ LIRE L&apos;EXTRAIT ({clipDurationSeconds}s)
+                          ▶ Extrait
                         </Button>
                         <Button
                           id="btn-ve-global-pause"
@@ -1273,44 +1823,15 @@ export const VisualEngineStudio: React.FC = () => {
                           size="sm"
                           onClick={handlePauseSiteMusic}
                         >
-                          ⏸ PAUSE
-                        </Button>
-                        <Button
-                          variant={isRecordingVideo ? "comic" : "primary"}
-                          size="sm"
-                          onClick={() => void handleToggleVideoExport()}
-                        >
-                          {isRecordingVideo
-                            ? "⏹ STOP & SAUVER MP4"
-                            : `🎬 ENREGISTRER EXTRAIT (${clipDurationSeconds}s + SON)`}
-                        </Button>
-                        <Button
-                          variant="clinical"
-                          size="sm"
-                          onClick={handleAutoSyncScenesToAudio}
-                        >
-                          ⏱ CALER SCÈNES EN BPM ({bpm} BPM)
+                          ⏸ Pause
                         </Button>
                       </div>
                     </div>
 
-                    <div className="px-2.5 py-1.5 rounded-lg bg-brand-white border border-black font-mono text-[10px] flex flex-wrap items-center justify-between gap-2">
-                      <span className="font-bold text-brand-black">
-                        ZONE PRÉVISUALISÉE &amp; ENREGISTRÉE :{" "}
-                        <span className="text-brand-red">
-                          {clipStartSeconds.toFixed(2)}s → {(clipStartSeconds + clipDurationSeconds).toFixed(2)}s
-                        </span>{" "}
-                        ({clipDurationSeconds}s)
-                      </span>
-                      <span className="text-neutral-600">
-                        Audio + Vidéo + Fondus ({fadeInSeconds.toFixed(1)}s / {fadeOutSeconds.toFixed(1)}s) synchronisés dans le MP4
-                      </span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 font-mono text-[11px]">
+                    <div className="grid grid-cols-3 gap-2 font-mono text-[10px]">
                       <div>
-                        <div className="flex justify-between mb-1">
-                          <span>DURÉE EXTRAIT</span>
+                        <div className="flex justify-between mb-0.5">
+                          <span>Durée</span>
                           <strong>{clipDurationSeconds}s</strong>
                         </div>
                         <input
@@ -1324,8 +1845,8 @@ export const VisualEngineStudio: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <div className="flex justify-between mb-1">
-                          <span>FONDU ENTRÉE</span>
+                        <div className="flex justify-between mb-0.5">
+                          <span>Fade In</span>
                           <strong>{fadeInSeconds.toFixed(1)}s</strong>
                         </div>
                         <input
@@ -1339,8 +1860,8 @@ export const VisualEngineStudio: React.FC = () => {
                         />
                       </div>
                       <div>
-                        <div className="flex justify-between mb-1">
-                          <span>FONDU SORTIE</span>
+                        <div className="flex justify-between mb-0.5">
+                          <span>Fade Out</span>
                           <strong>{fadeOutSeconds.toFixed(1)}s</strong>
                         </div>
                         <input
@@ -1355,28 +1876,21 @@ export const VisualEngineStudio: React.FC = () => {
                       </div>
                     </div>
 
-                    {/* Calage fin BPM & Mesures (avec contrôle BPM manuel ÷2 / ×2 et ancrage exact du 1er temps) */}
-                    <div className="pt-2.5 border-t border-neutral-300 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 items-center font-mono text-[11px]">
-                      <div>
-                        <div className="flex justify-between mb-1">
-                          <span>TEMPO (BPM)</span>
-                          <strong className="text-brand-red">{bpm} BPM</strong>
-                        </div>
+                    <div className="pt-2 border-t border-neutral-200 space-y-2.5 font-mono text-[11px]">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
                         <div className="flex items-center gap-1">
+                          <span className="font-bold mr-1">BPM :</span>
                           <button
                             type="button"
-                            onClick={() =>
-                              setBpm((b) => Math.max(40, Math.round(b / 2)))
-                            }
-                            className="px-1.5 py-1 rounded border border-black bg-brand-white text-[10px] font-bold hover:bg-brand-pearl"
-                            title="Diviser le BPM par 2 (half-time)"
+                            onClick={() => setBpm((b) => Math.max(40, Math.round(b / 2)))}
+                            className="px-1.5 py-0.5 rounded border border-neutral-400 bg-brand-white text-[10px] font-bold"
                           >
                             ÷2
                           </button>
                           <button
                             type="button"
                             onClick={() => setBpm((b) => Math.max(40, b - 1))}
-                            className="px-2 py-1 rounded border border-black bg-brand-white text-[10px] font-bold hover:bg-brand-pearl"
+                            className="px-1.5 py-0.5 rounded border border-neutral-400 bg-brand-white text-[10px] font-bold"
                           >
                             -
                           </button>
@@ -1392,172 +1906,323 @@ export const VisualEngineStudio: React.FC = () => {
                                 setBpm(Math.max(40, Math.min(240, Math.round(v))));
                               }
                             }}
-                            className="w-16 px-1.5 py-1 rounded border border-black bg-brand-white text-center font-bold"
+                            className="w-14 px-1 py-0.5 rounded border border-black bg-brand-white text-center font-bold"
                           />
                           <button
                             type="button"
                             onClick={() => setBpm((b) => Math.min(240, b + 1))}
-                            className="px-2 py-1 rounded border border-black bg-brand-white text-[10px] font-bold hover:bg-brand-pearl"
+                            className="px-1.5 py-0.5 rounded border border-neutral-400 bg-brand-white text-[10px] font-bold"
                           >
                             +
                           </button>
                           <button
                             type="button"
-                            onClick={() =>
-                              setBpm((b) => Math.min(240, Math.round(b * 2)))
-                            }
-                            className="px-1.5 py-1 rounded border border-black bg-brand-white text-[10px] font-bold hover:bg-brand-pearl"
-                            title="Multiplier le BPM par 2 (double-time)"
+                            onClick={() => setBpm((b) => Math.min(240, Math.round(b * 2)))}
+                            className="px-1.5 py-0.5 rounded border border-neutral-400 bg-brand-white text-[10px] font-bold"
                           >
                             ×2
                           </button>
                         </div>
-                      </div>
 
-                      <div>
-                        <div className="flex justify-between mb-1">
-                          <span>SWITCH SCÈNES (MESURES)</span>
-                          <strong className="text-brand-red">
-                            {autoSceneSwitchBeats === 0
-                              ? "FIXE"
-                              : `${autoSceneSwitchBeats} TEMPS`}
-                          </strong>
-                        </div>
                         <select
                           value={autoSceneSwitchBeats}
-                          onChange={(e) =>
-                            setAutoSceneSwitchBeats(Number(e.target.value))
-                          }
-                          className="w-full px-2 py-1 rounded border border-black bg-brand-white font-bold"
+                          onChange={(e) => setAutoSceneSwitchBeats(Number(e.target.value))}
+                          className="px-2 py-1 rounded border border-black bg-brand-white text-[11px] font-bold"
+                          aria-label="Switch scènes par mesures"
                         >
-                          <option value={0}>Fixe (manuel)</option>
-                          <option value={1}>1 temps (rapide)</option>
-                          <option value={2}>2 temps (1/2 mes.)</option>
-                          <option value={4}>4 temps (1 mesure)</option>
-                          <option value={8}>8 temps (2 mesures)</option>
-                          <option value={16}>16 temps (4 mesures)</option>
-                          <option value={32}>32 temps (8 mesures)</option>
-                          <option value={64}>64 temps (16 mesures)</option>
+                          <option value={0}>Switch : Manuel</option>
+                          <option value={4}>Switch : 1 mesure (4T)</option>
+                          <option value={8}>Switch : 2 mesures (8T)</option>
+                          <option value={16}>Switch : 4 mesures (16T)</option>
+                          <option value={32}>Switch : 8 mesures (32T)</option>
                         </select>
                       </div>
 
-                      <div>
-                        <div className="flex justify-between items-center mb-1">
-                          <span>CALAGE 1ER TEMPS (OFFSET)</span>
-                          <div className="flex items-center gap-1.5">
-                            <strong>{beatOffset.toFixed(2)}s</strong>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setBeatOffset(0);
-                                setSceneAnchorSeconds(0);
-                              }}
-                              className="px-1.5 py-0.5 rounded border border-black bg-brand-white text-[9px] font-bold hover:bg-brand-red hover:text-white"
-                            >
-                              ↺ 0.00s
-                            </button>
-                          </div>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 flex-1 min-w-[160px]">
+                          <span className="text-[10px] text-neutral-600">
+                            Offset {beatOffset.toFixed(2)}s
+                          </span>
+                          <input
+                            type="range"
+                            min={-2}
+                            max={2}
+                            step={0.01}
+                            value={beatOffset}
+                            onChange={(e) => {
+                              const nextOffset = Number(e.target.value);
+                              setBeatOffset(nextOffset);
+                              setSceneAnchorSeconds(nextOffset);
+                            }}
+                            className="flex-1 accent-brand-red"
+                          />
                         </div>
-                        <input
-                          type="range"
-                          min={-2}
-                          max={2}
-                          step={0.01}
-                          value={beatOffset}
-                          onChange={(e) => {
-                            const nextOffset = Number(e.target.value);
-                            setBeatOffset(nextOffset);
-                            setSceneAnchorSeconds(nextOffset);
-                          }}
-                          className="w-full accent-brand-red"
-                        />
-                      </div>
-
-                      <div className="flex items-end h-full">
-                        <Button
-                          variant="clinical"
-                          size="sm"
-                          onClick={() => {
-                            const t =
-                              localAudioRef.current?.currentTime ?? localTime;
-                            const beatDur = 60 / Math.max(40, bpm);
-                            const phase = Number((t % beatDur).toFixed(2));
-                            setBeatOffset(phase);
-                            setSceneAnchorSeconds(t);
-                            if (autoSceneSwitchBeats === 0) {
-                              setAutoSceneSwitchBeats(16);
-                            }
-                            setPresetMessage(
-                              `1er temps & Scène #1 calés exactement à ${t.toFixed(2)}s (phase ${phase}s @ ${bpm} BPM).`
-                            );
-                          }}
-                        >
-                          ⚡ CALER 1ER TEMPS ICI
-                        </Button>
+                        <div className="flex items-center gap-1.5">
+                          <Button
+                            variant="clinical"
+                            size="sm"
+                            onClick={() => {
+                              const t = localAudioRef.current?.currentTime ?? localTime;
+                              const beatDur = 60 / Math.max(40, bpm);
+                              const phase = Number((t % beatDur).toFixed(2));
+                              setBeatOffset(phase);
+                              setSceneAnchorSeconds(t);
+                              if (autoSceneSwitchBeats === 0) setAutoSceneSwitchBeats(16);
+                              setPresetMessage(
+                                `1er temps calé à ${t.toFixed(2)}s (${bpm} BPM).`
+                              );
+                            }}
+                          >
+                            ⚡ Caler 1er temps
+                          </Button>
+                          <Button
+                            variant="clinical"
+                            size="sm"
+                            onClick={handleAutoSyncScenesToAudio}
+                          >
+                            ⏱ Auto BPM
+                          </Button>
+                        </div>
                       </div>
                     </div>
+                  </div>
+                )}
+
+                {/* Mini jauges audio temps réel */}
+                <div className="grid grid-cols-5 gap-1.5 pt-1 font-mono text-[9px]">
+                  {(
+                    [
+                      ["RMS", liveFeatures.rms],
+                      ["BASS", Math.sqrt(Math.max(0, liveFeatures.bass))],
+                      ["MID", Math.sqrt(Math.max(0, liveFeatures.mid))],
+                      ["HIGH", Math.sqrt(Math.max(0, liveFeatures.treble))],
+                      ["FLUX", Math.min(1, Math.sqrt(Math.max(0, liveFeatures.spectralFlux)) * 2)],
+                    ] as const
+                  ).map(([label, val]) => (
+                    <div key={label} className="p-1.5 rounded bg-brand-pearl border border-neutral-200">
+                      <div className="font-bold text-neutral-500">{label}</div>
+                      <meter
+                        aria-label={label}
+                        min={0}
+                        max={1}
+                        value={Math.min(1, Math.max(0, val))}
+                        className="w-full h-1.5 mt-1"
+                      />
+                    </div>
+                  ))}
+                </div>
+
+                <div className="flex justify-end">
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        await clearAnalysisCache();
+                        setImportWarning("Cache FFT vidé.");
+                      } catch {
+                        setImportWarning("Impossible de vider le cache.");
+                      }
+                    }}
+                    className="font-mono text-[10px] text-neutral-500 hover:text-brand-red underline"
+                  >
+                    Vider le cache FFT
+                  </button>
+                </div>
+              </div>
+            </Card>
+          )}
+
+          {/* ONGLET 3 : VARIATIONS & COULEURS */}
+          {showVariations && (
+            <Card
+              moduleTitle="STYLES_&_VARIATIONS // 3D"
+              moduleMeta="4 VARIATIONS RAPIDES"
+              activeIndicator={activeVariationIdx !== null}
+            >
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span className="font-mono text-[11px] text-neutral-600">
+                    Clique pour tester une variation sans couper l&apos;audio :
+                  </span>
+                  <div className="flex items-center gap-1.5">
+                    {useCustomPalette && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          useCustomPaletteRef.current = false;
+                          setUseCustomPalette(false);
+                          setActiveVariationIdx(null);
+                        }}
+                        className="font-mono text-[10px] font-bold px-2 py-1 rounded border border-black bg-brand-pearl hover:bg-brand-white"
+                      >
+                        ↺ Couleurs Pack
+                      </button>
+                    )}
+                    <Button
+                      id="btn-ve-variations"
+                      variant="clinical"
+                      size="sm"
+                      onClick={handleGenerateVariations}
+                    >
+                      🎲 Nouvelles
+                    </Button>
                   </div>
                 </div>
-              )}
+                <div className="grid grid-cols-2 gap-2">
+                  {variations.map((v, idx) => {
+                    const isSelected = activeVariationIdx === idx;
+                    const sceneName =
+                      SCENE_CATALOG.find((s) => s.id === v.sceneId)?.name ??
+                      v.sceneId;
+                    const paletteName =
+                      STUDY_PALETTES.find((p) => p.id === v.paletteId)?.name ??
+                      v.paletteId;
+                    return (
+                      <button
+                        key={`${v.seed}-${idx}`}
+                        type="button"
+                        onClick={() => handleApplyVariation(v, idx)}
+                        className={`p-2.5 rounded-lg border-2 font-mono text-xs font-bold text-left transition-all ${
+                          isSelected
+                            ? "border-black bg-brand-red text-white shadow-comic-sm"
+                            : "border-black bg-brand-pearl hover:bg-brand-white text-brand-black"
+                        }`}
+                      >
+                        <div className="truncate">{sceneName}</div>
+                        <div
+                          className={`text-[10px] truncate mt-0.5 ${
+                            isSelected ? "text-white/90" : "text-neutral-500"
+                          }`}
+                        >
+                          {paletteName}
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            </Card>
+          )}
 
-              {/* Jauges des 5 caractéristiques audio en temps réel */}
-              <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 pt-2">
-                {(
-                  [
-                    ["RMS", liveFeatures.rms],
-                    ["BASSES", Math.sqrt(Math.max(0, liveFeatures.bass))],
-                    ["MÉDIUMS", Math.sqrt(Math.max(0, liveFeatures.mid))],
-                    ["AIGUS", Math.sqrt(Math.max(0, liveFeatures.treble))],
-                    [
-                      "TRANSIT.",
-                      Math.min(1, Math.sqrt(Math.max(0, liveFeatures.spectralFlux)) * 2),
-                    ],
-                  ] as const
-                ).map(([label, val]) => (
-                  <div
-                    key={label}
-                    className="p-2.5 rounded-lg bg-brand-pearl border border-neutral-200 font-mono"
+          {/* ONGLET 4 : PAROLES & WHISPER LRC */}
+          {showLyrics && (
+            <Card
+              moduleTitle="PAROLES_&_LRC"
+              moduleMeta={
+                timedWords.length > 0
+                  ? `WHISPER (${timedWords.length} MOTS)`
+                  : "BITMAP 3D"
+              }
+              activeIndicator={lyricsEnabled}
+            >
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <label
+                    htmlFor="ve-lyrics-toggle"
+                    className="inline-flex items-center gap-2 font-mono text-xs font-bold text-brand-black cursor-pointer"
                   >
-                    <div className="text-[10px] text-neutral-500 font-bold">
-                      {label}
-                    </div>
-                    <div className="text-xs font-bold text-brand-black mt-0.5">
-                      {val.toFixed(3)}
-                    </div>
-                    <meter
-                      aria-label={label}
-                      min={0}
-                      max={1}
-                      value={Math.min(1, Math.max(0, val))}
-                      className="w-full h-1.5 mt-1"
+                    <input
+                      id="ve-lyrics-toggle"
+                      type="checkbox"
+                      checked={lyricsEnabled}
+                      onChange={(e) => setLyricsEnabled(e.target.checked)}
+                      className="accent-brand-red w-4 h-4"
                     />
+                    <span>Afficher sur la vidéo</span>
+                  </label>
+
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <Button
+                      id="btn-ve-whisper"
+                      variant="primary"
+                      size="sm"
+                      disabled={whisperBusy}
+                      onClick={() => void handleWhisperTranscribe()}
+                    >
+                      {whisperBusy ? "⏳..." : "✨ Whisper"}
+                    </Button>
+                    <Button
+                      id="btn-ve-timecode"
+                      variant="clinical"
+                      size="sm"
+                      onClick={handleInsertLrcTimecode}
+                    >
+                      ⏱ +TC
+                    </Button>
+                    <Button
+                      id="btn-ve-mic"
+                      variant={speechActive ? "primary" : "comic"}
+                      size="sm"
+                      onClick={handleSpeechMic}
+                    >
+                      {speechActive ? "● Micro" : "🎙 Micro"}
+                    </Button>
                   </div>
-                ))}
-              </div>
+                </div>
 
-              <div className="flex items-center justify-between pt-2 border-t border-neutral-200 font-mono text-[11px] text-neutral-500">
-                <span>Cache hors-ligne IndexedDB (expire après 30 jours)</span>
-                <button
-                  type="button"
-                  onClick={async () => {
-                    try {
-                      await clearAnalysisCache();
-                      setImportWarning("Cache local IndexedDB vidé.");
-                    } catch {
-                      setImportWarning("Impossible de vider le cache.");
+                {whisperStatus && (
+                  <p
+                    role="status"
+                    className="p-2 rounded bg-brand-pearl border-l-4 border-[#00E5FF] font-mono text-[11px] text-brand-black"
+                  >
+                    {whisperStatus}
+                  </p>
+                )}
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <select
+                    id="ve-lyrics-style"
+                    aria-label="Style typographique pixel"
+                    value={lyricsStyle}
+                    onChange={(e) =>
+                      setLyricsStyle(e.target.value as LyricsDisplayStyle)
                     }
-                  }}
-                  className="text-brand-red font-bold underline"
-                >
-                  Vider cache FFT
-                </button>
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
+                    className="flex-1 px-2.5 py-1.5 rounded-lg border-2 border-black bg-brand-white font-mono text-xs font-bold"
+                  >
+                    <option value="cinema-sub">Sous-titre Cinéma 16-bit</option>
+                    <option value="center-impact">Impact Central Brutaliste</option>
+                    <option value="hud-terminal">Terminal HUD Haut</option>
+                    <option value="psyche-wave">Onde Psychédélique</option>
+                  </select>
 
-      {/* Système unifié de Packs de Scènes 3D profondes (JSON / JS 3D) avec isolation stricte des 10 Faders et du BPM */}
+                  <Button
+                    type="button"
+                    variant="comic"
+                    size="sm"
+                    onClick={() => {
+                      const scenarioPrompt = `Transforme ces paroles en scénario LRC horodaté pour Anarchy Visual Studio (${bpm} BPM, extrait ${clipStartSeconds.toFixed(1)}s → ${(clipStartSeconds + clipDurationSeconds).toFixed(1)}s) :\nFormat exact par ligne : [mm:ss.xx] #SECTION TEXTE COURT\nSections disponibles : #INTRO, #COUPLET, #PRE_DROP, #DROP, #REFRAIN, #OUTRO.\nGarde 3 à 6 mots max par ligne pour un rendu TikTok / 9:16 lisible.`;
+                      navigator.clipboard
+                        ?.writeText(scenarioPrompt)
+                        .then(() =>
+                          setWhisperStatus(
+                            "📋 Prompt IA Scénario LRC copié !"
+                          )
+                        )
+                        .catch(() => {});
+                    }}
+                  >
+                    📋 Prompt LRC
+                  </Button>
+                </div>
+
+                <textarea
+                  id="ve-lyrics-text"
+                  rows={4}
+                  value={lyricsText}
+                  onChange={(e) => {
+                    setLyricsText(e.target.value);
+                    if (timedWords.length > 0) setTimedWords([]);
+                  }}
+                  placeholder="[00:00.00] #INTRO ANARCHY VISUAL ENGINE"
+                  className="w-full p-2.5 rounded-lg border-2 border-black bg-brand-pearl font-mono text-xs text-brand-black focus:outline-none focus:border-brand-red"
+                />
+              </div>
+            </Card>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Packs de Scènes 3D & JSON Composer */}
       <ScenePackManager
         authorName="Anarchy Studio"
         liveSlotIndex={livePackSlotIndex}
@@ -1565,7 +2230,6 @@ export const VisualEngineStudio: React.FC = () => {
         beatsPerScene={autoSceneSwitchBeats}
         onChangeBeatsPerScene={setAutoSceneSwitchBeats}
         onPackChange={(pack: ScenePack) => {
-          // ISOLATION STRICTE : aucun des 10 faders ni le BPM ne sont modifiés lors d'un changement ou édition de Pack 3D
           activePackRef.current = pack;
         }}
         onSelectSlot={(
@@ -1573,7 +2237,6 @@ export const VisualEngineStudio: React.FC = () => {
           slot: ScenePackSlot,
           pack: ScenePack
         ) => {
-          // ISOLATION STRICTE : on met uniquement à jour la scène 3D active sans écraser les faders (intensity, effects, camera, gains) ni le BPM
           activePackRef.current = pack;
           livePackSlotIndexRef.current = slotIndex;
           setLivePackSlotIndex(slotIndex);
@@ -1590,721 +2253,9 @@ export const VisualEngineStudio: React.FC = () => {
           );
         }}
       />
-
-      {(showStagePanel || showMatrixPanel) && (
-        <div className="grid grid-cols-1 xl:grid-cols-12 gap-6 items-start">
-          {showStagePanel && (
-            <div className={showMatrixPanel ? "xl:col-span-7 space-y-4" : "xl:col-span-12 space-y-4"}>
-          <Card
-            moduleTitle={`STAGE_OUTPUT // ${activeDescriptor.name.toUpperCase()}`}
-            moduleMeta={
-              isLowPoly && renderReport
-                ? `${aspectSpec.width}×${aspectSpec.height} (${aspectRatio}) // ${renderReport.triangleCount}/${activeDescriptor.geometryBudget.maxTriangles} TRI`
-                : `${aspectSpec.width}×${aspectSpec.height} (${aspectRatio}) PIXEL-PERFECT`
-            }
-            activeIndicator
-          >
-            <div className="space-y-4">
-              {/* Sélecteur de format Réseaux Sociaux (TikTok / Insta / YouTube) */}
-              <div className="flex flex-wrap items-center justify-between gap-2 p-2 rounded-lg bg-brand-pearl border-2 border-black font-mono text-[10px]">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="font-bold text-brand-red uppercase mr-1">
-                    FORMAT :
-                  </span>
-                  {(["16:9", "9:16", "4:5", "1:1"] as const).map((ratio) => {
-                    const spec = VIDEO_ASPECT_FORMATS[ratio];
-                    const active = aspectRatio === ratio;
-                    return (
-                      <button
-                        key={ratio}
-                        type="button"
-                        id={`btn-aspect-${ratio.replace(":", "x")}`}
-                        onClick={() => setAspectRatio(ratio)}
-                        title={spec.label}
-                        className={`px-2 py-1 rounded border-2 font-bold transition-all ${
-                          active
-                            ? "bg-black text-white border-black shadow-comic-sm"
-                            : "bg-brand-white text-brand-black border-neutral-300 hover:border-black"
-                        }`}
-                      >
-                        {spec.shortLabel}
-                      </button>
-                    );
-                  })}
-                </div>
-                {(aspectRatio === "9:16" || aspectRatio === "4:5") && (
-                  <label className="inline-flex items-center gap-1.5 font-bold text-brand-black cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={showSafeZone}
-                      onChange={(e) => setShowSafeZone(e.target.checked)}
-                      className="accent-brand-red"
-                    />
-                    <span>Safe Zone TikTok/Reels</span>
-                  </label>
-                )}
-              </div>
-
-              {/* Cadre moniteur encré style BD / Figma adapté au ratio */}
-              <div className="relative rounded-xl border-4 border-black bg-[#08090c] p-2 shadow-comic flex justify-center">
-                <div
-                  className="relative"
-                  style={{
-                    width:
-                      aspectRatio === "9:16"
-                        ? "min(100%, 270px)"
-                        : aspectRatio === "4:5"
-                        ? "min(100%, 340px)"
-                        : aspectRatio === "1:1"
-                        ? "min(100%, 360px)"
-                        : "100%",
-                  }}
-                >
-                  <canvas
-                    ref={stageCanvasRef}
-                    width={aspectSpec.width}
-                    height={aspectSpec.height}
-                    role="img"
-                    aria-label={activeDescriptor.ariaLabel}
-                    className="w-full h-auto rounded border-2 border-neutral-800 bg-black block"
-                    style={{
-                      imageRendering: "pixelated",
-                      aspectRatio: `${aspectSpec.width} / ${aspectSpec.height}`,
-                    }}
-                  />
-                  {showSafeZone &&
-                    (aspectRatio === "9:16" || aspectRatio === "4:5") && (
-                      <div
-                        aria-hidden="true"
-                        className="pointer-events-none absolute inset-0 rounded border-2 border-dashed border-[#00E5FF]/60"
-                      >
-                        <div className="absolute top-[11%] left-[6%] right-[16%] bottom-[22%] border border-dashed border-brand-red/70 rounded">
-                          <span className="inline-block bg-black/75 text-[#00E5FF] font-mono text-[8px] px-1">
-                            SAFE ZONE {aspectRatio}
-                          </span>
-                        </div>
-                      </div>
-                    )}
-                </div>
-              </div>
-
-              {/* Barre Actions & Export MP4 synchronisée (proche du son et de l'image) */}
-              <div className="p-3 rounded-xl bg-brand-pearl border-2 border-black shadow-comic-sm space-y-2.5">
-                <div className="flex flex-wrap items-center justify-between gap-2 font-mono text-[10px]">
-                  <span className="font-bold text-brand-black uppercase">
-                    EXPORT &amp; GÉNÉRATION DIRECTE {"//"} ZONE :{" "}
-                    <span className="text-brand-red">
-                      {clipStartSeconds.toFixed(1)}s → {(clipStartSeconds + clipDurationSeconds).toFixed(1)}s
-                    </span>{" "}
-                    ({clipDurationSeconds}s + SON)
-                  </span>
-                  <span className="text-neutral-600">
-                    {isRecordingVideo
-                      ? "⏺ Enregistrement en cours (arrêt auto fin d'extrait)..."
-                      : sourceMode === "LOCAL_FILE"
-                        ? `Prêt : ${aspectSpec.exportWidth}×${aspectSpec.exportHeight} + son`
-                        : `Prêt : ${aspectSpec.exportWidth}×${aspectSpec.exportHeight} + flux Hub`}
-                  </span>
-                </div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      id="btn-ve-undo"
-                      variant="clinical"
-                      size="sm"
-                      disabled={historyPast.length === 0}
-                      onClick={handleUndo}
-                    >
-                      ↶ UNDO
-                    </Button>
-                    <Button
-                      id="btn-ve-redo"
-                      variant="clinical"
-                      size="sm"
-                      disabled={historyFuture.length === 0}
-                      onClick={handleRedo}
-                    >
-                      ↷ REDO
-                    </Button>
-                  </div>
-
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Button
-                      id="btn-ve-snapshot"
-                      variant="clinical"
-                      size="sm"
-                      onClick={handleExportSnapshot}
-                    >
-                      ⬇ PNG {aspectSpec.exportWidth}×{aspectSpec.exportHeight}
-                    </Button>
-                    <Button
-                      id="btn-ve-video"
-                      variant={isRecordingVideo ? "comic" : "primary"}
-                      size="sm"
-                      onClick={() => void handleToggleVideoExport()}
-                    >
-                      {isRecordingVideo
-                        ? "⏹ STOP & SAUVER MP4"
-                        : `🎬 EXPORTER MP4 ${aspectRatio} (${clipDurationSeconds}s + SON)`}
-                    </Button>
-                  </div>
-                </div>
-                {presetMessage && (
-                  <p
-                    role="status"
-                    className="p-2 rounded bg-brand-white border-l-4 border-[#00E5FF] font-mono text-[11px] text-brand-black"
-                  >
-                    {presetMessage}
-                  </p>
-                )}
-                {presetError && (
-                  <p
-                    role="alert"
-                    className="p-2 rounded bg-brand-white border-l-4 border-brand-red font-mono text-[11px] text-brand-red font-bold"
-                  >
-                    {presetError}
-                  </p>
-                )}
-              </div>
-            </div>
-          </Card>
-        </div>
-
-          )}
-          {showMatrixPanel && (
-            <div className={showStagePanel ? "xl:col-span-5 space-y-4" : "xl:col-span-12 space-y-4"}>
-          <Card
-            moduleTitle="VARIATIONS_RAPIDES // VARIATIONS_3D"
-            moduleMeta="4 VARIATIONS AUDIO-RÉACTIVES"
-            activeIndicator={activeVariationIdx !== null}
-          >
-            <div className="space-y-3">
-              {/* Variations rapides pour expérimenter */}
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-mono text-[10px] font-bold uppercase text-brand-red">
-                  Variations rapides (Cliquer pour charger)
-                </span>
-                <div className="flex items-center gap-1.5">
-                  {useCustomPalette && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        useCustomPaletteRef.current = false;
-                        setUseCustomPalette(false);
-                        setActiveVariationIdx(null);
-                      }}
-                      className="font-mono text-[10px] font-bold px-2 py-1 rounded border border-black bg-brand-pearl hover:bg-brand-white text-brand-black"
-                      title="Revenir aux couleurs du Pack 3D actif"
-                    >
-                      ↺ Couleurs Pack
-                    </button>
-                  )}
-                  <Button
-                    id="btn-ve-variations"
-                    variant="clinical"
-                    size="sm"
-                    onClick={handleGenerateVariations}
-                  >
-                    🎲 Nouvelles Variations
-                  </Button>
-                </div>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5">
-                {variations.map((v, idx) => {
-                  const isSelected = activeVariationIdx === idx;
-                  const sceneName =
-                    SCENE_CATALOG.find((s) => s.id === v.sceneId)?.name ??
-                    v.sceneId;
-                  const paletteName =
-                    STUDY_PALETTES.find((p) => p.id === v.paletteId)?.name ??
-                    v.paletteId;
-                  return (
-                    <button
-                      key={`${v.seed}-${idx}`}
-                      type="button"
-                      onClick={() => handleApplyVariation(v, idx)}
-                      className={`px-2.5 py-2 rounded-lg border-2 font-mono text-[11px] font-bold text-left transition-all ${
-                        isSelected
-                          ? "border-black bg-brand-red text-white shadow-comic-sm"
-                          : "border-black bg-brand-pearl hover:bg-brand-white text-brand-black shadow-comic-sm"
-                      }`}
-                    >
-                      <div className="truncate">{sceneName}</div>
-                      <div
-                        className={`text-[9px] truncate ${
-                          isSelected ? "text-white/90" : "text-neutral-600"
-                        }`}
-                      >
-                        {paletteName}
-                      </div>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </Card>
-        </div>
-          )}
-        </div>
-      )}
-
-      {showFadersPanel && (
-        <Card
-        moduleTitle="MIXING_CONSOLE // 10_FADERS_ESSENTIELS"
-        moduleMeta="DOUBLE-CLIC = RESET · RÉACTIF EN TEMPS RÉEL"
-        activeIndicator
-      >
-        <div className="space-y-6">
-          {/* Barre de filtre rapide des banques de faders */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pb-3 border-b border-neutral-200">
-            <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
-              {(
-                [
-                  { id: "ALL", label: "TOUS LES FADERS (10)" },
-                  { id: "AUDIO", label: "AUDIO : BASSES & AIGUS (3)" },
-                  { id: "FX", label: "STROBE AIGU & PSYCHÉ (5)" },
-                  { id: "CAMERA", label: "CAMÉRA (2)" },
-                ] as const
-              ).map((tab) => (
-                <button
-                  key={tab.id}
-                  type="button"
-                  onClick={() => setBankFilter(tab.id)}
-                  className={[
-                    "px-3 py-1.5 rounded-lg font-bold border-2 transition-all",
-                    bankFilter === tab.id
-                      ? "bg-black text-white border-black shadow-comic-sm"
-                      : "bg-brand-pearl text-brand-charcoal border-neutral-300 hover:border-black",
-                  ].join(" ")}
-                >
-                  {tab.label}
-                </button>
-              ))}
-            </div>
-            <span className="font-mono text-[11px] text-neutral-500">
-              Temps réel sur <strong className="text-brand-black">STAGE_OUTPUT</strong>
-            </span>
-          </div>
-
-          {/* 01 // AUDIO : BASSES, AIGUS/CLAP & MASTER (3 Faders) */}
-          {(bankFilter === "ALL" || bankFilter === "AUDIO") && (
-            <div className="space-y-2.5">
-              <div className="font-mono text-xs font-bold uppercase text-brand-red flex items-center gap-2">
-                <span>{"01 //"}</span>
-                <span>AUDIO — BASSES, AIGUS / CLAP &amp; PUISSANCE (3 FADERS)</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <ConsoleFader
-                  id="fader-bass"
-                  shortTag="BASS"
-                  label="Bass Punch"
-                  value={bassGain}
-                  min={0}
-                  max={250}
-                  defaultValue={110}
-                  unit="%"
-                  accent="red"
-                  compact
-                  liveMeter={Math.min(1, Math.sqrt(liveFeatures.bass))}
-                  onChange={setBassGain}
-                />
-                <ConsoleFader
-                  id="fader-treble"
-                  shortTag="CLAP-HI"
-                  label="Aigus / Clap"
-                  value={trebleGain}
-                  min={0}
-                  max={250}
-                  defaultValue={125}
-                  unit="%"
-                  accent="cyan"
-                  compact
-                  liveMeter={Math.min(
-                    1,
-                    Math.max(
-                      Math.sqrt(liveFeatures.treble),
-                      Math.sqrt(liveFeatures.spectralFlux) * 2
-                    )
-                  )}
-                  onChange={setTrebleGain}
-                />
-                <ConsoleFader
-                  id="fader-intensity"
-                  shortTag="MSTR"
-                  label="Master Int."
-                  value={Math.round(preset.intensity * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={75}
-                  unit="%"
-                  accent="red"
-                  compact
-                  locked={Boolean(preset.locks["intensity"])}
-                  liveMeter={liveFeatures.rms}
-                  onToggleLock={() => toggleLock("intensity")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({ ...curr, intensity: val / 100 }))
-                  }
-                />
-              </div>
-            </div>
-          )}
-
-          {/* 02 // STROBE AIGU, BLACKOUT & PSYCHÉDÉLIE (5 Faders) */}
-          {(bankFilter === "ALL" || bankFilter === "FX") && (
-            <div className="space-y-2.5 pt-2 border-t border-neutral-200">
-              <div className="font-mono text-xs font-bold uppercase text-brand-black flex items-center gap-2">
-                <span className="text-[#00E5FF]">{"02 //"}</span>
-                <span>STROBE AIGU (FLASH FOND), KICK BLACKOUT &amp; PSYCHÉDÉLIE (5 FADERS)</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-                <ConsoleFader
-                  id="fader-strobe"
-                  shortTag="FLASH"
-                  label="Strobe Aigu"
-                  value={Math.round((preset.effects.strobeGlow ?? 0.45) * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={45}
-                  unit="%"
-                  accent="red"
-                  compact
-                  locked={Boolean(preset.locks["effects.strobeGlow"])}
-                  liveMeter={Math.min(
-                    1,
-                    Math.max(
-                      Math.sqrt(liveFeatures.treble),
-                      Math.sqrt(liveFeatures.spectralFlux) * 2
-                    )
-                  )}
-                  onToggleLock={() => toggleLock("effects.strobeGlow")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, strobeGlow: val / 100 },
-                    }))
-                  }
-                />
-                <ConsoleFader
-                  id="fader-blackout"
-                  shortTag="KICK"
-                  label="Kick Blackout"
-                  value={Math.round((preset.effects.kickBlackout ?? 0) * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={0}
-                  unit="%"
-                  accent="red"
-                  compact
-                  locked={Boolean(preset.locks["effects.kickBlackout"])}
-                  onToggleLock={() => toggleLock("effects.kickBlackout")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, kickBlackout: val / 100 },
-                    }))
-                  }
-                />
-                <ConsoleFader
-                  id="fader-psyche"
-                  shortTag="PSYCHE"
-                  label="Psychédélie"
-                  value={Math.round((preset.effects.psychedelic ?? 0) * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={0}
-                  unit="%"
-                  accent="cyan"
-                  compact
-                  locked={Boolean(preset.locks["effects.psychedelic"])}
-                  onToggleLock={() => toggleLock("effects.psychedelic")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, psychedelic: val / 100 },
-                    }))
-                  }
-                />
-                <ConsoleFader
-                  id="fader-morph"
-                  shortTag="MORPH"
-                  label="Morph Couleur"
-                  value={Math.round((preset.effects.colorTransition ?? 0) * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={0}
-                  unit="%"
-                  accent="cyan"
-                  compact
-                  locked={Boolean(preset.locks["effects.colorTransition"])}
-                  onToggleLock={() => toggleLock("effects.colorTransition")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, colorTransition: val / 100 },
-                    }))
-                  }
-                />
-                <ConsoleFader
-                  id="fader-anaglyph"
-                  shortTag="3D-FX"
-                  label="Anaglyph 3D"
-                  value={Math.round((preset.effects.anaglyphSplit ?? 0.16) * 100)}
-                  min={0}
-                  max={100}
-                  defaultValue={16}
-                  unit="%"
-                  accent="red"
-                  compact
-                  locked={Boolean(preset.locks["effects.anaglyphSplit"])}
-                  onToggleLock={() => toggleLock("effects.anaglyphSplit")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, anaglyphSplit: val / 100 },
-                    }))
-                  }
-                />
-              </div>
-            </div>
-          )}
-
-          {/* 03 // CAMÉRA (2 Faders) */}
-          {(bankFilter === "ALL" || bankFilter === "CAMERA") && (
-            <div className="space-y-2.5 pt-2 border-t border-neutral-200">
-              <div className="font-mono text-xs font-bold uppercase text-brand-charcoal flex items-center gap-2">
-                <span className="text-brand-red">{"03 //"}</span>
-                <span>CAMÉRA — ZOOM &amp; BALANCEMENT PENDULAIRE (2 FADERS)</span>
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <ConsoleFader
-                  id="fader-cam-zoom"
-                  shortTag="ZOOM"
-                  label="Zoom Cam"
-                  value={
-                    preset.render.camera.kind === "orthographic"
-                      ? Math.round(preset.render.camera.zoom * 100)
-                      : Math.round(
-                          (1 / Math.max(0.45, preset.render.camera.distance)) *
-                            100
-                        )
-                  }
-                  min={50}
-                  max={220}
-                  defaultValue={100}
-                  unit="%"
-                  accent="cyan"
-                  compact
-                  locked={Boolean(
-                    preset.render.camera.kind === "orthographic"
-                      ? preset.locks["render.camera.zoom"]
-                      : preset.locks["render.camera.distance"]
-                  )}
-                  onToggleLock={() =>
-                    toggleLock(
-                      preset.render.camera.kind === "orthographic"
-                        ? "render.camera.zoom"
-                        : "render.camera.distance"
-                    )
-                  }
-                  onChange={(val) =>
-                    updatePreset((curr) =>
-                      curr.render.style === "pixel-16"
-                        ? {
-                            ...curr,
-                            render: {
-                              ...curr.render,
-                              camera: {
-                                ...curr.render.camera,
-                                zoom: val / 100,
-                              },
-                            },
-                          }
-                        : {
-                            ...curr,
-                            render: {
-                              ...curr.render,
-                              camera: {
-                                ...curr.render.camera,
-                                distance: 100 / Math.max(50, val),
-                              },
-                            },
-                          }
-                    )
-                  }
-                />
-
-                <ConsoleFader
-                  id="fader-pendulum"
-                  shortTag="SWAY"
-                  label="Pendule Cam"
-                  value={Math.round(
-                    (preset.effects.pendulumSwing ?? 0.25) * 100
-                  )}
-                  min={0}
-                  max={100}
-                  defaultValue={25}
-                  unit="%"
-                  accent="cyan"
-                  compact
-                  locked={Boolean(preset.locks["effects.pendulumSwing"])}
-                  onToggleLock={() => toggleLock("effects.pendulumSwing")}
-                  onChange={(val) =>
-                    updatePreset((curr) => ({
-                      ...curr,
-                      effects: { ...curr.effects, pendulumSwing: val / 100 },
-                    }))
-                  }
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      </Card>
-
-      )}
-
-      {showLyricsPanel && (
-      <div>
-          <Card
-            moduleTitle="LYRICS_&_SCENARIO // WHISPER_LRC_&_BITMAP"
-            moduleMeta={
-              timedWords.length > 0
-                ? `WHISPER SYNC (${timedWords.length} MOTS)`
-                : "LRC HORODATÉ · #SECTION · 3D HUD"
-            }
-            activeIndicator={lyricsEnabled}
-          >
-            <div className="space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <label
-                  htmlFor="ve-lyrics-toggle"
-                  className="inline-flex items-center gap-2 font-mono text-xs font-bold text-brand-black cursor-pointer"
-                >
-                  <input
-                    id="ve-lyrics-toggle"
-                    type="checkbox"
-                    checked={lyricsEnabled}
-                    onChange={(e) => setLyricsEnabled(e.target.checked)}
-                    className="accent-brand-red w-4 h-4"
-                  />
-                  <span>Activer paroles &amp; scénario</span>
-                </label>
-
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button
-                    id="btn-ve-whisper"
-                    variant="primary"
-                    size="sm"
-                    disabled={whisperBusy}
-                    onClick={() => void handleWhisperTranscribe()}
-                  >
-                    {whisperBusy ? "⏳ WHISPER..." : "✨ TRANSCRIRE (WHISPER)"}
-                  </Button>
-                  <Button
-                    id="btn-ve-timecode"
-                    variant="clinical"
-                    size="sm"
-                    onClick={handleInsertLrcTimecode}
-                  >
-                    ⏱ + TIMECODE
-                  </Button>
-                  <Button
-                    id="btn-ve-mic"
-                    variant={speechActive ? "primary" : "comic"}
-                    size="sm"
-                    onClick={handleSpeechMic}
-                  >
-                    {speechActive ? "● ÉCOUTE MICRO..." : "🎙 MICRO"}
-                  </Button>
-                </div>
-              </div>
-
-              {whisperStatus && (
-                <p
-                  role="status"
-                  className="p-2.5 rounded bg-brand-pearl border-l-4 border-[#00E5FF] font-mono text-[11px] text-brand-black"
-                >
-                  {whisperStatus}
-                </p>
-              )}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 items-end">
-                <div>
-                  <label
-                    htmlFor="ve-lyrics-style"
-                    className="block font-mono text-[10px] font-bold uppercase text-neutral-500 mb-1"
-                  >
-                    Style typographique pixel
-                  </label>
-                  <select
-                    id="ve-lyrics-style"
-                    value={lyricsStyle}
-                    onChange={(e) =>
-                      setLyricsStyle(e.target.value as LyricsDisplayStyle)
-                    }
-                    className="w-full px-3 py-1.5 rounded-lg border-2 border-black bg-brand-white font-mono text-xs font-bold"
-                  >
-                    <option value="cinema-sub">Sous-titre Cinéma 16-bit</option>
-                    <option value="center-impact">Impact Central Brutaliste</option>
-                    <option value="hud-terminal">Terminal HUD Haut</option>
-                    <option value="psyche-wave">Onde Psychédélique</option>
-                  </select>
-                </div>
-
-                <Button
-                  type="button"
-                  variant="comic"
-                  size="sm"
-                  onClick={() => {
-                    const scenarioPrompt = `Transforme ces paroles en scénario LRC horodaté pour Anarchy Visual Studio (${bpm} BPM, extrait ${clipStartSeconds.toFixed(1)}s → ${(clipStartSeconds + clipDurationSeconds).toFixed(1)}s) :\nFormat exact par ligne : [mm:ss.xx] #SECTION TEXTE COURT\nSections disponibles : #INTRO, #COUPLET, #PRE_DROP, #DROP, #REFRAIN, #OUTRO.\nGarde 3 à 6 mots max par ligne pour un rendu TikTok / 9:16 lisible.`;
-                    navigator.clipboard
-                      ?.writeText(scenarioPrompt)
-                      .then(() =>
-                        setWhisperStatus(
-                          "📋 Prompt IA Scénario LRC copié ! Colle-le dans ton IA avec tes paroles."
-                        )
-                      )
-                      .catch(() => {});
-                  }}
-                >
-                  📋 PROMPT IA SCÉNARIO LRC
-                </Button>
-              </div>
-
-              <div>
-                <label
-                  htmlFor="ve-lyrics-text"
-                  className="block font-mono text-[10px] font-bold uppercase text-neutral-500 mb-1"
-                >
-                  Scénario &amp; Paroles LRC ([mm:ss.xx] #SECTION Texte)
-                </label>
-                <textarea
-                  id="ve-lyrics-text"
-                  rows={5}
-                  value={lyricsText}
-                  onChange={(e) => {
-                    setLyricsText(e.target.value);
-                    if (timedWords.length > 0) setTimedWords([]);
-                  }}
-                  placeholder="[00:00.00] #INTRO ANARCHY VISUAL ENGINE"
-                  className="w-full p-3 rounded-lg border-2 border-black bg-brand-pearl font-mono text-xs text-brand-black focus:outline-none focus:border-brand-red"
-                />
-              </div>
-
-              <div className="p-3 rounded-lg bg-brand-pearl border-l-4 border-brand-red font-mono text-[11px] text-neutral-600">
-                Supporte les timecodes LRC (<code>[00:08.50]</code>), les sections
-                scénario (<code>#INTRO</code>, <code>#DROP</code>,{" "}
-                <code>#REFRAIN</code>) incrustées dans le moteur 3D en bitmap 5×5, et
-                l&apos;alignement mot-à-mot via <strong>Whisper</strong>.
-              </div>
-            </div>
-          </Card>
-        </div>
-      )}
-
     </div>
   );
 };
 
 export default VisualEngineStudio;
+
