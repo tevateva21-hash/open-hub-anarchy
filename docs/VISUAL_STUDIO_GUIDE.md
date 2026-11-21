@@ -153,3 +153,15 @@ Dans le panneau **`PACK DE SCÈNES // ENCHAÎNEMENT BPM`** :
    - `vintage_1930_film` : `filmGrain`, `scratchesAndDust`, `gateWeave`, `colorGrade` (`technicolor_30s | sepia_warm | black_and_white_ink | none`), `vignette`.
    - `toon_outline` : encrage plume (`inkThickness`, `inkJitter`).
 
+## 9. Moteur v6 : Morphing Inter-Scènes & Programmation Temporelle DAW (`Anarchy3DPackV6`)
+
+1. **Moteur de Morphing Inter-Scènes (`morphTransition` & même `actor.id`)** :
+   - Lorsqu'un acteur conserve le même `id` entre deux scènes consécutives (ex. `id: "main_entity"`), ses sommets, couleurs, matériaux et contours sont interpolés en continu sur `morphTransition.durationBeats` (`1..16` temps) avec easing `linear | easeInOutCubic | elasticOut | expoIn`.
+   - **Vertex Lerp** : transformation géométrique fluide d'une goutte de mercure liquide (`organic_blob` chrome) vers un Boss Cartoon 1930 (`rubber_hose_mesh` Cel-Shading + Pie-Eyes).
+   - **Particle Swarm Morphing (`particle_swarm`)** : chaque particule glisse de sa forme dans la Scène A vers sa nouvelle cible `shapeTarget` (`sphere | vortex | tunnel | grid | text_outline`) dans la Scène B.
+2. **Courbes d'Automation DAW par Scène (`automations[]`)** :
+   - Fait évoluer automatiquement n'importe quelle cible (`scale`, `noiseStrength`, `rotationSpeed`, `emissiveIntensity`, `positionY`, `squashStretch`, `lineBoil`, `filmGrain`, `parallaxSpeed`, `steppedFps`, `zoom`, `fov`, `fogDensity`) de `from` vers `to` sur la progression normalisée `0.0 → 1.0` de la scène.
+3. **Modulateurs LFO Synchronisés au BPM (`modulators[]`)** :
+   - Jusqu'à 4 oscillateurs internes `lfo_1..lfo_4` (`waveform: sine | triangle | saw | square | random_hold`, `rateBeats: 0.25 | 0.5 | 1 | 2 | 4 | 8`, `phase: 0..1`) directement utilisables dans `audioModulation[].source`.
+4. **Multi-Caméras & Cuts Rythmiques (`cameraCuts[]`)** :
+   - Définit plusieurs presets de caméra par scène alternant toutes les `switchEveryBars` mesures ou sur un pic audio (`onPeakBand: snare | kick | bass`) avec transition `cut | glide`.

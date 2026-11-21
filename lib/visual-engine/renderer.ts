@@ -1,22 +1,27 @@
 import { getAudioFeaturesAt } from "./audioAnalysis";
 import { evaluateMathExpression } from "@/lib/visual-studio/math-expr";
 import type {
+  Anarchy3DActor,
   Anarchy3DAnimation,
   Anarchy3DBackdropLayer,
   Anarchy3DBackdropShaderConfig,
   Anarchy3DCartoonPhysics,
   Anarchy3DCloner,
   Anarchy3DGenerator,
+  Anarchy3DLfoModulator,
   Anarchy3DPostFx,
   Anarchy3DPostFxStep,
   Anarchy3DRenderStyle,
   Anarchy3DScene,
+  Anarchy3DSceneAutomation,
   Anarchy3DSidePropsLayer,
   Anarchy3DSubject,
   Anarchy3DTerrainLayer,
+  AnarchyMorphEasing,
   AnarchyProceduralPart,
   AnarchySceneTransitionType,
   AnarchyStudioLightingPreset,
+  AnarchySwarmShapeTarget,
   AnarchyToneMapping,
   AudioAnalysis,
   AudioFeatures,
@@ -2127,6 +2132,254 @@ function getStudioLightConfig(preset?: AnarchyStudioLightingPreset): {
 
 /**
  * COUCHE 1 v4 — Environnement, Éclairage Studio virtuel, Fond procédural & Brouillard volumétrique.
+/**
+ * Courbes d'easing v6 (linear, easeInOutCubic, elasticOut, expoIn).
+ */
+function evaluateMorphEasing(t: number, easing?: AnarchyMorphEasing): number {
+  const x = clamp01(t);
+  switch (easing) {
+    case "easeInOutCubic":
+      return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2;
+    case "elasticOut": {
+      if (x === 0 || x === 1) return x;
+      const c4 = (2 * Math.PI) / 3;
+      return Math.pow(2, -10 * x) * Math.sin((x * 10 - 0.75) * c4) + 1;
+    }
+    case "expoIn":
+      return x === 0 ? 0 : Math.pow(2, 10 * x - 10);
+    case "linear":
+    default:
+      return x;
+  }
+}
+
+/**
+ * Évalue les 4 LFO synchronisés au BPM (`lfo_1`..`lfo_4`) dans [0..1].
+ */
+function evaluateSceneLfos(
+  modulators: readonly Anarchy3DLfoModulator[] | undefined,
+  timeSeconds: number,
+  bpm = 128
+): Record<string, number> {
+  const out: Record<string, number> = {
+    lfo_1: 0.5 + 0.5 * Math.sin(timeSeconds * 2),
+    lfo_2: 0.5 + 0.5 * Math.cos(timeSeconds * 1.5),
+    lfo_3: (timeSeconds * 0.8) % 1,
+    lfo_4: Math.sin(timeSeconds * 4) >= 0 ? 1 : 0,
+  };
+  if (!modulators || modulators.length === 0) return out;
+  const totalBeats = (timeSeconds * Math.max(40, bpm)) / 60;
+  for (const mod of modulators) {
+    const rate = Math.max(0.125, mod.rateBeats || 2);
+    const rawPhase = totalBeats / rate + (mod.phase ?? 0);
+    const cycle = ((rawPhase % 1) + 1) % 1;
+    let val = 0.5;
+    switch (mod.waveform) {
+      case "sine":
+        val = 0.5 + 0.5 * Math.sin(cycle * Math.PI * 2);
+        break;
+      case "triangle":
+        val = 1 - Math.abs(cycle * 2 - 1);
+        break;
+      case "saw":
+        val = cycle;
+        break;
+      case "square":
+        val = cycle < 0.5 ? 1 : 0;
+        break;
+      case "random_hold": {
+        const slot = Math.floor(rawPhase);
+        const h = Math.sin(slot * 12.9898 + 78.233) * 43758.5453;
+        val = h - Math.floor(h);
+        break;
+      }
+    }
+    out[mod.id] = clamp01(val);
+  }
+  return out;
+}
+
+/**
+ * Évalue une cible d'automation v6 (`automations[]`) sur la progression [0..1] de la scène.
+ */
+function resolveAutomationOverride(
+  automations: readonly Anarchy3DSceneAutomation[] | undefined,
+  target: string,
+  actorId: string | undefined,
+  sceneProgress: number
+): number | undefined {
+  if (!automations || automations.length === 0) return undefined;
+  for (const au of automations) {
+    if (au.target !== target) continue;
+    if (au.actorId && actorId && au.actorId !== actorId) continue;
+    const e = evaluateMorphEasing(sceneProgress, au.easing);
+    return au.from + (au.to - au.from) * e;
+  }
+  return undefined;
+}
+
+// Tampons Float32Array pré-alloués pour le morphing géométrique (Vertex Lerp) et de particules à 60 FPS (zéro allocation GC par frame)
+const MORPH_VERTEX_STEPS = 64;
+const MORPH_SWARM_COUNT = 520;
+const MORPH_UNIT_ANGLES = (() => {
+  const arr = new Float32Array(MORPH_VERTEX_STEPS + 1);
+  for (let i = 0; i <= MORPH_VERTEX_STEPS; i++) {
+    arr[i] = (i / MORPH_VERTEX_STEPS) * Math.PI * 2;
+  }
+  return arr;
+})();
+const MORPH_SWARM_SEEDS = (() => {
+  const arr = new Float32Array(MORPH_SWARM_COUNT * 3);
+  let rng = 0x6c8e9cf5 >>> 0;
+  for (let i = 0; i < arr.length; i++) {
+    rng = (rng * 1664525 + 1013904223) >>> 0;
+    arr[i] = rng / 4294967296;
+  }
+  return arr;
+})();
+
+/**
+ * Échantillonne le rayon polaire normalisé d'un acteur (`organic_blob` ou `rubber_hose_mesh`) à l'angle `ang`
+ * pour permettre le Vertex Lerp temps réel entre deux formes ou topologies différentes.
+ */
+function sampleActorContourRadius(
+  actor: Anarchy3DActor,
+  ang: number,
+  baseR: number,
+  t: number,
+  rotSpeed: number,
+  noiseAmt: number,
+  salt: number
+): number {
+  if (actor.type === "rubber_hose_mesh") {
+    const shape = actor.shape ?? "boss_character";
+    if (shape === "boss_character") {
+      // Silhouette boss à couronne/cornes sur le haut
+      const crown =
+        ang > -Math.PI * 0.85 && ang < -Math.PI * 0.15
+          ? Math.max(0, Math.sin((ang + Math.PI * 0.5) * 6)) * 0.28
+          : 0;
+      return baseR * (0.88 + crown);
+    }
+    if (shape === "vintage_wheel" || shape === "psyche_tunnel") {
+      return baseR * (0.9 + 0.08 * Math.cos(ang * 8 + t * rotSpeed * 2));
+    }
+    if (shape === "pie_eyes") {
+      return baseR * (0.78 + 0.22 * Math.abs(Math.cos(ang)));
+    }
+    return baseR * (0.85 + 0.15 * Math.sin(ang * 3 + t * rotSpeed));
+  }
+  // organic_blob (ou autre forme) : bruit Simplex/FBM 3D continu
+  const freq = actor.noiseFrequency ?? 1.8;
+  const nx = Math.cos(ang) * freq + t * rotSpeed * 0.55;
+  const ny = Math.sin(ang) * freq - t * rotSpeed * 0.42;
+  const nz = t * rotSpeed * 0.35 + salt * 2.1;
+  const disp = fbmNoise3D(nx, ny, nz) * noiseAmt * 0.36;
+  return baseR * (1 + disp);
+}
+
+/**
+ * Calcule la position cible (x, y) de la particule `i` selon `shapeTarget` v6
+ * (`sphere` | `vortex` | `tunnel` | `grid` | `text_outline`) ou `behavior`.
+ */
+function sampleParticleTargetPos(
+  i: number,
+  shapeTarget: AnarchySwarmShapeTarget | undefined,
+  behavior: string | undefined,
+  cx: number,
+  cy: number,
+  width: number,
+  height: number,
+  t: number,
+  rotSpeed: number,
+  scale: number
+): [number, number] {
+  const r0 = MORPH_SWARM_SEEDS[i * 3];
+  const r1 = MORPH_SWARM_SEEDS[i * 3 + 1];
+  const r2 = MORPH_SWARM_SEEDS[i * 3 + 2];
+
+  if (shapeTarget === "sphere") {
+    const theta = r0 * Math.PI * 2 + t * rotSpeed * 0.65;
+    const phi = Math.acos(2 * r1 - 1);
+    const rad = Math.min(width, height) * 0.32 * scale * (0.82 + 0.18 * r2);
+    return [
+      cx + Math.sin(phi) * Math.cos(theta) * rad,
+      cy + Math.cos(phi) * rad * 0.85,
+    ];
+  }
+  if (shapeTarget === "tunnel") {
+    const ringIdx = i % 10;
+    const depthFrac = ((ringIdx / 10 + t * rotSpeed * 0.25) % 1);
+    const ang = r0 * Math.PI * 2 + t * rotSpeed * (ringIdx % 2 === 0 ? 0.5 : -0.5);
+    const rad = (0.1 + depthFrac * 0.52) * Math.min(width, height) * scale;
+    return [cx + Math.cos(ang) * rad * 1.25, cy + Math.sin(ang) * rad * 0.85];
+  }
+  if (shapeTarget === "grid") {
+    const cols = 24;
+    const rows = Math.ceil(MORPH_SWARM_COUNT / cols);
+    const gx = (i % cols) / (cols - 1) - 0.5;
+    const gy = Math.floor(i / cols) / Math.max(1, rows - 1) - 0.5;
+    const wave = Math.sin(gx * 6 + gy * 6 + t * rotSpeed * 2) * 8 * scale;
+    return [
+      cx + gx * width * 0.78 * scale,
+      cy + gy * height * 0.72 * scale + wave,
+    ];
+  }
+  if (shapeTarget === "text_outline") {
+    // Monogramme étoile / A-cercle Anarchy Open Hub
+    const branch = i % 5;
+    const u = r0;
+    const outerR = Math.min(width, height) * 0.36 * scale;
+    if (branch === 0) {
+      const ang = u * Math.PI * 2 + t * rotSpeed * 0.3;
+      return [cx + Math.cos(ang) * outerR, cy + Math.sin(ang) * outerR];
+    }
+    if (branch === 1) {
+      return [
+        cx + (u - 0.5) * outerR * 1.1,
+        cy + outerR * 0.8 - Math.abs(u - 0.5) * outerR * 3.1,
+      ];
+    }
+    if (branch === 2) {
+      return [cx + (u - 0.5) * outerR * 1.25, cy + outerR * 0.12];
+    }
+    const ang = (branch * 2.4 + u * 6.28) + t * rotSpeed * 0.4;
+    return [
+      cx + Math.cos(ang) * outerR * 0.55,
+      cy + Math.sin(ang) * outerR * 0.55,
+    ];
+  }
+  if (shapeTarget === "vortex" || behavior === "vortex") {
+    const ang = r0 * Math.PI * 2 + t * rotSpeed * (0.7 + r1 * 1.5);
+    const rad = (10 + r1 * width * 0.44) * scale;
+    return [cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad * 0.64];
+  }
+  if (behavior === "beat_explosion") {
+    const ang = r0 * Math.PI * 2;
+    const rad = ((t * rotSpeed * 0.65 + r2) % 1) * width * 0.52 * scale;
+    return [cx + Math.cos(ang) * rad, cy + Math.sin(ang) * rad * 0.72];
+  }
+  if (behavior === "floating_dust") {
+    return [
+      ((r0 * width + Math.sin(t * 0.5 + i) * 18) % width + width) % width,
+      ((r1 * height - t * rotSpeed * (12 + r2 * 18)) % height + height) % height,
+    ];
+  }
+  // curl_noise_flow
+  const bx = (r0 - 0.5) * width * 1.1;
+  const by = (r1 - 0.5) * height * 1.1;
+  const nx = bx * 0.012 + t * rotSpeed * 0.35;
+  const ny = by * 0.012 - t * rotSpeed * 0.28;
+  const curlX = fbmNoise3D(nx, ny, r2 * 4) * 52 * scale;
+  const curlY = fbmNoise3D(ny + 3.1, nx - 1.7, r2 * 4) * 44 * scale;
+  return [
+    ((cx + bx + curlX) % width + width) % width,
+    ((cy + by + curlY) % height + height) % height,
+  ];
+}
+
+/**
+ * COUCHE 1 v4/v6 — Environnement, Éclairage Studio virtuel, Fond procédural & Morphing inter-scènes.
  */
 function drawV4EnvironmentLayer(
   ctx: CanvasRenderingContext2D,
@@ -2136,16 +2389,37 @@ function drawV4EnvironmentLayer(
   width: number,
   height: number,
   seed: number,
-  reducedMotion: boolean
+  reducedMotion: boolean,
+  prevScene?: Anarchy3DScene,
+  morphAlpha = 1
 ): void {
   const env = scene.environment;
-  const cols =
+  const prevEnv = prevScene?.environment;
+  const isMorphing = Boolean(prevEnv && morphAlpha < 0.999);
+  const m = clamp01(morphAlpha);
+
+  const rawCols =
     env.backdropColors && env.backdropColors.length > 0
       ? env.backdropColors
       : [env.skyColor, env.fogColor, env.terrainPrimaryColor];
-  const c0 = cols[0] ?? "#090D16";
-  const c1 = cols[1] ?? c0;
-  const c2 = cols[2] ?? c1;
+  const prevCols =
+    prevEnv?.backdropColors && prevEnv.backdropColors.length > 0
+      ? prevEnv.backdropColors
+      : [
+          prevEnv?.skyColor ?? rawCols[0],
+          prevEnv?.fogColor ?? rawCols[1],
+          prevEnv?.terrainPrimaryColor ?? rawCols[2],
+        ];
+
+  const c0 = isMorphing
+    ? lerpHexColor(prevCols[0] ?? "#090D16", rawCols[0] ?? "#090D16", m)
+    : rawCols[0] ?? "#090D16";
+  const c1 = isMorphing
+    ? lerpHexColor(prevCols[1] ?? c0, rawCols[1] ?? c0, m)
+    : rawCols[1] ?? c0;
+  const c2 = isMorphing
+    ? lerpHexColor(prevCols[2] ?? c1, rawCols[2] ?? c1, m)
+    : rawCols[2] ?? c1;
   const t = reducedMotion ? 0 : timeSeconds;
 
   ctx.save();
@@ -2218,21 +2492,35 @@ function drawV4EnvironmentLayer(
   }
 
   // Éclairage studio virtuel (halo key-light + rim-light doux)
-  if (env.lightingPreset) {
-    const light = getStudioLightConfig(env.lightingPreset);
-    const keyX = width * (0.5 + light.lightDirX * 0.5);
-    const keyY = height * (0.5 + light.lightDirY * 0.45);
+  if (env.lightingPreset || prevEnv?.lightingPreset) {
+    const curLight = getStudioLightConfig(env.lightingPreset);
+    const prevLight = getStudioLightConfig(prevEnv?.lightingPreset ?? env.lightingPreset);
+    const keyColor = isMorphing
+      ? lerpHexColor(prevLight.keyColor, curLight.keyColor, m)
+      : curLight.keyColor;
+    const rimColor = isMorphing
+      ? lerpHexColor(prevLight.rimColor, curLight.rimColor, m)
+      : curLight.rimColor;
+    const dirX = isMorphing
+      ? prevLight.lightDirX + (curLight.lightDirX - prevLight.lightDirX) * m
+      : curLight.lightDirX;
+    const dirY = isMorphing
+      ? prevLight.lightDirY + (curLight.lightDirY - prevLight.lightDirY) * m
+      : curLight.lightDirY;
+
+    const keyX = width * (0.5 + dirX * 0.5);
+    const keyY = height * (0.5 + dirY * 0.45);
     const keyGrad = ctx.createRadialGradient(keyX, keyY, 4, keyX, keyY, width * 0.72);
-    keyGrad.addColorStop(0, light.keyColor);
+    keyGrad.addColorStop(0, keyColor);
     keyGrad.addColorStop(1, "rgba(0,0,0,0)");
     ctx.globalAlpha = 0.16 + audio.bassEnvelope * 0.1;
     ctx.fillStyle = keyGrad;
     ctx.fillRect(0, 0, width, height);
 
-    const rimX = width * (0.5 - light.lightDirX * 0.55);
+    const rimX = width * (0.5 - dirX * 0.55);
     const rimY = height * 0.72;
     const rimGrad = ctx.createRadialGradient(rimX, rimY, 4, rimX, rimY, width * 0.65);
-    rimGrad.addColorStop(0, light.rimColor);
+    rimGrad.addColorStop(0, rimColor);
     rimGrad.addColorStop(1, "rgba(0,0,0,0)");
     ctx.globalAlpha = 0.14 + audio.midEnvelope * 0.12;
     ctx.fillStyle = rimGrad;
@@ -2240,12 +2528,20 @@ function drawV4EnvironmentLayer(
     ctx.globalAlpha = 1;
   }
 
-  // Brouillard volumétrique doux
-  if (env.fog?.enabled && (env.fog.density ?? 0) > 0.002) {
+  // Brouillard volumétrique doux (interpolé lors du morphing)
+  const curFogDen = env.fog?.enabled ? env.fog.density ?? 0.03 : 0;
+  const prevFogDen = prevEnv?.fog?.enabled ? prevEnv.fog.density ?? 0.03 : curFogDen;
+  const effFogDen = isMorphing ? prevFogDen + (curFogDen - prevFogDen) * m : curFogDen;
+  if (effFogDen > 0.002) {
+    const curFogCol = env.fog?.color ?? env.fogColor;
+    const prevFogCol = prevEnv?.fog?.color ?? prevEnv?.fogColor ?? curFogCol;
     const fogGrad = ctx.createLinearGradient(0, height * 0.45, 0, height);
     fogGrad.addColorStop(0, "rgba(0,0,0,0)");
-    fogGrad.addColorStop(1, env.fog.color ?? env.fogColor);
-    ctx.globalAlpha = clamp01((env.fog.density ?? 0.03) * 14);
+    fogGrad.addColorStop(
+      1,
+      isMorphing ? lerpHexColor(prevFogCol, curFogCol, m) : curFogCol
+    );
+    ctx.globalAlpha = clamp01(effFogDen * 14);
     ctx.fillStyle = fogGrad;
     ctx.fillRect(0, 0, width, height);
     ctx.globalAlpha = 1;
@@ -2257,7 +2553,8 @@ function drawV4EnvironmentLayer(
 function resolveActorModulationValue(
   source: string,
   audio: SceneAudioState,
-  faderValues?: Record<string, number>
+  faderValues?: Record<string, number>,
+  lfoValues?: Record<string, number>
 ): number {
   switch (source) {
     case "bass":
@@ -2275,6 +2572,9 @@ function resolveActorModulationValue(
     case "snare":
       return clamp01(audio.midEnvelope * 0.6 + audio.transientPulse * 0.7);
     default:
+      if (source.startsWith("lfo_") && lfoValues) {
+        return clamp01(lfoValues[source] ?? 0.5);
+      }
       if (source.startsWith("fader_") && faderValues) {
         return clamp01(faderValues[source] ?? 0);
       }
@@ -2283,7 +2583,7 @@ function resolveActorModulationValue(
 }
 
 /**
- * COUCHE 2 v4/v5 — Acteurs Organiques, Hybrides & Cartoon 1930 (`actors[]`) avec modulations audio + 19 faders.
+ * COUCHE 2 v4/v5/v6 — Acteurs Organiques, Hybrides, Cartoon 1930 & Morphing Inter-Scènes (`actors[]`).
  */
 function renderV4Actors(
   ctx: CanvasRenderingContext2D,
@@ -2296,10 +2596,17 @@ function renderV4Actors(
   reducedMotion: boolean,
   camOff: PerspectiveOffsets,
   faderValues?: Record<string, number>,
-  beatPhase = 0
+  beatPhase = 0,
+  prevScene?: Anarchy3DScene,
+  morphAlpha = 1,
+  sceneProgress = 0,
+  lfoValues?: Record<string, number>
 ): void {
   const actors = scene.actors;
   if (!actors || actors.length === 0) return;
+
+  const isMorphing = Boolean(prevScene && morphAlpha < 0.999);
+  const mAlpha = clamp01(morphAlpha);
 
   const cp = scene.cartoonPhysics;
   const fb = cp?.faderBindings;
@@ -2308,26 +2615,38 @@ function renderV4Actors(
     const fv = clamp01(faderValues[fb.steppedFps] ?? 0.5);
     steppedFps = fv < 0.34 ? 12 : fv < 0.68 ? 24 : 60;
   }
+  const autoFps = resolveAutomationOverride(
+    scene.automations,
+    "steppedFps",
+    undefined,
+    sceneProgress
+  );
+  if (autoFps !== undefined) {
+    steppedFps = autoFps < 18 ? 12 : autoFps < 40 ? 24 : 60;
+  }
   const rawT = reducedMotion ? 0 : timeSeconds;
   const t = steppedFps < 60 ? Math.floor(rawT * steppedFps) / steppedFps : rawT;
   const boilTick = Math.floor(rawT * Math.min(24, steppedFps));
   const globalBoil =
     (cp?.lineBoil ?? 0) +
-    (fb?.lineBoil ? resolveActorModulationValue(fb.lineBoil, audio, faderValues) * 1.4 : 0);
+    (fb?.lineBoil
+      ? resolveActorModulationValue(fb.lineBoil, audio, faderValues, lfoValues) * 1.4
+      : 0);
   const globalParallaxMul =
     1 +
     (fb?.parallaxSpeed
-      ? resolveActorModulationValue(fb.parallaxSpeed, audio, faderValues) * 1.8
+      ? resolveActorModulationValue(fb.parallaxSpeed, audio, faderValues, lfoValues) * 1.8
       : 0);
   const squashTriggerVal = resolveActorModulationValue(
     cp?.squashTrigger ?? "bass",
     audio,
-    faderValues
+    faderValues,
+    lfoValues
   );
   const globalSquashAmt =
     (cp?.squashStretch ?? 0) +
     (fb?.squashStretch
-      ? resolveActorModulationValue(fb.squashStretch, audio, faderValues) * 0.9
+      ? resolveActorModulationValue(fb.squashStretch, audio, faderValues, lfoValues) * 0.9
       : 0);
 
   const boilOffset = (salt: number, amt: number): number => {
@@ -2342,25 +2661,89 @@ function renderV4Actors(
 
   for (let aIdx = 0; aIdx < actors.length; aIdx++) {
     const actor = actors[aIdx];
-    const baseScale =
-      typeof actor.scale === "number"
-        ? actor.scale
-        : Array.isArray(actor.scale)
-        ? (actor.scale[0] + actor.scale[1] + actor.scale[2]) / 3
+    const prevActor =
+      isMorphing && actor.id
+        ? prevScene?.actors?.find((pa) => pa.id === actor.id)
+        : undefined;
+
+    const extractScale = (a: Anarchy3DActor): number =>
+      typeof a.scale === "number"
+        ? a.scale
+        : Array.isArray(a.scale)
+        ? (a.scale[0] + a.scale[1] + a.scale[2]) / 3
         : 1.0;
 
-    let modScale = baseScale;
-    let modNoise = actor.noiseStrength ?? 0.6;
-    let modRotSpeed = actor.speed ?? 1.0;
-    let modEmissive = 0.7;
-    let modPosY = actor.position?.[1] ?? 0;
-    let modSquash = globalSquashAmt * squashTriggerVal;
-    let modBoil = globalBoil;
-    let modParallaxSpeed = globalParallaxMul;
+    const curBaseScale = extractScale(actor);
+    const prevBaseScale = prevActor ? extractScale(prevActor) : curBaseScale;
+    const baseScale = prevActor
+      ? prevBaseScale + (curBaseScale - prevBaseScale) * mAlpha
+      : curBaseScale;
+
+    let modScale =
+      resolveAutomationOverride(scene.automations, "scale", actor.id, sceneProgress) ??
+      baseScale;
+    let modNoise =
+      resolveAutomationOverride(
+        scene.automations,
+        "noiseStrength",
+        actor.id,
+        sceneProgress
+      ) ??
+      (prevActor
+        ? (prevActor.noiseStrength ?? 0.6) +
+          ((actor.noiseStrength ?? 0.6) - (prevActor.noiseStrength ?? 0.6)) * mAlpha
+        : actor.noiseStrength ?? 0.6);
+    let modRotSpeed =
+      resolveAutomationOverride(
+        scene.automations,
+        "rotationSpeed",
+        actor.id,
+        sceneProgress
+      ) ?? (actor.speed ?? 1.0);
+    let modEmissive =
+      resolveAutomationOverride(
+        scene.automations,
+        "emissiveIntensity",
+        actor.id,
+        sceneProgress
+      ) ?? 0.7;
+    const curPosY = actor.position?.[1] ?? 0;
+    const prevPosY = prevActor?.position?.[1] ?? curPosY;
+    let modPosY =
+      resolveAutomationOverride(
+        scene.automations,
+        "positionY",
+        actor.id,
+        sceneProgress
+      ) ?? (prevActor ? prevPosY + (curPosY - prevPosY) * mAlpha : curPosY);
+    let modSquash =
+      (resolveAutomationOverride(
+        scene.automations,
+        "squashStretch",
+        actor.id,
+        sceneProgress
+      ) ?? globalSquashAmt) * squashTriggerVal;
+    let modBoil =
+      resolveAutomationOverride(
+        scene.automations,
+        "lineBoil",
+        actor.id,
+        sceneProgress
+      ) ?? globalBoil;
+    let modParallaxSpeed =
+      resolveAutomationOverride(
+        scene.automations,
+        "parallaxSpeed",
+        actor.id,
+        sceneProgress
+      ) ?? globalParallaxMul;
 
     if (actor.audioModulation) {
       for (const m of actor.audioModulation) {
-        const v = resolveActorModulationValue(m.source, audio, faderValues) * m.amount + (m.offset ?? 0);
+        const v =
+          resolveActorModulationValue(m.source, audio, faderValues, lfoValues) *
+            m.amount +
+          (m.offset ?? 0);
         if (m.target === "scale") modScale = Math.max(0.15, modScale + v);
         else if (m.target === "noiseStrength") modNoise = Math.max(0, modNoise + v);
         else if (m.target === "rotationSpeed") modRotSpeed += v;
@@ -2377,40 +2760,72 @@ function renderV4Actors(
     const squashX = 1 + squashFactor * 0.42;
     const squashY = 1 / Math.max(0.55, squashX);
 
-    const posX = actor.position?.[0] ?? 0;
-    const posZ = Math.max(1.8, actor.position?.[2] ?? 5.0);
+    const curPosX = actor.position?.[0] ?? 0;
+    const prevPosX = prevActor?.position?.[0] ?? curPosX;
+    const posX = prevActor ? prevPosX + (curPosX - prevPosX) * mAlpha : curPosX;
+    const curPosZ = Math.max(1.8, actor.position?.[2] ?? 5.0);
+    const prevPosZ = Math.max(1.8, prevActor?.position?.[2] ?? curPosZ);
+    const posZ = prevActor ? prevPosZ + (curPosZ - prevPosZ) * mAlpha : curPosZ;
     const depthScale = 5.0 / posZ;
     const cx = width * 0.5 + (posX - camOff.yawRad * 1.4) * (width * 0.16) * depthScale;
     const cy = height * 0.5 - (modPosY - camOff.pitchRad * 1.1) * (height * 0.22) * depthScale;
-    const col1 = actor.color ?? "#38BDF8";
-    const col2 = actor.secondaryColor ?? "#F472B6";
+    const rawCol1 = actor.color ?? "#38BDF8";
+    const rawCol2 = actor.secondaryColor ?? "#F472B6";
+    const col1 = prevActor
+      ? lerpHexColor(prevActor.color ?? rawCol1, rawCol1, mAlpha)
+      : rawCol1;
+    const col2 = prevActor
+      ? lerpHexColor(prevActor.secondaryColor ?? rawCol2, rawCol2, mAlpha)
+      : rawCol2;
     const mat = actor.material ?? "chrome";
 
-    if (actor.type === "organic_blob") {
+    // MORPHING GÉOMÉTRIQUE (Vertex Lerp) : organic_blob <-> rubber_hose_mesh (ou organic_blob <-> organic_blob)
+    if (
+      actor.type === "organic_blob" ||
+      (prevActor &&
+        prevActor.type === "organic_blob" &&
+        actor.type === "rubber_hose_mesh" &&
+        mAlpha < 0.72)
+    ) {
       const baseR = Math.min(width, height) * 0.24 * modScale * depthScale;
-      const steps = Math.max(24, Math.min(96, (actor.detail ?? 28) * 2));
-      const freq = actor.noiseFrequency ?? 1.8;
-
       ctx.save();
+      ctx.translate(cx + boilOffset(aIdx * 5, modBoil), cy + boilOffset(aIdx * 9, modBoil));
+      ctx.scale(squashX, squashY);
       ctx.beginPath();
-      for (let i = 0; i <= steps; i++) {
-        const ang = (i / steps) * Math.PI * 2;
-        const nx = Math.cos(ang) * freq + t * modRotSpeed * 0.55;
-        const ny = Math.sin(ang) * freq - t * modRotSpeed * 0.42;
-        const nz = t * modRotSpeed * 0.35 + aIdx * 2.1;
-        const disp = fbmNoise3D(nx, ny, nz) * modNoise * 0.36;
-        const r = baseR * (1 + disp);
-        const px = cx + Math.cos(ang) * r;
-        const py = cy + Math.sin(ang) * r;
+      for (let i = 0; i <= MORPH_VERTEX_STEPS; i++) {
+        const ang = MORPH_UNIT_ANGLES[i];
+        const rCur = sampleActorContourRadius(
+          actor,
+          ang,
+          baseR,
+          t,
+          modRotSpeed,
+          modNoise,
+          aIdx
+        );
+        const rPrev = prevActor
+          ? sampleActorContourRadius(
+              prevActor,
+              ang,
+              baseR,
+              t,
+              prevActor.speed ?? modRotSpeed,
+              prevActor.noiseStrength ?? modNoise,
+              aIdx
+            )
+          : rCur;
+        const r = prevActor ? rPrev + (rCur - rPrev) * mAlpha : rCur;
+        const px = Math.cos(ang) * r;
+        const py = Math.sin(ang) * r;
         if (i === 0) ctx.moveTo(px, py);
         else ctx.lineTo(px, py);
       }
       ctx.closePath();
 
-      const hlX = cx + light.lightDirX * baseR * 0.55;
-      const hlY = cy + light.lightDirY * baseR * 0.55;
-      const grad = ctx.createRadialGradient(hlX, hlY, baseR * 0.06, cx, cy, baseR * 1.25);
-      if (mat === "chrome") {
+      const hlX = light.lightDirX * baseR * 0.55;
+      const hlY = light.lightDirY * baseR * 0.55;
+      const grad = ctx.createRadialGradient(hlX, hlY, baseR * 0.06, 0, 0, baseR * 1.25);
+      if (mat === "chrome" && (!prevActor || mAlpha > 0.35 || prevActor.material === "chrome")) {
         grad.addColorStop(0, "#FFFFFF");
         grad.addColorStop(0.28, col1);
         grad.addColorStop(0.62, lerpHexColor(col2, "#0F172A", 0.55));
@@ -2453,16 +2868,43 @@ function renderV4Actors(
         ctx.fill();
       }
 
-      if (mat === "toon_cel_outline") {
-        ctx.globalAlpha = 1;
+      // Apparition progressive du contour d'encre noir et des Pie-Eyes lors du morphing vers rubber_hose_mesh
+      const targetInk =
+        actor.type === "rubber_hose_mesh" || mat === "toon_cel_outline"
+          ? actor.inkThickness ?? 3.6
+          : prevActor?.type === "rubber_hose_mesh"
+          ? (prevActor.inkThickness ?? 3.6) * (1 - mAlpha)
+          : 0;
+      if (targetInk > 0.2) {
+        ctx.globalAlpha =
+          actor.type === "rubber_hose_mesh" ? clamp01(mAlpha * 1.25) : 1;
         ctx.strokeStyle = "#09090B";
-        ctx.lineWidth = 2.6;
+        ctx.lineWidth = targetInk;
         ctx.stroke();
       } else if (mat === "emissive_neon") {
         ctx.globalAlpha = 0.65 * modEmissive;
         ctx.strokeStyle = col2;
         ctx.lineWidth = 2.2;
         ctx.stroke();
+      }
+
+      // Morphing progressif des yeux Pie-Eyes quand organic_blob devient rubber_hose_mesh
+      if (actor.type === "rubber_hose_mesh" && mAlpha > 0.22) {
+        const eyeAlpha = clamp01((mAlpha - 0.22) / 0.5);
+        ctx.globalAlpha = eyeAlpha;
+        ctx.fillStyle = "#FFFBEB";
+        ctx.strokeStyle = "#09090B";
+        ctx.lineWidth = Math.max(2, targetInk * 0.8);
+        ctx.beginPath();
+        ctx.ellipse(-baseR * 0.28, -baseR * 0.16, baseR * 0.2, baseR * 0.28 * eyeAlpha, 0, 0, Math.PI * 2);
+        ctx.ellipse(baseR * 0.28, -baseR * 0.16, baseR * 0.2, baseR * 0.28 * eyeAlpha, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.stroke();
+        ctx.fillStyle = "#09090B";
+        ctx.beginPath();
+        ctx.arc(-baseR * 0.24, -baseR * 0.16, baseR * 0.11 * eyeAlpha, 0.2 * Math.PI, 1.82 * Math.PI);
+        ctx.arc(baseR * 0.24, -baseR * 0.16, baseR * 0.11 * eyeAlpha, 0.2 * Math.PI, 1.82 * Math.PI);
+        ctx.fill();
       }
       ctx.restore();
     } else if (actor.type === "wave_terrain") {
@@ -2521,46 +2963,55 @@ function renderV4Actors(
       }
       ctx.restore();
     } else if (actor.type === "particle_swarm") {
-      // Cap à ~700 particules bokeh dessinées pour rester à 60 FPS fluide tout en représentant 1k-10k
-      const drawCount = Math.max(120, Math.min(720, Math.round((actor.count ?? 3000) * 0.12)));
+      // MORPHING DE PARTICULES v6 : interpolation fluide entre shapeTarget précédent (ou forme solide éclatée) et shapeTarget courant
+      const drawCount = Math.min(
+        MORPH_SWARM_COUNT,
+        Math.max(120, Math.round((actor.count ?? 3000) * 0.11))
+      );
+      const curShape = actor.shapeTarget;
+      const prevShape: AnarchySwarmShapeTarget | undefined =
+        prevActor?.type === "particle_swarm"
+          ? prevActor.shapeTarget
+          : prevActor
+          ? "sphere"
+          : undefined;
       const behavior = actor.behavior ?? "curl_noise_flow";
-      let rng = ((seed + aIdx * 4099) ^ 0x9e3779b9) >>> 0;
-      const next = () => {
-        rng = (rng * 1664525 + 1013904223) >>> 0;
-        return rng / 4294967296;
-      };
+      const prevBehavior = prevActor?.behavior ?? behavior;
+
       ctx.save();
       for (let i = 0; i < drawCount; i++) {
-        const r0 = next();
-        const r1 = next();
-        const r2 = next();
-        let px = cx;
-        let py = cy;
-        if (behavior === "curl_noise_flow") {
-          const bx = (r0 - 0.5) * width * 1.1;
-          const by = (r1 - 0.5) * height * 1.1;
-          const nx = bx * 0.012 + t * modRotSpeed * 0.35;
-          const ny = by * 0.012 - t * modRotSpeed * 0.28;
-          const curlX = fbmNoise3D(nx, ny, r2 * 4) * 52 * modScale;
-          const curlY = fbmNoise3D(ny + 3.1, nx - 1.7, r2 * 4) * 44 * modScale;
-          px = ((cx + bx + curlX) % width + width) % width;
-          py = ((cy + by + curlY) % height + height) % height;
-        } else if (behavior === "vortex") {
-          const ang = r0 * Math.PI * 2 + t * modRotSpeed * (0.7 + r1 * 1.5);
-          const rad = (10 + r1 * width * 0.44) * modScale;
-          px = cx + Math.cos(ang) * rad;
-          py = cy + Math.sin(ang) * rad * 0.64;
-        } else if (behavior === "beat_explosion") {
-          const ang = r0 * Math.PI * 2;
-          const rad = ((t * modRotSpeed * 0.65 + r2) % 1) * width * 0.52 * modScale;
-          px = cx + Math.cos(ang) * rad;
-          py = cy + Math.sin(ang) * rad * 0.72;
-        } else {
-          // floating_dust
-          px = ((r0 * width + Math.sin(t * 0.5 + i) * 18) % width + width) % width;
-          py = ((r1 * height - t * modRotSpeed * (12 + r2 * 18)) % height + height) % height;
+        const [tx, ty] = sampleParticleTargetPos(
+          i,
+          curShape,
+          behavior,
+          cx,
+          cy,
+          width,
+          height,
+          t,
+          modRotSpeed,
+          modScale
+        );
+        let px = tx;
+        let py = ty;
+        if (prevActor && mAlpha < 0.999) {
+          const [sx, sy] = sampleParticleTargetPos(
+            i,
+            prevShape,
+            prevBehavior,
+            cx,
+            cy,
+            width,
+            height,
+            t,
+            prevActor.speed ?? modRotSpeed,
+            prevBaseScale
+          );
+          px = sx + (tx - sx) * mAlpha;
+          py = sy + (ty - sy) * mAlpha;
         }
-        const sz = (0.8 + r2 * 2.4) * (behavior === "floating_dust" ? 0.9 : 1.15);
+        const r2 = MORPH_SWARM_SEEDS[i * 3 + 2];
+        const sz = (0.85 + r2 * 2.3) * (behavior === "floating_dust" ? 0.9 : 1.15);
         ctx.globalAlpha = clamp01((0.32 + r2 * 0.65) * (0.65 + modEmissive * 0.45));
         ctx.fillStyle = i % 3 === 0 ? col2 : col1;
         ctx.beginPath();
@@ -3131,7 +3582,9 @@ function applyV4PostFxStack(
   transitionType?: AnarchySceneTransitionType,
   transitionProgress?: number,
   cartoonPhysics?: Anarchy3DCartoonPhysics,
-  faderValues?: Record<string, number>
+  faderValues?: Record<string, number>,
+  prevPostFX?: readonly Anarchy3DPostFxStep[],
+  morphAlpha: number = 1
 ): void {
   const filmTick = Math.floor(timeSeconds * (cartoonPhysics?.steppedFps ?? 24));
   const faderGrainBoost =
@@ -3143,8 +3596,41 @@ function applyV4PostFxStack(
         ) * 0.65
       : 0;
 
+  // Fusion inter-scènes de la pile postFX pendant le morphing v6
+  const effectiveSteps: Anarchy3DPostFxStep[] = [];
+  if (prevPostFX && prevPostFX.length > 0 && morphAlpha < 0.999) {
+    const curTypes = new Set((postFX ?? []).map((s) => s.type));
+    for (const ps of prevPostFX) {
+      if (!curTypes.has(ps.type)) {
+        effectiveSteps.push({
+          ...ps,
+          intensity: (ps.intensity ?? 0.85) * (1 - morphAlpha),
+        });
+      }
+    }
+  }
   if (postFX && postFX.length > 0) {
-    for (const step of postFX) {
+    for (const cs of postFX) {
+      const prevMatch =
+        prevPostFX && morphAlpha < 0.999
+          ? prevPostFX.find((p) => p.type === cs.type)
+          : undefined;
+      const curInt = cs.intensity ?? 0.85;
+      const blendedInt = prevMatch
+        ? (prevMatch.intensity ?? 0.85) +
+          (curInt - (prevMatch.intensity ?? 0.85)) * morphAlpha
+        : prevPostFX && morphAlpha < 0.999
+        ? curInt * morphAlpha
+        : curInt;
+      effectiveSteps.push({
+        ...cs,
+        intensity: blendedInt,
+      });
+    }
+  }
+
+  if (effectiveSteps.length > 0) {
+    for (const step of effectiveSteps) {
       const intensity = clamp01((step.intensity ?? 0.85) * 0.5) * 2;
       if (intensity <= 0.01) continue;
 
@@ -5076,6 +5562,21 @@ export function renderSceneFrame(
   const switchBeats = input.bpmConfig?.autoSceneSwitchBeats ?? 0;
 
   const scene3d: Anarchy3DScene | undefined = input.anarchy3dScene;
+  const prevScene3d: Anarchy3DScene | undefined = input.previousAnarchy3dScene;
+  const sceneProgress = clamp01(input.sceneProgress ?? 0);
+  const rawMorphProgress = clamp01(input.transitionProgress ?? 1);
+  const morphAlpha =
+    prevScene3d && rawMorphProgress < 0.999
+      ? evaluateMorphEasing(
+          rawMorphProgress,
+          scene3d?.morphTransition?.easing ?? "easeInOutCubic"
+        )
+      : 1;
+  const lfoValues = evaluateSceneLfos(
+    scene3d?.modulators,
+    input.timeSeconds,
+    bpm
+  );
 
   let effectiveSceneId: SceneId = scene3d?.sceneId ?? input.sceneId;
   let transitionBlackout = 0;
@@ -5116,17 +5617,44 @@ export function renderSceneFrame(
   let artisticBasePalette: StudyPalette = basePalette;
   if (scene3d) {
     const { environment: env, subject: sub } = scene3d;
+    const prevEnv = prevScene3d?.environment;
+    const prevSub = prevScene3d?.subject;
+    const skyCol =
+      prevEnv && morphAlpha < 0.999
+        ? lerpHexColor(prevEnv.skyColor, env.skyColor, morphAlpha)
+        : env.skyColor;
+    const fogCol =
+      prevEnv && morphAlpha < 0.999
+        ? lerpHexColor(prevEnv.fogColor, env.fogColor, morphAlpha)
+        : env.fogColor;
+    const tPrim =
+      prevEnv && morphAlpha < 0.999
+        ? lerpHexColor(prevEnv.terrainPrimaryColor, env.terrainPrimaryColor, morphAlpha)
+        : env.terrainPrimaryColor;
+    const tSec =
+      prevEnv && morphAlpha < 0.999
+        ? lerpHexColor(prevEnv.terrainSecondaryColor, env.terrainSecondaryColor, morphAlpha)
+        : env.terrainSecondaryColor;
+    const sPrim =
+      prevSub && morphAlpha < 0.999
+        ? lerpHexColor(prevSub.primaryColor, sub.primaryColor, morphAlpha)
+        : sub.primaryColor;
+    const sAcc =
+      prevSub && morphAlpha < 0.999
+        ? lerpHexColor(prevSub.accentColor, sub.accentColor, morphAlpha)
+        : sub.accentColor;
+
     artisticBasePalette = {
       ...basePalette,
-      sky: env.skyColor,
-      haze: env.fogColor,
-      distant: lerpHexColor(env.fogColor, env.terrainPrimaryColor, 0.35),
-      structure: env.terrainPrimaryColor,
-      reflection: env.terrainSecondaryColor,
-      face: sub.primaryColor,
-      glow: sub.accentColor,
-      light: lerpHexColor(sub.accentColor, "#FFFFFF", 0.55),
-      shadow: lerpHexColor(env.skyColor, "#000000", 0.65),
+      sky: skyCol,
+      haze: fogCol,
+      distant: lerpHexColor(fogCol, tPrim, 0.35),
+      structure: tPrim,
+      reflection: tSec,
+      face: sPrim,
+      glow: sAcc,
+      light: lerpHexColor(sAcc, "#FFFFFF", 0.55),
+      shadow: lerpHexColor(skyCol, "#000000", 0.65),
     };
   }
 
@@ -5164,9 +5692,16 @@ export function renderSceneFrame(
     palette = blendStudyPalettes(palette, BLACKOUT_PALETTE, totalDarkness);
   }
 
-  // Le fader fog agit comme multiplicateur de fogDensity du JSON (ex: 0.045 * 10 ≈ 0.45)
+  // Le fader fog agit comme multiplicateur de fogDensity du JSON (avec automation DAW v6 éventuelle)
+  const autoFogDensity = resolveAutomationOverride(
+    scene3d?.automations,
+    "fogDensity",
+    undefined,
+    sceneProgress
+  );
+  const rawFogDensity = autoFogDensity ?? scene3d?.environment.fogDensity ?? 0.035;
   const jsonFogNormalized = scene3d
-    ? clamp01(scene3d.environment.fogDensity * 10)
+    ? clamp01(rawFogDensity * 10)
     : DEFAULT_RETRO_EFFECTS.fog;
   const faderFogMul =
     (input.effects?.fog ?? DEFAULT_RETRO_EFFECTS.fog) /
@@ -5234,7 +5769,7 @@ export function renderSceneFrame(
     };
   }
 
-  // Paramètres caméra unifiés : JSON camera (mode, rig, beatCut, fov, shakeIntensity) × Multiplicateurs Faders
+  // Paramètres caméra unifiés : JSON camera (mode, rig, beatCut, fov, shakeIntensity) × Multiplicateurs Faders + cameraCuts[] v6
   const pendulumAmt = reducedMotion ? 0 : effects.pendulumSwing ?? 0;
   const midSwayBonus =
     scene3d?.audioMapping.midTarget === "camera_sway"
@@ -5244,7 +5779,36 @@ export function renderSceneFrame(
   let modeYaw = 0;
   let modePitch = 0;
   let modeDistFactor = 1;
+  let cutFovOverride: number | undefined;
   if (scene3d) {
+    let activeRig = scene3d.camera.rig;
+    // Multi-Caméras & Cuts Rythmiques v6 (`cameraCuts[]`)
+    if (!reducedMotion && scene3d.cameraCuts && scene3d.cameraCuts.length > 0) {
+      const cuts = scene3d.cameraCuts;
+      const barFloat = beatFloat / 4;
+      let activeCut = cuts[0];
+      for (let cIdx = 0; cIdx < cuts.length; cIdx++) {
+        const cut = cuts[cIdx];
+        if (cut.onPeakBand === "snare" && audio.transientPulse > 0.36) {
+          activeCut = cut;
+          break;
+        }
+        if (cut.onPeakBand === "kick" && audio.bassEnvelope > 0.58) {
+          activeCut = cut;
+          break;
+        }
+        if (cut.onPeakBand === "bass" && audio.bassEnvelope > 0.45) {
+          activeCut = cut;
+        }
+        if (cut.switchEveryBars && cut.switchEveryBars > 0) {
+          const slot = Math.floor(barFloat / cut.switchEveryBars) % cuts.length;
+          activeCut = cuts[slot];
+        }
+      }
+      activeRig = activeCut.rig;
+      cutFovOverride = activeCut.fov;
+    }
+
     switch (scene3d.camera.mode) {
       case "chase_low":
         modePitch = -0.06;
@@ -5266,8 +5830,8 @@ export function renderSceneFrame(
         break;
     }
 
-    if (!reducedMotion && scene3d.camera.rig) {
-      switch (scene3d.camera.rig) {
+    if (!reducedMotion && activeRig) {
+      switch (activeRig) {
         case "orbit_smooth":
           modeYaw = Math.sin(input.timeSeconds * 0.55) * 0.95;
           modePitch = 0.14 + Math.sin(input.timeSeconds * 0.32) * 0.09;
@@ -5334,11 +5898,21 @@ export function renderSceneFrame(
       ? audio.transientPulse * 0.18
       : 0;
 
-  const unifiedZoom = orthoCam
+  const autoZoom = resolveAutomationOverride(
+    scene3d?.automations,
+    "zoom",
+    undefined,
+    sceneProgress
+  );
+  const baseUnifiedZoom = orthoCam
     ? Math.max(0.5, Math.min(2.5, orthoCam.zoom))
     : perspCam
     ? Math.max(0.5, Math.min(2.2, 1 / Math.max(0.45, perspCam.distance)))
     : 1;
+  const unifiedZoom =
+    autoZoom !== undefined
+      ? Math.max(0.45, Math.min(2.6, baseUnifiedZoom * autoZoom))
+      : baseUnifiedZoom;
 
   const frameExprCtx = {
     t: input.timeSeconds,
@@ -5362,14 +5936,21 @@ export function renderSceneFrame(
       }
     }
   }
+  const autoFov = resolveAutomationOverride(
+    scene3d?.automations,
+    "fov",
+    undefined,
+    sceneProgress
+  );
+  const defaultSceneFov = cutFovOverride ?? autoFov ?? scene3d?.camera.fov ?? 75;
   const sceneFovAnim = scene3d?.animations?.find((a) => a.target === "fov");
   const baseAnimFov = sceneFovAnim
     ? evaluateMathExpression(
         sceneFovAnim.expr,
         frameExprCtx,
-        scene3d?.camera.fov ?? 75
+        defaultSceneFov
       )
-    : scene3d?.camera.fov ?? 75;
+    : defaultSceneFov;
   const animatedFov = Math.max(40, Math.min(115, baseAnimFov + triggerFovBoost));
   const cfgFovFactor = scene3d ? animatedFov / 75 : 1;
 
@@ -5534,7 +6115,9 @@ export function renderSceneFrame(
         STUDY_SIZE.width,
         STUDY_SIZE.height,
         scene3d.seed ?? seed,
-        reducedMotion
+        reducedMotion,
+        prevScene3d,
+        morphAlpha
       );
     } else {
       drawAnarchy3DBackdropLayer(
@@ -5597,7 +6180,11 @@ export function renderSceneFrame(
         reducedMotion,
         swoopCamOff,
         input.faderValues,
-        beatPhase
+        beatPhase,
+        prevScene3d,
+        morphAlpha,
+        sceneProgress,
+        lfoValues
       );
     }
 
@@ -5768,7 +6355,7 @@ export function renderSceneFrame(
 
     ctx.drawImage(offscreen.canvas, dx, dy, drawW, drawH);
 
-    // Ré-exécuter les acteurs V4/V5 directement en résolution HD sur le canvas principal
+    // Ré-exécuter les acteurs V4/V5/V6 directement en résolution HD sur le canvas principal
     if (scene3d && scene3d.actors && scene3d.actors.length > 0) {
       ctx.save();
       ctx.translate(dx, dy);
@@ -5782,7 +6369,9 @@ export function renderSceneFrame(
           STUDY_SIZE.width,
           STUDY_SIZE.height,
           scene3d.seed ?? seed,
-          reducedMotion
+          reducedMotion,
+          prevScene3d,
+          morphAlpha
         );
       }
       renderV4Actors(
@@ -5796,7 +6385,11 @@ export function renderSceneFrame(
         reducedMotion,
         camOff,
         input.faderValues,
-        beatPhase
+        beatPhase,
+        prevScene3d,
+        morphAlpha,
+        sceneProgress,
+        lfoValues
       );
       ctx.restore();
     }
@@ -5842,7 +6435,9 @@ export function renderSceneFrame(
     input.transitionType ?? scene3d?.transition,
     input.transitionProgress,
     scene3d?.cartoonPhysics,
-    input.faderValues
+    input.faderValues,
+    prevScene3d?.postFX,
+    morphAlpha
   );
 
   ctx.restore();

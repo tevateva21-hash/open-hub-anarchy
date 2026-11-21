@@ -1,0 +1,1008 @@
+{
+  "packId": "v6-morphing-showcase",
+  "name": "V6 Morphing // DAW Automations & Continuum",
+  "author": "Anarchy Visual Studio",
+  "modulators": [
+    {
+      "id": "lfo_1",
+      "waveform": "sine",
+      "rateBeats": 2,
+      "phase": 0
+    },
+    {
+      "id": "lfo_2",
+      "waveform": "triangle",
+      "rateBeats": 4,
+      "phase": 0.25
+    },
+    {
+      "id": "lfo_3",
+      "waveform": "saw",
+      "rateBeats": 1,
+      "phase": 0
+    },
+    {
+      "id": "lfo_4",
+      "waveform": "random_hold",
+      "rateBeats": 0.5,
+      "phase": 0
+    }
+  ],
+  "bpm": 130,
+  "beatsPerScene": 16,
+  "scenes": [
+    {
+      "id": "v6-chrome-genesis",
+      "name": "01. Genèse — Sphère Liquide Chrome HD",
+      "version": 6,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "chrome_reflective",
+        "outlineThickness": 0,
+        "toneMapping": "aces_filmic"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "main_entity",
+          "type": "organic_blob",
+          "position": [
+            0,
+            0.05,
+            4.8
+          ],
+          "scale": 1.35,
+          "color": "#F8FAFC",
+          "secondaryColor": "#38BDF8",
+          "material": "chrome",
+          "detail": 32,
+          "noiseStrength": 0.55,
+          "noiseFrequency": 1.8,
+          "speed": 1.3,
+          "audioModulation": [
+            {
+              "source": "bass",
+              "target": "scale",
+              "amount": 0.45,
+              "offset": 0
+            },
+            {
+              "source": "lfo_1",
+              "target": "noiseStrength",
+              "amount": 0.5,
+              "offset": 0
+            },
+            {
+              "source": "fader_1",
+              "target": "scale",
+              "amount": 0.35,
+              "offset": 0
+            }
+          ]
+        },
+        {
+          "id": "ambient_swarm",
+          "type": "particle_swarm",
+          "shapeTarget": "sphere",
+          "position": [
+            0,
+            0,
+            5.2
+          ],
+          "scale": 1.15,
+          "color": "#38BDF8",
+          "secondaryColor": "#E2E8F0",
+          "count": 2500,
+          "behavior": "vortex",
+          "speed": 1.1,
+          "audioModulation": [
+            {
+              "source": "lfo_2",
+              "target": "rotationSpeed",
+              "amount": 0.6,
+              "offset": 0
+            }
+          ]
+        }
+      ],
+      "morphTransition": {
+        "durationBeats": 4,
+        "easing": "easeInOutCubic"
+      },
+      "automations": [
+        {
+          "target": "noiseStrength",
+          "actorId": "main_entity",
+          "from": 0.35,
+          "to": 1.15,
+          "easing": "easeInOutCubic"
+        },
+        {
+          "target": "zoom",
+          "from": 1,
+          "to": 1.25,
+          "easing": "linear"
+        }
+      ],
+      "modulators": [
+        {
+          "id": "lfo_1",
+          "waveform": "sine",
+          "rateBeats": 2,
+          "phase": 0
+        },
+        {
+          "id": "lfo_2",
+          "waveform": "triangle",
+          "rateBeats": 4,
+          "phase": 0.25
+        }
+      ],
+      "cameraCuts": [
+        {
+          "mode": "orbit",
+          "rig": "orbit_smooth",
+          "fov": 64,
+          "switchEveryBars": 2,
+          "transition": "glide"
+        },
+        {
+          "mode": "dramatic_tilt",
+          "rig": "dolly_zoom_on_kick",
+          "fov": 72,
+          "switchEveryBars": 2,
+          "transition": "glide"
+        }
+      ],
+      "postFX": [
+        {
+          "type": "bloom",
+          "intensity": 0.9,
+          "threshold": 0.5
+        },
+        {
+          "type": "depth_of_field",
+          "intensity": 0.35,
+          "radius": 2.5
+        }
+      ],
+      "durationBars": 4,
+      "transition": "morph",
+      "environment": {
+        "skyColor": "#070B14",
+        "fogColor": "#0F172A",
+        "fogDensity": 0.018,
+        "terrainType": "mirror_floor",
+        "terrainSpeed": 7,
+        "terrainPrimaryColor": "#E2E8F0",
+        "terrainSecondaryColor": "#38BDF8",
+        "lightingPreset": "studio_clean",
+        "backdropType": "gradient_sky",
+        "backdropColors": [
+          "#050811",
+          "#0F172A",
+          "#1E293B"
+        ],
+        "fog": {
+          "enabled": true,
+          "color": "#0F172A",
+          "density": 0.02
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#E2E8F0",
+        "accentColor": "#38BDF8",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#070B14",
+              "#0F172A"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#38BDF8",
+              "colorBottom": "#E2E8F0",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#E2E8F0"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "mirror_floor",
+            "speed": 7,
+            "primaryColor": "#E2E8F0",
+            "secondaryColor": "#38BDF8"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#E2E8F0",
+            "secondaryColor": "#38BDF8"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#E2E8F0",
+              "accentColor": "#38BDF8",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 0.8
+      },
+      "camera": {
+        "mode": "orbit",
+        "fov": 64,
+        "shakeIntensity": 0.1,
+        "rig": "orbit_smooth",
+        "beatCut": false
+      },
+      "audioMapping": {
+        "bassTarget": "subject_pulse",
+        "midTarget": "color_shift",
+        "trebleTarget": "particles_burst",
+        "fluxTarget": "glitch_and_emissive"
+      }
+    },
+    {
+      "id": "v6-morph-rubber-hose-1930",
+      "name": "02. Métamorphose — Entité Cartoon Rubber-Hose 1930",
+      "version": 6,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "toon_cel",
+        "outlineThickness": 4,
+        "toneMapping": "reinhard"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "main_entity",
+          "type": "rubber_hose_mesh",
+          "shape": "boss_character",
+          "position": [
+            0,
+            0,
+            4.6
+          ],
+          "scale": 1.3,
+          "color": "#DC2626",
+          "secondaryColor": "#FACC15",
+          "material": "toon_cel_outline",
+          "inkThickness": 4,
+          "speed": 1.45,
+          "audioModulation": [
+            {
+              "source": "kick",
+              "target": "squashStretch",
+              "amount": 0.85,
+              "offset": 0
+            },
+            {
+              "source": "lfo_1",
+              "target": "positionY",
+              "amount": 0.25,
+              "offset": 0
+            }
+          ]
+        },
+        {
+          "id": "ambient_swarm",
+          "type": "particle_swarm",
+          "shapeTarget": "vortex",
+          "position": [
+            0,
+            0,
+            5
+          ],
+          "scale": 1.25,
+          "color": "#18181B",
+          "secondaryColor": "#DC2626",
+          "count": 3200,
+          "behavior": "vortex",
+          "speed": 1.35
+        }
+      ],
+      "cartoonPhysics": {
+        "steppedFps": 24,
+        "squashStretch": 0.75,
+        "squashTrigger": "kick",
+        "lineBoil": 0.95,
+        "faderBindings": {
+          "squashStretch": "fader_1",
+          "lineBoil": "fader_2",
+          "filmGrain": "fader_3"
+        }
+      },
+      "morphTransition": {
+        "durationBeats": 6,
+        "easing": "elasticOut"
+      },
+      "automations": [
+        {
+          "target": "lineBoil",
+          "actorId": "main_entity",
+          "from": 0.3,
+          "to": 1.65,
+          "easing": "expoIn"
+        },
+        {
+          "target": "squashStretch",
+          "actorId": "main_entity",
+          "from": 0.35,
+          "to": 1.25,
+          "easing": "easeInOutCubic"
+        }
+      ],
+      "modulators": [
+        {
+          "id": "lfo_1",
+          "waveform": "sine",
+          "rateBeats": 1,
+          "phase": 0
+        },
+        {
+          "id": "lfo_3",
+          "waveform": "saw",
+          "rateBeats": 2,
+          "phase": 0
+        }
+      ],
+      "cameraCuts": [
+        {
+          "mode": "chase_low",
+          "rig": "handheld_shake",
+          "fov": 66,
+          "switchEveryBars": 2,
+          "onPeakBand": "snare",
+          "transition": "cut"
+        },
+        {
+          "mode": "orbit",
+          "rig": "dolly_zoom_on_kick",
+          "fov": 74,
+          "switchEveryBars": 2,
+          "onPeakBand": "snare",
+          "transition": "glide"
+        }
+      ],
+      "postFX": [
+        {
+          "type": "toon_outline",
+          "inkThickness": 3.8,
+          "inkJitter": 1.2,
+          "color": "#0B0908"
+        },
+        {
+          "type": "vintage_1930_film",
+          "filmGrain": 0.42,
+          "scratchesAndDust": 0.32,
+          "gateWeave": 0.38,
+          "colorGrade": "technicolor_30s",
+          "vignette": 0.48
+        }
+      ],
+      "durationBars": 8,
+      "transition": "morph",
+      "environment": {
+        "skyColor": "#F6E7C1",
+        "fogColor": "#D9B37C",
+        "fogDensity": 0.015,
+        "terrainType": "infinite_grid",
+        "terrainSpeed": 9,
+        "terrainPrimaryColor": "#DC2626",
+        "terrainSecondaryColor": "#FACC15",
+        "lightingPreset": "sunset_warm",
+        "backdropType": "gradient_sky",
+        "backdropColors": [
+          "#F6E7C1",
+          "#E9C78B",
+          "#C68B59"
+        ],
+        "fog": {
+          "enabled": true,
+          "color": "#E2C08D",
+          "density": 0.018
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#DC2626",
+        "accentColor": "#FACC15",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#F6E7C1",
+              "#D9B37C"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#FACC15",
+              "colorBottom": "#DC2626",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#DC2626"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "infinite_grid",
+            "speed": 9,
+            "primaryColor": "#DC2626",
+            "secondaryColor": "#FACC15"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#DC2626",
+            "secondaryColor": "#FACC15"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#DC2626",
+              "accentColor": "#FACC15",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 0.3
+      },
+      "camera": {
+        "mode": "chase_low",
+        "fov": 68,
+        "shakeIntensity": 0.18,
+        "rig": "handheld_shake",
+        "beatCut": false
+      },
+      "audioMapping": {
+        "bassTarget": "subject_pulse",
+        "midTarget": "camera_sway",
+        "trebleTarget": "particles_burst",
+        "fluxTarget": "camera_shake"
+      }
+    },
+    {
+      "id": "v6-swarm-tunnel-explosion",
+      "name": "03. Éclatement — 5 000 Particules en Tunnel Infini",
+      "version": 6,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "neon_glow",
+        "outlineThickness": 0,
+        "toneMapping": "cineon"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "main_entity",
+          "type": "particle_swarm",
+          "shapeTarget": "tunnel",
+          "position": [
+            0,
+            0,
+            4.8
+          ],
+          "scale": 1.4,
+          "color": "#22D3EE",
+          "secondaryColor": "#F43F5E",
+          "count": 5000,
+          "behavior": "curl_noise_flow",
+          "speed": 1.8,
+          "audioModulation": [
+            {
+              "source": "bass",
+              "target": "scale",
+              "amount": 0.65,
+              "offset": 0
+            },
+            {
+              "source": "lfo_3",
+              "target": "rotationSpeed",
+              "amount": 0.9,
+              "offset": 0
+            }
+          ]
+        },
+        {
+          "id": "ambient_swarm",
+          "type": "particle_swarm",
+          "shapeTarget": "tunnel",
+          "position": [
+            0,
+            0,
+            5.4
+          ],
+          "scale": 1.2,
+          "color": "#FACC15",
+          "secondaryColor": "#A855F7",
+          "count": 5000,
+          "behavior": "vortex",
+          "speed": 1.5
+        }
+      ],
+      "morphTransition": {
+        "durationBeats": 8,
+        "easing": "easeInOutCubic"
+      },
+      "automations": [
+        {
+          "target": "rotationSpeed",
+          "actorId": "main_entity",
+          "from": 0.8,
+          "to": 2.8,
+          "easing": "expoIn"
+        },
+        {
+          "target": "zoom",
+          "from": 0.9,
+          "to": 1.65,
+          "easing": "expoIn"
+        },
+        {
+          "target": "fov",
+          "from": 64,
+          "to": 94,
+          "easing": "easeInOutCubic"
+        }
+      ],
+      "modulators": [
+        {
+          "id": "lfo_2",
+          "waveform": "triangle",
+          "rateBeats": 4,
+          "phase": 0
+        },
+        {
+          "id": "lfo_3",
+          "waveform": "saw",
+          "rateBeats": 1,
+          "phase": 0
+        },
+        {
+          "id": "lfo_4",
+          "waveform": "random_hold",
+          "rateBeats": 0.5,
+          "phase": 0
+        }
+      ],
+      "cameraCuts": [
+        {
+          "mode": "fps_arms",
+          "rig": "first_person_fly",
+          "fov": 78,
+          "switchEveryBars": 4,
+          "transition": "glide"
+        },
+        {
+          "mode": "orbit",
+          "rig": "top_down_spin",
+          "fov": 88,
+          "switchEveryBars": 4,
+          "onPeakBand": "snare",
+          "transition": "cut"
+        }
+      ],
+      "postFX": [
+        {
+          "type": "bloom",
+          "intensity": 1.15,
+          "threshold": 0.4
+        },
+        {
+          "type": "depth_of_field",
+          "intensity": 0.6,
+          "radius": 3
+        },
+        {
+          "type": "chromatic_aberration",
+          "intensity": 0.22
+        }
+      ],
+      "durationBars": 16,
+      "transition": "morph",
+      "environment": {
+        "skyColor": "#04030C",
+        "fogColor": "#1E1B4B",
+        "fogDensity": 0.025,
+        "terrainType": "tunnel",
+        "terrainSpeed": 18,
+        "terrainPrimaryColor": "#22D3EE",
+        "terrainSecondaryColor": "#F43F5E",
+        "lightingPreset": "cyber_neon",
+        "backdropType": "starfield",
+        "backdropColors": [
+          "#03020A",
+          "#0F172A",
+          "#31104B"
+        ],
+        "fog": {
+          "enabled": true,
+          "color": "#090618",
+          "density": 0.028
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#22D3EE",
+        "accentColor": "#F43F5E",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#04030C",
+              "#1E1B4B"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#F43F5E",
+              "colorBottom": "#22D3EE",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#22D3EE"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "tunnel",
+            "speed": 18,
+            "primaryColor": "#22D3EE",
+            "secondaryColor": "#F43F5E"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#22D3EE",
+            "secondaryColor": "#F43F5E"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#22D3EE",
+              "accentColor": "#F43F5E",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0.15,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 1
+      },
+      "camera": {
+        "mode": "fps_arms",
+        "fov": 82,
+        "shakeIntensity": 0.26,
+        "rig": "first_person_fly",
+        "beatCut": false
+      },
+      "audioMapping": {
+        "bassTarget": "tunnel_boost",
+        "midTarget": "subject_rotation",
+        "trebleTarget": "particles_burst",
+        "fluxTarget": "fov_kick"
+      }
+    },
+    {
+      "id": "v6-drop-recomposition",
+      "name": "04. Drop — Recomposition Hybride Chrome & Pie-Eyes",
+      "version": 6,
+      "renderStyle": {
+        "resolutionScale": 1,
+        "shading": "chrome_reflective",
+        "outlineThickness": 3,
+        "toneMapping": "aces_filmic"
+      },
+      "compositionMode": "void_orbital",
+      "actors": [
+        {
+          "id": "main_entity",
+          "type": "organic_blob",
+          "position": [
+            0,
+            0.05,
+            4.6
+          ],
+          "scale": 1.4,
+          "color": "#F8FAFC",
+          "secondaryColor": "#F43F5E",
+          "material": "chrome",
+          "detail": 32,
+          "noiseStrength": 0.85,
+          "noiseFrequency": 2.2,
+          "speed": 1.7,
+          "audioModulation": [
+            {
+              "source": "kick",
+              "target": "squashStretch",
+              "amount": 0.9,
+              "offset": 0
+            },
+            {
+              "source": "lfo_1",
+              "target": "scale",
+              "amount": 0.35,
+              "offset": 0
+            }
+          ]
+        },
+        {
+          "id": "ambient_swarm",
+          "type": "particle_swarm",
+          "shapeTarget": "text_outline",
+          "position": [
+            0,
+            0,
+            4.4
+          ],
+          "scale": 1.25,
+          "color": "#FACC15",
+          "secondaryColor": "#22D3EE",
+          "count": 4200,
+          "behavior": "beat_explosion",
+          "speed": 1.6
+        },
+        {
+          "id": "drop_pie_eyes",
+          "type": "rubber_hose_mesh",
+          "shape": "pie_eyes",
+          "position": [
+            0,
+            0.1,
+            4.1
+          ],
+          "scale": 1.05,
+          "color": "#FFFBEB",
+          "secondaryColor": "#09090B",
+          "inkThickness": 3.8,
+          "speed": 1.75
+        }
+      ],
+      "cartoonPhysics": {
+        "steppedFps": 60,
+        "squashStretch": 0.95,
+        "squashTrigger": "bass",
+        "lineBoil": 0.85,
+        "faderBindings": {
+          "squashStretch": "fader_1",
+          "lineBoil": "fader_2"
+        }
+      },
+      "morphTransition": {
+        "durationBeats": 4,
+        "easing": "elasticOut"
+      },
+      "automations": [
+        {
+          "target": "scale",
+          "actorId": "main_entity",
+          "from": 1.1,
+          "to": 1.55,
+          "easing": "elasticOut"
+        }
+      ],
+      "modulators": [
+        {
+          "id": "lfo_1",
+          "waveform": "sine",
+          "rateBeats": 0.5,
+          "phase": 0
+        },
+        {
+          "id": "lfo_4",
+          "waveform": "square",
+          "rateBeats": 1,
+          "phase": 0
+        }
+      ],
+      "cameraCuts": [
+        {
+          "mode": "orbit",
+          "rig": "dolly_zoom_on_kick",
+          "fov": 74,
+          "switchEveryBars": 1,
+          "onPeakBand": "kick",
+          "transition": "cut"
+        },
+        {
+          "mode": "dramatic_tilt",
+          "rig": "top_down_spin",
+          "fov": 84,
+          "switchEveryBars": 1,
+          "onPeakBand": "snare",
+          "transition": "glide"
+        }
+      ],
+      "postFX": [
+        {
+          "type": "bloom",
+          "intensity": 1,
+          "threshold": 0.45
+        },
+        {
+          "type": "toon_outline",
+          "inkThickness": 3.2,
+          "inkJitter": 0.95,
+          "color": "#09090B"
+        },
+        {
+          "type": "chromatic_aberration",
+          "intensity": 0.18
+        }
+      ],
+      "durationBars": 8,
+      "transition": "morph",
+      "environment": {
+        "skyColor": "#140524",
+        "fogColor": "#4C0519",
+        "fogDensity": 0.02,
+        "terrainType": "mirror_floor",
+        "terrainSpeed": 14,
+        "terrainPrimaryColor": "#F43F5E",
+        "terrainSecondaryColor": "#22D3EE",
+        "lightingPreset": "cyber_neon",
+        "backdropType": "liquid_plasma",
+        "backdropColors": [
+          "#0F041D",
+          "#831843",
+          "#0284C7"
+        ],
+        "fog": {
+          "enabled": true,
+          "color": "#1E0933",
+          "density": 0.02
+        }
+      },
+      "subject": {
+        "meshType": "none",
+        "primaryColor": "#F43F5E",
+        "accentColor": "#22D3EE",
+        "wireframeOverlay": false,
+        "scale": 1
+      },
+      "layers": [
+        {
+          "kind": "backdrop",
+          "backdrop": {
+            "skyGradient": [
+              "#140524",
+              "#4C0519"
+            ],
+            "horizonSun": {
+              "enabled": false,
+              "colorTop": "#22D3EE",
+              "colorBottom": "#F43F5E",
+              "stripes": 6,
+              "size": 1
+            },
+            "starfield": {
+              "enabled": true,
+              "density": 0.45,
+              "color": "#F43F5E"
+            }
+          }
+        },
+        {
+          "kind": "terrain",
+          "terrain": {
+            "type": "mirror_floor",
+            "speed": 14,
+            "primaryColor": "#F43F5E",
+            "secondaryColor": "#22D3EE"
+          }
+        },
+        {
+          "kind": "sideProps",
+          "sideProps": {
+            "type": "none",
+            "density": 0.6,
+            "primaryColor": "#F43F5E",
+            "secondaryColor": "#22D3EE"
+          }
+        },
+        {
+          "kind": "subjects",
+          "subjects": [
+            {
+              "meshType": "none",
+              "primaryColor": "#F43F5E",
+              "accentColor": "#22D3EE",
+              "wireframeOverlay": false,
+              "scale": 1
+            }
+          ]
+        }
+      ],
+      "postFx": {
+        "ps1VertexJitter": 0,
+        "crtScanlines": 0,
+        "chromaticAberration": 0.12,
+        "kaleidoscopeSegments": 0,
+        "bloomIntensity": 0.85
+      },
+      "camera": {
+        "mode": "orbit",
+        "fov": 74,
+        "shakeIntensity": 0.28,
+        "rig": "dolly_zoom_on_kick",
+        "beatCut": true
+      },
+      "audioMapping": {
+        "bassTarget": "camera_zoom_and_jump",
+        "midTarget": "color_shift",
+        "trebleTarget": "sky_flash",
+        "fluxTarget": "glitch_and_emissive"
+      }
+    }
+  ]
+}

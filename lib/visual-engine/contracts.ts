@@ -34,6 +34,11 @@ import type {
   AnarchyParallaxPattern,
   AnarchyVintageColorGrade,
   AnarchySteppedFps,
+  AnarchyMorphEasing,
+  AnarchySwarmShapeTarget,
+  AnarchyLfoWaveform,
+  AnarchyLfoRateBeats,
+  AnarchyCameraCutTransition,
 } from "@/lib/visual-studio/registry";
 
 export type {
@@ -67,6 +72,11 @@ export type {
   AnarchyParallaxPattern,
   AnarchyVintageColorGrade,
   AnarchySteppedFps,
+  AnarchyMorphEasing,
+  AnarchySwarmShapeTarget,
+  AnarchyLfoWaveform,
+  AnarchyLfoRateBeats,
+  AnarchyCameraCutTransition,
 };
 
 export const PRESET_SCHEMA_VERSION = 1 as const;
@@ -521,8 +531,54 @@ export interface Anarchy3DActor {
   /** v5 rubber_hose_mesh : forme rétro 1930 & épaisseur d'encre */
   shape?: AnarchyRubberHoseShape;
   inkThickness?: number;
-  /** Modulations audio (bass/lowMid/highMid/treble/energy/kick/snare) ou fader_1..fader_19 */
+  /** v6 particle_swarm : forme cible vers laquelle l'essaim se morphe */
+  shapeTarget?: AnarchySwarmShapeTarget;
+  /** Modulations audio (bass/lowMid/highMid/treble/energy/kick/snare), lfo_1..lfo_4 ou fader_1..fader_19 */
   audioModulation?: Anarchy3DAudioModulation[];
+}
+
+export interface Anarchy3DMorphTransition {
+  /** Durée du morphing inter-scènes en temps (beats) [0.5..32] */
+  durationBeats?: number;
+  /** Courbe d'easing du morphing */
+  easing?: AnarchyMorphEasing;
+}
+
+export interface Anarchy3DSceneAutomation {
+  /** Paramètre modulé au fil de la progression [0..1] de la scène */
+  target: AnarchyModulationTarget;
+  /** Identifiant d'acteur ciblé (optionnel : si omis, s'applique à tous les acteurs / caméra / scène) */
+  actorId?: string;
+  /** Valeur au début de la scène (progress = 0.0) */
+  from: number;
+  /** Valeur à la fin de la scène (progress = 1.0) */
+  to: number;
+  /** Courbe d'interpolation temporelle */
+  easing?: AnarchyMorphEasing;
+}
+
+export interface Anarchy3DLfoModulator {
+  /** Identifiant de source utilisable dans audioModulation[].source */
+  id: "lfo_1" | "lfo_2" | "lfo_3" | "lfo_4";
+  /** Forme d'onde du LFO */
+  waveform: AnarchyLfoWaveform;
+  /** Période en temps (beats) synchronisée au BPM */
+  rateBeats: AnarchyLfoRateBeats;
+  /** Déphasage initial [0..1] */
+  phase?: number;
+}
+
+export interface Anarchy3DCameraCut {
+  mode: AnarchyCameraMode;
+  rig?: AnarchyCameraRig;
+  fov?: number;
+  shakeIntensity?: number;
+  /** Bascule automatique toutes les N mesures */
+  switchEveryBars?: number;
+  /** Bascule déclenchée sur un impact audio */
+  onPeakBand?: "snare" | "kick" | "bass";
+  /** Coupe franche ou glissement rapide */
+  transition?: AnarchyCameraCutTransition;
 }
 
 export interface Anarchy3DCartoonPhysics {
@@ -612,7 +668,7 @@ export interface Anarchy3DTrigger {
 export interface Anarchy3DScene {
   id: string;
   name: string;
-  version?: 1 | 2 | 3 | 4 | 5;
+  version?: 1 | 2 | 3 | 4 | 5 | 6;
   /** Style de rendu et résolution par scène */
   renderStyle?: Anarchy3DRenderStyle;
   /** Architecture de composition spatiale (corridor, void_orbital, tunnel_infinite, kaleido_mandala, terrain_flyover) */
@@ -621,15 +677,23 @@ export interface Anarchy3DScene {
   kaleidoAxes?: number;
   /** Générateurs procéduraux avancés v3 (particules, rubans, vagues FFT, réseaux) */
   generators?: Anarchy3DGenerator[];
-  /** Couche 2 v4/v5 : Acteurs organiques, hybrides & Cartoon 1930 */
+  /** Couche 2 v4/v5/v6 : Acteurs organiques, hybrides, Cartoon 1930 & Morphing */
   actors?: Anarchy3DActor[];
   /** Physique dessin animé v5 (steppedFps, squash & stretch, line boil, faderBindings) */
   cartoonPhysics?: Anarchy3DCartoonPhysics;
+  /** v6 : Configuration du morphing inter-scènes (durationBeats, easing) */
+  morphTransition?: Anarchy3DMorphTransition;
+  /** v6 : Courbes d'automation DAW sur la progression [0..1] de la scène */
+  automations?: Anarchy3DSceneAutomation[];
+  /** v6 : LFO synchronisés au BPM (lfo_1..lfo_4) */
+  modulators?: Anarchy3DLfoModulator[];
+  /** v6 : Multi-caméras & coupes rythmiques (switchEveryBars, onPeakBand, cut/glide) */
+  cameraCuts?: Anarchy3DCameraCut[];
   /** Couche 3 v4/v5 : Pile d'effets post-processing optionnels et cumulables */
   postFX?: Anarchy3DPostFxStep[];
   /** Couche 3 v4 : Durée individuelle de la scène en mesures (1, 2, 4, 8, 16, 32, 64) */
   durationBars?: number;
-  /** Couche 3 v4 : Transition d'entrée de la scène */
+  /** Couche 3 v4/v6 : Transition d'entrée de la scène */
   transition?: AnarchySceneTransitionType;
   environment: Anarchy3DEnvironment;
   subject: Anarchy3DSubject;
@@ -660,6 +724,8 @@ export interface Anarchy3DPack {
   scenes: Anarchy3DScene[];
   /** Paramètres globaux v4 hérités par toutes les scènes du pack */
   params?: Record<string, number>;
+  /** Modulateurs LFO globaux v6 hérités par toutes les scènes */
+  modulators?: Anarchy3DLfoModulator[];
   bpm?: number;
   beatsPerScene?: number;
   seed?: number;
@@ -672,6 +738,8 @@ export type Anarchy3DSceneV4 = Anarchy3DScene;
 export type Anarchy3DPackV4 = Anarchy3DPack;
 export type Anarchy3DSceneV5 = Anarchy3DScene;
 export type Anarchy3DPackV5 = Anarchy3DPack;
+export type Anarchy3DSceneV6 = Anarchy3DScene;
+export type Anarchy3DPackV6 = Anarchy3DPack;
 
 export interface SceneFrameInput {
   sceneId: SceneId;
@@ -691,6 +759,10 @@ export interface SceneFrameInput {
   aspectRatio?: VideoAspectRatio;
   /** Configuration 3D Data-Driven (JSON) de la scène active. */
   anarchy3dScene?: Anarchy3DScene;
+  /** Scène précédente pour le morphing inter-scènes v6 (Vertex Lerp, Particules, Environnement, PostFX) */
+  previousAnarchy3dScene?: Anarchy3DScene;
+  /** Progression normalisée [0..1] à l'intérieur de la scène active (pour automations[]) */
+  sceneProgress?: number;
   /** Valeurs normalisées [0..1] des 19 faders live pour audioModulation[] (fader_1..fader_19) */
   faderValues?: Record<string, number>;
   /** Progression de la transition de scène [0..1] (0 = début transition, 1 = terminée) */

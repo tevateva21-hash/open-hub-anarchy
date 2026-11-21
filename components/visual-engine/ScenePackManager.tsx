@@ -1887,6 +1887,16 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                   </code>{" "}
                   · <code>toon_outline (inkThickness, inkJitter)</code>
                 </p>
+                <p className="text-[11px]">
+                  • <strong>Morphing Inter-Scènes &amp; DAW (v6)</strong> : même{" "}
+                  <code>actor.id</code> entre 2 scènes ={" "}
+                  <strong>Vertex Lerp &amp; Particle Swarm Morphing</strong> (
+                  <code>shapeTarget: sphere | vortex | tunnel | grid | text_outline</code>) sur{" "}
+                  <code>morphTransition (durationBeats: 1..16, easing: linear | easeInOutCubic | elasticOut | expoIn)</code>{" "}
+                  · <code>automations[] (target, from, to, easing)</code> ·{" "}
+                  <code>modulators[] (lfo_1..lfo_4, waveform, rateBeats)</code> ·{" "}
+                  <code>cameraCuts[] (rig, fov, switchEveryBars, onPeakBand, transition)</code>
+                </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-brand-pearl border-2 border-black space-y-1.5">

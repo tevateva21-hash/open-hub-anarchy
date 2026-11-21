@@ -514,17 +514,39 @@ export const VisualEngineStudio: React.FC = () => {
       const effectivePreset = sequenceEval.activePreset;
       const pack = activePackRef.current;
       let activeSlot: ScenePackSlot | undefined;
+      let prevSlot: ScenePackSlot | undefined;
+      let sceneProgress = 0;
+      let transitionProgress = 1;
+      const beatDur = 60 / Math.max(40, bpm);
+
       if (pack.scenes.length > 0) {
         if (autoSceneSwitchBeats > 0) {
-          const beatDur = 60 / Math.max(40, bpm);
-          const elapsedFromAnchor = timeSeconds - sceneAnchorSeconds;
-          const rawSlotIdx = Math.floor(
-            elapsedFromAnchor / (beatDur * autoSceneSwitchBeats)
-          );
+          const slotDurationSec = Math.max(0.25, beatDur * autoSceneSwitchBeats);
+          const elapsedFromAnchor = Math.max(0, timeSeconds - sceneAnchorSeconds);
+          const rawSlotIdx = Math.floor(elapsedFromAnchor / slotDurationSec);
           const slotIdx =
             ((rawSlotIdx % pack.scenes.length) + pack.scenes.length) %
             pack.scenes.length;
           activeSlot = pack.scenes[slotIdx];
+          if (pack.scenes.length > 1) {
+            const prevIdx =
+              (slotIdx - 1 + pack.scenes.length) % pack.scenes.length;
+            prevSlot = pack.scenes[prevIdx];
+          }
+          const slotElapsedSec = elapsedFromAnchor % slotDurationSec;
+          sceneProgress = Math.max(
+            0,
+            Math.min(1, slotElapsedSec / slotDurationSec)
+          );
+          const morphBeats = activeSlot?.morphTransition?.durationBeats ?? 4;
+          const morphDurationSec = Math.max(
+            0.2,
+            Math.min(slotDurationSec, beatDur * morphBeats)
+          );
+          transitionProgress = Math.max(
+            0,
+            Math.min(1, slotElapsedSec / morphDurationSec)
+          );
           if (livePackSlotIndexRef.current !== slotIdx) {
             livePackSlotIndexRef.current = slotIdx;
             setLivePackSlotIndex(slotIdx);
@@ -533,6 +555,31 @@ export const VisualEngineStudio: React.FC = () => {
           const safeIdx =
             Math.max(0, livePackSlotIndexRef.current) % pack.scenes.length;
           activeSlot = pack.scenes[safeIdx];
+          if (pack.scenes.length > 1) {
+            prevSlot =
+              pack.scenes[
+                (safeIdx - 1 + pack.scenes.length) % pack.scenes.length
+              ];
+          }
+          const slotBars = activeSlot?.durationBars ?? 8;
+          const slotDurationSec = Math.max(1, slotBars * 4 * beatDur);
+          const slotElapsedSec =
+            Math.max(0, timeSeconds - sceneAnchorSeconds) % slotDurationSec;
+          sceneProgress = Math.max(
+            0,
+            Math.min(1, slotElapsedSec / slotDurationSec)
+          );
+          const morphBeats = activeSlot?.morphTransition?.durationBeats;
+          if (morphBeats && morphBeats > 0) {
+            const morphDurationSec = Math.max(
+              0.2,
+              Math.min(slotDurationSec, beatDur * morphBeats)
+            );
+            transitionProgress = Math.max(
+              0,
+              Math.min(1, slotElapsedSec / morphDurationSec)
+            );
+          }
         }
       }
 
@@ -583,6 +630,10 @@ export const VisualEngineStudio: React.FC = () => {
           seed: activeSlot?.seed ?? effectivePreset.seed,
           aspectRatio,
           anarchy3dScene: activeSlot,
+          previousAnarchy3dScene: prevSlot,
+          sceneProgress,
+          transitionType: activeSlot?.transition,
+          transitionProgress,
         });
 
         setRenderReport(nextReport);

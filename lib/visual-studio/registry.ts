@@ -399,6 +399,10 @@ export const MODULATION_SOURCE_REGISTRY = [
   "energy",
   "kick",
   "snare",
+  "lfo_1",
+  "lfo_2",
+  "lfo_3",
+  "lfo_4",
   "fader_1",
   "fader_2",
   "fader_3",
@@ -431,6 +435,39 @@ export const MODULATION_TARGET_REGISTRY = [
   { value: "filmGrain", label: "filmGrain (Grain Pellicule 35 mm)" },
   { value: "parallaxSpeed", label: "parallaxSpeed (Vitesse Parallaxe)" },
   { value: "steppedFps", label: "steppedFps (Cadence 12 / 24 / 60 FPS)" },
+  { value: "zoom", label: "zoom (Zoom / Distance Caméra)" },
+  { value: "fov", label: "fov (Angle de Champ Caméra)" },
+  { value: "fogDensity", label: "fogDensity (Densité Brouillard)" },
+] as const;
+
+export const MORPH_EASING_REGISTRY = [
+  { value: "linear", label: "linear (Linéaire Constant)" },
+  { value: "easeInOutCubic", label: "easeInOutCubic (Cubique Doux)" },
+  { value: "elasticOut", label: "elasticOut (Rebond Élastique Cartoon)" },
+  { value: "expoIn", label: "expoIn (Accélération Exponentielle Drop)" },
+] as const;
+
+export const SWARM_SHAPE_TARGET_REGISTRY = [
+  { value: "sphere", label: "sphere (Sphère Orbitale 3D)" },
+  { value: "vortex", label: "vortex (Tourbillon / Spirale)" },
+  { value: "tunnel", label: "tunnel (Tunnel Infini)" },
+  { value: "grid", label: "grid (Matrice / Grille 3D)" },
+  { value: "text_outline", label: "text_outline (Silhouette Logo ANARCHY)" },
+] as const;
+
+export const LFO_WAVEFORM_REGISTRY = [
+  { value: "sine", label: "sine (Onde Sinusoïdale)" },
+  { value: "triangle", label: "triangle (Onde Triangulaire)" },
+  { value: "saw", label: "saw (Dent de Scie)" },
+  { value: "square", label: "square (Onde Carrée)" },
+  { value: "random_hold", label: "random_hold (Sample & Hold Aléatoire)" },
+] as const;
+
+export const LFO_RATE_BEATS_OPTIONS = [0.25, 0.5, 1, 2, 4, 8] as const;
+
+export const CAMERA_CUT_TRANSITION_REGISTRY = [
+  { value: "cut", label: "cut (Coupe Franche)" },
+  { value: "glide", label: "glide (Glissement Fluide Rapide)" },
 ] as const;
 
 export const POST_FX_STACK_TYPE_REGISTRY = [
@@ -448,6 +485,7 @@ export const SCENE_TRANSITION_REGISTRY = [
   { value: "crossfade", label: "crossfade (Fondu Enchaîné)" },
   { value: "camera_swoop", label: "camera_swoop (Mouvement Caméra Rapide)" },
   { value: "flash", label: "flash (Flash Lumineux au Beat)" },
+  { value: "morph", label: "morph (Morphing Géométrique & Particules Inter-Scènes)" },
 ] as const;
 
 export const EXTENDED_BARS_OPTIONS = [0, 1, 2, 4, 8, 16, 32, 64] as const;
@@ -466,6 +504,11 @@ export type AnarchyModulationSource = (typeof MODULATION_SOURCE_REGISTRY)[number
 export type AnarchyModulationTarget = (typeof MODULATION_TARGET_REGISTRY)[number]["value"];
 export type AnarchyPostFxStackType = (typeof POST_FX_STACK_TYPE_REGISTRY)[number]["value"];
 export type AnarchySceneTransitionType = (typeof SCENE_TRANSITION_REGISTRY)[number]["value"];
+export type AnarchyMorphEasing = (typeof MORPH_EASING_REGISTRY)[number]["value"];
+export type AnarchySwarmShapeTarget = (typeof SWARM_SHAPE_TARGET_REGISTRY)[number]["value"];
+export type AnarchyLfoWaveform = (typeof LFO_WAVEFORM_REGISTRY)[number]["value"];
+export type AnarchyLfoRateBeats = (typeof LFO_RATE_BEATS_OPTIONS)[number];
+export type AnarchyCameraCutTransition = (typeof CAMERA_CUT_TRANSITION_REGISTRY)[number]["value"];
 
 export const AI_STYLE_PRESETS = [
   {
@@ -829,6 +872,9 @@ export function generateAiPackPromptV3(
   const rubberShapes = RUBBER_HOSE_SHAPE_REGISTRY.map((r) => `"${r.value}"`).join(" | ");
   const parallaxPatterns = PARALLAX_PATTERN_REGISTRY.map((p) => `"${p.value}"`).join(" | ");
   const vintageGrades = VINTAGE_COLOR_GRADE_REGISTRY.map((v) => `"${v.value}"`).join(" | ");
+  const morphEasings = MORPH_EASING_REGISTRY.map((m) => `"${m.value}"`).join(" | ");
+  const swarmShapes = SWARM_SHAPE_TARGET_REGISTRY.map((s) => `"${s.value}"`).join(" | ");
+  const lfoWaveforms = LFO_WAVEFORM_REGISTRY.map((w) => `"${w.value}"`).join(" | ");
   const cloners = CLONER_MODE_REGISTRY.map((c) => `"${c.value}"`).join(" | ");
   const triggers = TRIGGER_ACTION_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
   const bass = BASS_TARGET_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
@@ -839,39 +885,44 @@ export function generateAiPackPromptV3(
   const stylePreset =
     AI_STYLE_PRESETS.find((s) => s.id === styleId) ?? AI_STYLE_PRESETS[0];
 
-  return `Tu es un directeur artistique 3D / 2.5D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v5 Data-Driven Organique & Cartoon 1930 / Cuphead).
-Génère une "Cartouche / Pack 3D" au format JSON strict (Anarchy3DPackV5) contenant 4 à 5 scènes radicalement variées synchronisées à ${Math.round(activeBpm)} BPM.
+  return `Tu es un directeur artistique 3D / 2.5D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v6 Data-Driven Morphing, DAW Automations & Cartoon 1930).
+Génère une "Cartouche / Pack 3D" au format JSON strict (Anarchy3DPackV6) contenant 4 à 5 scènes enchaînées par morphing fluide à ${Math.round(activeBpm)} BPM.
 
 DIRECTION ARTISTIQUE DEMANDÉE (${stylePreset.label}) :
 - Palette conseillée : ${stylePreset.paletteHint}
 - Décors & Sujets : ${stylePreset.terrainHint}
 - Post-FX suggérés : ${stylePreset.fxHint}
 
-ARCHITECTURE MODULAIRE EN 3 COUCHES + CARTOON 1930 (Anarchy3DPackV5) :
+ARCHITECTURE MODULAIRE EN 3 COUCHES + MORPHING & DAW (Anarchy3DPackV6) :
 1. COUCHE 1 — ENVIRONNEMENT & ÉCLAIRAGE STUDIO ("environment" & "renderStyle") :
    - environment.lightingPreset : ${lightingPresets}
    - environment.backdropType : ${v4Backdrops} (avec backdropColors: ["#...", "#...", "#..."])
    - environment.fog : { "enabled": true, "color": "#...", "density": 0.03 }
    - renderStyle : { "resolutionScale": 0.2..1.0 (1.0 = HD net), "toneMapping": ${toneMappings}, "shading": ${shadings}, "outlineThickness": 0..6 }
 
-2. COUCHE 2 — ACTEURS ORGANIQUES & CARTOON 1930 ("actors[]") :
+2. COUCHE 2 — ACTEURS ORGANIQUES, CARTOON 1930 & MORPHING PAR ID PARTAGÉ ("actors[]") :
    - actors[].type : ${actorTypes}
+   - MORPHING INTER-SCÈNES ("morphTransition" / shared "id") :
+     * Conserve le MÊME "id" (ex: "id": "main_entity") d'une scène à l'autre pour interpoler sa géométrie (Vertex Lerp : organic_blob ↔ rubber_hose_mesh ↔ particle_swarm), ses couleurs et ses positions sur "morphTransition": { "durationBeats": 4, "easing": ${morphEasings} }.
+     * Pour "particle_swarm", définis "shapeTarget": ${swarmShapes} afin que chaque particule glisse vers sa nouvelle forme cible.
    - Acteurs Cartoon 1930 / Cuphead :
-     * "parallax_layer" : plan 2.5D (pattern: ${parallaxPatterns}, scrollX, scrollY, depthBlur, position[2]=profondeur z)
+     * "parallax_layer" : plan 2.5D (pattern: ${parallaxPatterns}, scrollX, scrollY, depthBlur)
      * "cartoon_sprite" : spritesheet (framesX, framesY, bpmSync: true, inkOutline: true)
      * "rubber_hose_mesh" : formes 1930 cel-shading + contour noir épais (shape: ${rubberShapes}, inkThickness: 2..5)
-   - actors[].material : ${materials}
-   - actors[].behavior (particle_swarm, count 1000..10000) : ${swarmBehaviors}
-   - actors[].audioModulation[] : source ("bass" | "lowMid" | "highMid" | "treble" | "energy" | "kick" | "snare" | "fader_1".."fader_19") → target (${modTargets}).
+   - actors[].material : ${materials} · behavior : ${swarmBehaviors}
+   - actors[].audioModulation[] : source ("bass" | "lowMid" | "highMid" | "treble" | "energy" | "kick" | "snare" | "lfo_1".."lfo_4" | "fader_1".."fader_19") → target (${modTargets}).
 
-3. PHYSIQUE CARTOON ("cartoonPhysics") & COUCHE 3 POST-PROCESSING ("postFX[]", "durationBars", "transition") :
+3. PROGRAMMATION DAW ("automations[]", "modulators[]", "cameraCuts[]") :
+   - automations[] : courbes sur la durée de la scène (progress 0.0 → 1.0) : { "target": ${modTargets}, "actorId"?: "main_entity", "from": 0.2, "to": 1.4, "easing": ${morphEasings} }
+   - modulators[] : LFO synchronisés au BPM : { "id": "lfo_1".."lfo_4", "waveform": ${lfoWaveforms}, "rateBeats": 0.25 | 0.5 | 1 | 2 | 4 | 8, "phase": 0..1 }
+   - cameraCuts[] : multi-caméras rythmiques : { "mode": ${cameras}, "rig"?: ${cameraRigs}, "fov": 68, "switchEveryBars"?: 2, "onPeakBand"?: "snare" | "kick" | "bass", "transition": "cut" | "glide" }
+
+4. PHYSIQUE CARTOON ("cartoonPhysics") & COUCHE 3 POST-PROCESSING ("postFX[]", "durationBars", "transition") :
    - cartoonPhysics : { "steppedFps": 12 | 24 | 60, "squashStretch": 0..1.5, "squashTrigger": "bass" | "snare" | "kick" | "energy", "lineBoil": 0..2, "faderBindings": { "squashStretch": "fader_1", "lineBoil": "fader_2", "filmGrain": "fader_3", "parallaxSpeed": "fader_4", "steppedFps": "fader_5" } }
-   - postFX[] : pile d'objets { "type": ${postFxStack}, "intensity": 0..2 }
-     * "vintage_1930_film" : { "type": "vintage_1930_film", "filmGrain": 0..1, "scratchesAndDust": 0..1, "gateWeave": 0..1, "colorGrade": ${vintageGrades}, "vignette": 0..1 }
-     * "toon_outline" : { "type": "toon_outline", "inkThickness": 1..6, "inkJitter": 0..3, "color": "#09090B" }
+   - postFX[] : pile d'objets { "type": ${postFxStack}, "intensity": 0..2 } (dont "vintage_1930_film" colorGrade: ${vintageGrades} et "toon_outline" inkThickness/inkJitter)
    - durationBars : 1 | 2 | 4 | 8 | 16 | 32 | 64 mesures · transition : ${transitions}
 
-RÈGLES STRICTES & RÉTROCOMPATIBILITÉ (v1–v4) :
+RÈGLES STRICTES & RÉTROCOMPATIBILITÉ (v1–v5) :
 - Réponds UNIQUEMENT avec un bloc JSON valide (zéro JS, zéro fonction, zéro \`eval\`).
 - Champs v2/v3 toujours supportés : compositionMode (${compositions}), backdrop.shader (${backdropShaders}), generators[] (${generatorTypes}, behavior: ${particleBehaviors}), camera.mode (${cameras}), camera.rig (${cameraRigs}, beatCut), terrain (${terrains}), sideProps (${props}), subject (${meshes}, primitives: ${primitives}), cloner.mode (${cloners}), triggers[].action (${triggers}), audioMapping (bass: ${bass}; mid: ${mid}; treble: ${treble}; flux: ${flux}).
 - Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".`;
@@ -879,6 +930,7 @@ RÈGLES STRICTES & RÉTROCOMPATIBILITÉ (v1–v4) :
 
 export const generateAiPackPromptV4 = generateAiPackPromptV3;
 export const generateAiPackPromptV5 = generateAiPackPromptV3;
+export const generateAiPackPromptV6 = generateAiPackPromptV3;
 
 /**
  * Génère automatiquement le Prompt IA complet à partir du registre extensible.

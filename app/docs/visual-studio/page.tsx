@@ -440,6 +440,16 @@ export default function VisualStudioDocsPage() {
                     <code>vintage_1930_film</code> (<code>filmGrain</code>, <code>scratchesAndDust</code>, <code>gateWeave</code>, <code>colorGrade</code>, <code>vignette</code>) &amp;{" "}
                     <code>toon_outline</code> (<code>inkThickness</code>, <code>inkJitter</code>).
                   </li>
+                  <li>
+                    <strong>Morphing Inter-Scènes &amp; Programmation Temporelle DAW (Anarchy3DPackV6)</strong> :{" "}
+                    même <code>actor.id</code> entre 2 scènes consécutives déclenche un{" "}
+                    <strong>Vertex Lerp géométrique</strong> (ex. <code>organic_blob</code> ↔ <code>rubber_hose_mesh</code>) et un{" "}
+                    <strong>Particle Swarm Morphing</strong> (<code>shapeTarget: sphere | vortex | tunnel | grid | text_outline</code>) sur{" "}
+                    <code>morphTransition</code> (<code>durationBeats: 1..16</code>, <code>easing: linear | easeInOutCubic | elasticOut | expoIn</code>),{" "}
+                    <code>automations[]</code> (<code>target</code>, <code>from</code>, <code>to</code>, <code>easing</code> sur la progression <code>0.0 → 1.0</code>),{" "}
+                    <code>modulators[]</code> (<code>lfo_1..lfo_4</code>, <code>waveform: sine | triangle | saw | square | random_hold</code>, <code>rateBeats: 0.25..8</code>) et{" "}
+                    <code>cameraCuts[]</code> (<code>rig</code>, <code>fov</code>, <code>switchEveryBars</code>, <code>onPeakBand: snare | kick | bass</code>, <code>transition: cut | glide</code>).
+                  </li>
                 </ul>
               </div>
 
