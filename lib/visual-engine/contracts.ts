@@ -14,6 +14,12 @@ import type {
   AnarchyTrebleTarget,
   AnarchyFluxTarget,
   AnarchyClonerMode,
+  AnarchyShadingMode,
+  AnarchyCompositionMode,
+  AnarchyGeneratorType,
+  AnarchyParticleBehavior,
+  AnarchyBackdropShader,
+  AnarchyCameraRig,
 } from "@/lib/visual-studio/registry";
 
 export type {
@@ -27,6 +33,12 @@ export type {
   AnarchyTrebleTarget,
   AnarchyFluxTarget,
   AnarchyClonerMode,
+  AnarchyShadingMode,
+  AnarchyCompositionMode,
+  AnarchyGeneratorType,
+  AnarchyParticleBehavior,
+  AnarchyBackdropShader,
+  AnarchyCameraRig,
 };
 
 export const PRESET_SCHEMA_VERSION = 1 as const;
@@ -352,8 +364,16 @@ export interface Anarchy3DSubject {
   animations?: Anarchy3DAnimation[];
 }
 
+export interface Anarchy3DBackdropShaderConfig {
+  type: AnarchyBackdropShader;
+  colors?: string[];
+  speed?: number;
+  audioReactive?: number;
+}
+
 export interface Anarchy3DBackdropLayer {
   skyGradient: [string, string];
+  shader?: Anarchy3DBackdropShaderConfig;
   horizonSun?: {
     enabled: boolean;
     colorTop: string;
@@ -396,10 +416,34 @@ export interface Anarchy3DPostFx {
   bloomIntensity?: number;
 }
 
+export interface Anarchy3DRenderStyle {
+  /** Facteur de résolution interne [0.15..1.0] (0.15 = ultra-pixel PS1, 1.0 = HD net) */
+  resolutionScale?: number;
+  shading?: AnarchyShadingMode;
+  /** Épaisseur des contours noirs BD/cel-shading [0..6] */
+  outlineThickness?: number;
+}
+
+export interface Anarchy3DGenerator {
+  type: AnarchyGeneratorType;
+  count?: number;
+  behavior?: AnarchyParticleBehavior;
+  color?: string;
+  secondaryColor?: string;
+  speed?: number;
+  scale?: number;
+  segments?: number;
+  amplitude?: number;
+  pattern?: "grid" | "spiral" | "ring" | "fractal";
+}
+
 export interface Anarchy3DCamera {
   mode: AnarchyCameraMode;
   fov: number;
   shakeIntensity: number;
+  rig?: AnarchyCameraRig;
+  /** Coupure d'angle automatique sur les temps forts */
+  beatCut?: boolean;
 }
 
 export interface Anarchy3DAudioMapping {
@@ -428,6 +472,14 @@ export interface Anarchy3DScene {
   id: string;
   name: string;
   version?: 1 | 2 | 3 | 4;
+  /** Style de rendu et résolution par scène */
+  renderStyle?: Anarchy3DRenderStyle;
+  /** Architecture de composition spatiale (corridor, void_orbital, tunnel_infinite, kaleido_mandala, terrain_flyover) */
+  compositionMode?: AnarchyCompositionMode;
+  /** Nombre d'axes pour kaleido_mandala (défaut 6) */
+  kaleidoAxes?: number;
+  /** Générateurs procéduraux avancés (particules, rubans, vagues FFT, réseaux) */
+  generators?: Anarchy3DGenerator[];
   environment: Anarchy3DEnvironment;
   subject: Anarchy3DSubject;
   /** Calques composables v2 (backdrop, terrain, sideProps, subjects) */
@@ -462,6 +514,9 @@ export interface Anarchy3DPack {
   seed?: number;
   createdAt?: string;
 }
+
+export type Anarchy3DSceneV3 = Anarchy3DScene;
+export type Anarchy3DPackV3 = Anarchy3DPack;
 
 export interface SceneFrameInput {
   sceneId: SceneId;

@@ -1837,6 +1837,26 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                     {POST_FX_REGISTRY.map((x) => `${x.key} (${x.range})`).join(" · ")}
                   </code>
                 </p>
+                <p className="text-[11px]">
+                  • <strong>renderStyle (v3)</strong> :{" "}
+                  <code>
+                    resolutionScale (0.15..1.0) · shading (wireframe | flat | toon_cel | hologram | chrome_reflective | neon_glow) · outlineThickness (0..6)
+                  </code>
+                </p>
+                <p className="text-[11px]">
+                  • <strong>compositionMode (v3)</strong> :{" "}
+                  <code>
+                    corridor | void_orbital | tunnel_infinite | kaleido_mandala | terrain_flyover
+                  </code>{" "}
+                  (+ <code>kaleidoAxes</code> 3..12)
+                </p>
+                <p className="text-[11px]">
+                  • <strong>backdrop.shader &amp; generators[] (v3)</strong> :{" "}
+                  <code>
+                    plasma_fluid | voronoi_cells | radial_sunburst | grid_horizon | noise_fog
+                  </code>{" "}
+                  · <code>particle_field | ribbon_trails | audio_wave_mesh | instanced_array</code>
+                </p>
               </div>
 
               <div className="p-3.5 rounded-xl bg-brand-pearl border-2 border-black space-y-1.5">
@@ -1844,10 +1864,15 @@ export const ScenePackManager: React.FC<ScenePackManagerProps> = ({
                   2. Valeurs autorisées — Camera &amp; AudioMapping
                 </div>
                 <p className="text-[11px]">
-                  • <strong>camera.mode</strong> :{" "}
+                  • <strong>camera.mode / rig (v3)</strong> :{" "}
                   <code>
                     {ANARCHY_CAMERA_MODES.map((x) => x.value).join(" | ")}
-                  </code>
+                  </code>{" "}
+                  · rig:{" "}
+                  <code>
+                    orbit_smooth | dolly_zoom_on_kick | first_person_fly | top_down_spin | handheld_shake
+                  </code>{" "}
+                  (+ <code>beatCut</code>)
                 </p>
                 <p className="text-[11px]">
                   • <strong>audioMapping.bassTarget</strong> :{" "}

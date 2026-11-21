@@ -3,8 +3,11 @@ import { evaluateMathExpression } from "@/lib/visual-studio/math-expr";
 import type {
   Anarchy3DAnimation,
   Anarchy3DBackdropLayer,
+  Anarchy3DBackdropShaderConfig,
   Anarchy3DCloner,
+  Anarchy3DGenerator,
   Anarchy3DPostFx,
+  Anarchy3DRenderStyle,
   Anarchy3DScene,
   Anarchy3DSidePropsLayer,
   Anarchy3DSubject,
@@ -730,9 +733,15 @@ function renderLowPolyMesh(
     fovScale: number;
     targetY: number;
   },
-  effects: RetroEffects
+  effects: RetroEffects,
+  renderStyle?: Anarchy3DRenderStyle
 ): { vertexCount: number; triangleCount: number } {
   const { rect, line, bayer } = tools;
+  const shading = renderStyle?.shading ?? "flat";
+  const outlineThickness = Math.max(
+    0,
+    Math.min(6, renderStyle?.outlineThickness ?? 0)
+  );
   const cosY = Math.cos(camera.yawRad);
   const sinY = Math.sin(camera.yawRad);
   const cosP = Math.cos(camera.pitchRad);
@@ -837,82 +846,136 @@ function renderLowPolyMesh(
     if (maxY <= minY) continue;
 
     const fogFactor = clamp01(((tri.avgZ - 6) / 22) * effects.fog);
-    const foggedTone = tri.tone * (1 - fogFactor * 0.65) + 0.25 * fogFactor;
+    const rawTone =
+      shading === "toon_cel"
+        ? tri.tone < 0.35
+          ? 0.2
+          : tri.tone < 0.72
+          ? 0.58
+          : 0.94
+        : shading === "chrome_reflective"
+        ? tri.tone > 0.74
+          ? 0.98
+          : tri.tone < 0.32
+          ? 0.14
+          : 0.55 + Math.sin(tri.tone * Math.PI * 3) * 0.22
+        : tri.tone;
+    const foggedTone = rawTone * (1 - fogFactor * 0.65) + 0.25 * fogFactor;
     const scaledTone = clamp01(foggedTone) * (paletteRamp.length - 1);
     const baseIdx = Math.floor(scaledTone);
     const frac = scaledTone - baseIdx;
 
-    const customPrimaryFill = tri.fillColor
+    let customPrimaryFill = tri.fillColor
       ? lerpHexColor(
-          tri.tone < 0.7
-            ? lerpHexColor(p.shadow, tri.fillColor, clamp01(tri.tone * 1.35))
-            : lerpHexColor(tri.fillColor, p.light, clamp01((tri.tone - 0.7) * 1.6)),
+          rawTone < 0.7
+            ? lerpHexColor(p.shadow, tri.fillColor, clamp01(rawTone * 1.35))
+            : lerpHexColor(tri.fillColor, p.light, clamp01((rawTone - 0.7) * 1.6)),
           p.haze,
           fogFactor * 0.78
         )
       : undefined;
+
+    if (shading === "neon_glow") {
+      customPrimaryFill = lerpHexColor(
+        p.shadow,
+        customPrimaryFill ?? paletteRamp[baseIdx],
+        0.42
+      );
+    } else if (shading === "chrome_reflective") {
+      const chromeBase = lerpHexColor(p.shadow, p.reflection, clamp01(rawTone));
+      customPrimaryFill =
+        rawTone > 0.82 ? lerpHexColor(chromeBase, "#ffffff", 0.75) : chromeBase;
+    }
+
     const customAltFill =
       customPrimaryFill && tri.checker
         ? lerpHexColor(customPrimaryFill, p.shadow, 0.26)
         : customPrimaryFill;
 
-    for (let y = minY; y <= maxY; y += 2) {
-      const xa = edgeInterp(a.sy, a.sx, c.sy, c.sx, y);
-      const xb =
-        y < b.sy
-          ? edgeInterp(a.sy, a.sx, b.sy, b.sx, y)
-          : edgeInterp(b.sy, b.sx, c.sy, c.sx, y);
-      const xStart = Math.max(0, Math.min(318, Math.round(Math.min(xa, xb))));
-      const xEnd = Math.max(0, Math.min(320, Math.round(Math.max(xa, xb))));
-      if (xEnd <= xStart) continue;
+    if (shading !== "wireframe") {
+      const yStep = shading === "hologram" ? 4 : 2;
+      for (let y = minY; y <= maxY; y += yStep) {
+        const xa = edgeInterp(a.sy, a.sx, c.sy, c.sx, y);
+        const xb =
+          y < b.sy
+            ? edgeInterp(a.sy, a.sx, b.sy, b.sx, y)
+            : edgeInterp(b.sy, b.sx, c.sy, c.sx, y);
+        const xStart = Math.max(0, Math.min(318, Math.round(Math.min(xa, xb))));
+        const xEnd = Math.max(0, Math.min(320, Math.round(Math.max(xa, xb))));
+        if (xEnd <= xStart) continue;
 
-      if (!effects.affineTextures && !tri.checker && effects.dither < 0.15) {
-        rect(
-          xStart,
-          y,
-          xEnd - xStart,
-          2,
-          customPrimaryFill ?? paletteRamp[baseIdx]
-        );
-        continue;
-      }
-
-      const spanWidth = Math.max(1, xEnd - xStart);
-      for (let x = xStart; x < xEnd; x += 4) {
-        const w = Math.min(4, xEnd - x);
-        const u = Math.floor(((x - xStart) * 8) / spanWidth);
-        const v = Math.floor((y - minY) / 4);
-        const isCheckerCell =
-          effects.affineTextures &&
-          tri.checker &&
-          (u + v + tri.polyIndex) % 2 === 0;
-        if (customPrimaryFill) {
+        if (
+          shading === "toon_cel" ||
+          (!effects.affineTextures && !tri.checker && effects.dither < 0.15)
+        ) {
           rect(
-            x,
+            xStart,
             y,
-            w,
-            2,
-            isCheckerCell ? customAltFill ?? customPrimaryFill : customPrimaryFill
+            xEnd - xStart,
+            shading === "hologram" ? 2 : 2,
+            customPrimaryFill ?? paletteRamp[baseIdx]
           );
-        } else {
-          const affineShift = isCheckerCell ? 1 : 0;
-          const ditherUp =
-            frac > 1 - effects.dither * 0.85 && bayer(x >> 1, y >> 1) < frac
-              ? 1
-              : 0;
-          const idx = Math.max(
-            0,
-            Math.min(paletteRamp.length - 1, baseIdx + ditherUp - affineShift)
-          );
-          rect(x, y, w, 2, paletteRamp[idx]);
+          continue;
+        }
+
+        const spanWidth = Math.max(1, xEnd - xStart);
+        for (let x = xStart; x < xEnd; x += 4) {
+          const w = Math.min(4, xEnd - x);
+          const u = Math.floor(((x - xStart) * 8) / spanWidth);
+          const v = Math.floor((y - minY) / 4);
+          const isCheckerCell =
+            effects.affineTextures &&
+            tri.checker &&
+            (u + v + tri.polyIndex) % 2 === 0;
+          if (customPrimaryFill) {
+            rect(
+              x,
+              y,
+              w,
+              2,
+              isCheckerCell ? customAltFill ?? customPrimaryFill : customPrimaryFill
+            );
+          } else {
+            const affineShift = isCheckerCell ? 1 : 0;
+            const ditherUp =
+              frac > 1 - effects.dither * 0.85 && bayer(x >> 1, y >> 1) < frac
+                ? 1
+                : 0;
+            const idx = Math.max(
+              0,
+              Math.min(paletteRamp.length - 1, baseIdx + ditherUp - affineShift)
+            );
+            rect(x, y, w, 2, paletteRamp[idx]);
+          }
         }
       }
     }
 
-    if (tri.wireRim) {
-      const rimCol = tri.wireColor ?? p.glow;
+    if (
+      shading === "wireframe" ||
+      shading === "hologram" ||
+      shading === "neon_glow" ||
+      tri.wireRim
+    ) {
+      const rimCol =
+        shading === "hologram"
+          ? lerpHexColor(tri.wireColor ?? p.glow, "#00f5ff", 0.55)
+          : tri.wireColor ?? p.glow;
       line(tri.v0.sx, tri.v0.sy, tri.v1.sx, tri.v1.sy, rimCol);
       line(tri.v1.sx, tri.v1.sy, tri.v2.sx, tri.v2.sy, rimCol);
+      if (shading === "wireframe" || shading === "neon_glow") {
+        line(tri.v2.sx, tri.v2.sy, tri.v0.sx, tri.v0.sy, rimCol);
+      }
+    }
+
+    if (outlineThickness > 0) {
+      const outlineCol = "#050508";
+      const passes = Math.min(3, Math.ceil(outlineThickness * 0.5));
+      for (let op = 0; op < passes; op++) {
+        line(tri.v0.sx + op, tri.v0.sy, tri.v1.sx + op, tri.v1.sy, outlineCol);
+        line(tri.v1.sx, tri.v1.sy + op, tri.v2.sx, tri.v2.sy + op, outlineCol);
+        line(tri.v2.sx - op, tri.v2.sy, tri.v0.sx - op, tri.v0.sy, outlineCol);
+      }
     }
   }
 
@@ -1670,6 +1733,173 @@ function applyKaleidoscopePass(
 /**
  * Calque 0 (`backdrop`) du moteur v2 : dégradé de ciel 2 couleurs, soleil synthwave strié et étoiles.
  */
+/**
+ * Shaders procéduraux de fond (`backdrop.shader`) v3 :
+ * plasma_fluid, voronoi_cells, radial_sunburst, grid_horizon, noise_fog.
+ */
+function drawProceduralBackdropShader(
+  ctx: CanvasRenderingContext2D,
+  shader: Anarchy3DBackdropShaderConfig,
+  audio: SceneAudioState,
+  timeSeconds: number,
+  width: number,
+  height: number,
+  reducedMotion: boolean
+): void {
+  if (shader.type === "none") return;
+  const cols =
+    shader.colors && shader.colors.length >= 2
+      ? shader.colors
+      : ["#050510", "#ff2a85", "#00f5ff"];
+  const c0 = cols[0];
+  const c1 = cols[1];
+  const c2 = cols[2] ?? cols[1];
+  const spd = reducedMotion ? 0 : shader.speed ?? 1.0;
+  const t = timeSeconds * spd;
+  const audioBoost = shader.audioReactive
+    ? 1 + audio.bassEnvelope * 0.6 + audio.midEnvelope * 0.35
+    : 1;
+  const horizonY = Math.round(height * 0.54);
+
+  if (shader.type === "plasma_fluid") {
+    const step = 6;
+    for (let y = 0; y < height; y += step) {
+      for (let x = 0; x < width; x += step) {
+        const nx = (x / width) * 4.2;
+        const ny = (y / height) * 3.6;
+        const v =
+          Math.sin(nx + t * 1.1) +
+          Math.sin(ny * 1.3 - t * 0.9) +
+          Math.sin((nx + ny) * 0.9 + t * 0.7 * audioBoost);
+        const norm = clamp01((v + 3) / 6);
+        ctx.fillStyle =
+          norm < 0.5
+            ? lerpHexColor(c0, c1, norm * 2)
+            : lerpHexColor(c1, c2, (norm - 0.5) * 2);
+        ctx.fillRect(x, y, step, step);
+      }
+    }
+    return;
+  }
+
+  if (shader.type === "voronoi_cells") {
+    const seeds = [
+      { x: 0.2 + Math.sin(t * 0.7) * 0.12, y: 0.3 + Math.cos(t * 0.5) * 0.15 },
+      { x: 0.5 + Math.cos(t * 0.6) * 0.18, y: 0.25 + Math.sin(t * 0.8) * 0.12 },
+      { x: 0.8 + Math.sin(t * 0.5 + 1) * 0.12, y: 0.4 + Math.cos(t * 0.7) * 0.16 },
+      { x: 0.35 + Math.cos(t * 0.9) * 0.14, y: 0.72 + Math.sin(t * 0.6) * 0.14 },
+      { x: 0.7 + Math.sin(t * 0.8 + 2) * 0.15, y: 0.75 + Math.cos(t * 0.4) * 0.12 },
+    ];
+    const step = 6;
+    for (let y = 0; y < height; y += step) {
+      const ny = y / height;
+      for (let x = 0; x < width; x += step) {
+        const nx = x / width;
+        let minD = 9;
+        let secD = 9;
+        for (let i = 0; i < seeds.length; i++) {
+          const dx = nx - seeds[i].x;
+          const dy = ny - seeds[i].y;
+          const d = Math.sqrt(dx * dx + dy * dy);
+          if (d < minD) {
+            secD = minD;
+            minD = d;
+          } else if (d < secD) {
+            secD = d;
+          }
+        }
+        const edge = clamp01(1 - (secD - minD) * (10 * audioBoost));
+        const cellShade = clamp01(minD * 2.2);
+        ctx.fillStyle = lerpHexColor(
+          lerpHexColor(c0, c1, cellShade),
+          c2,
+          edge * 0.9
+        );
+        ctx.fillRect(x, y, step, step);
+      }
+    }
+    return;
+  }
+
+  if (shader.type === "radial_sunburst") {
+    const cx = width * 0.5;
+    const cy = horizonY;
+    const rays = 16;
+    ctx.save();
+    ctx.fillStyle = c0;
+    ctx.fillRect(0, 0, width, height);
+    for (let i = 0; i < rays; i++) {
+      const a0 = (i / rays) * Math.PI * 2 + t * 0.35;
+      const a1 = a0 + (Math.PI / rays) * (0.65 + (audioBoost - 1) * 0.25);
+      const r = Math.max(width, height) * 1.1;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + Math.cos(a0) * r, cy + Math.sin(a0) * r);
+      ctx.lineTo(cx + Math.cos(a1) * r, cy + Math.sin(a1) * r);
+      ctx.closePath();
+      ctx.fillStyle = i % 2 === 0 ? c1 : c2;
+      ctx.globalAlpha = 0.45;
+      ctx.fill();
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (shader.type === "grid_horizon") {
+    ctx.save();
+    ctx.fillStyle = c0;
+    ctx.fillRect(0, 0, width, height);
+    ctx.strokeStyle = c1;
+    ctx.lineWidth = 1;
+    ctx.globalAlpha = 0.55;
+    const cx = width * 0.5;
+    for (let i = -8; i <= 8; i++) {
+      ctx.beginPath();
+      ctx.moveTo(cx + i * 6, horizonY);
+      ctx.lineTo(cx + i * 38, height);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(cx + i * 6, horizonY);
+      ctx.lineTo(cx + i * 38, 0);
+      ctx.stroke();
+    }
+    const scroll = (t * 24) % 16;
+    ctx.strokeStyle = c2;
+    for (let d = 1; d < 10; d++) {
+      const off = Math.pow(d / 10, 1.7) * (height - horizonY) + scroll * 0.35;
+      if (horizonY + off < height) {
+        ctx.beginPath();
+        ctx.moveTo(0, horizonY + off);
+        ctx.lineTo(width, horizonY + off);
+        ctx.stroke();
+      }
+      if (horizonY - off > 0) {
+        ctx.beginPath();
+        ctx.moveTo(0, horizonY - off);
+        ctx.lineTo(width, horizonY - off);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+    return;
+  }
+
+  if (shader.type === "noise_fog") {
+    ctx.save();
+    ctx.fillStyle = c0;
+    ctx.fillRect(0, 0, width, height);
+    for (let b = 0; b < 7; b++) {
+      const yBase = (b / 7) * height;
+      const bandH = Math.round(height / 5);
+      const shift = Math.sin(t * (0.4 + b * 0.13) + b * 1.7) * 24 * audioBoost;
+      ctx.globalAlpha = 0.28 + (b % 2) * 0.12;
+      ctx.fillStyle = b % 2 === 0 ? c1 : c2;
+      ctx.fillRect(0, Math.round(yBase + shift * 0.3), width, bandH);
+    }
+    ctx.restore();
+  }
+}
+
 function drawAnarchy3DBackdropLayer(
   ctx: CanvasRenderingContext2D,
   backdrop: Anarchy3DBackdropLayer,
@@ -1689,6 +1919,18 @@ function drawAnarchy3DBackdropLayer(
   grad.addColorStop(1, lerpHexColor(skyBottom, "#000000", 0.58));
   ctx.fillStyle = grad;
   ctx.fillRect(0, 0, width, height);
+
+  if (backdrop.shader && backdrop.shader.type !== "none") {
+    drawProceduralBackdropShader(
+      ctx,
+      backdrop.shader,
+      audio,
+      timeSeconds,
+      width,
+      height,
+      reducedMotion
+    );
+  }
 
   // Étoiles & particules d'ambiance
   if (backdrop.starfield?.enabled) {
@@ -1748,6 +1990,102 @@ function drawAnarchy3DBackdropLayer(
   // Ligne d'horizon lumineuse
   ctx.fillStyle = lerpHexColor(skyBottom, "#FFFFFF", 0.18 + audio.trebleEnvelope * 0.25);
   ctx.fillRect(0, horizonY, width, 1);
+}
+
+/**
+ * Générateurs 2D/2.5D v3 (`particle_field`, `ribbon_trails`) rendus par-dessus la scène 3D.
+ */
+function drawAnarchy3DGeneratorsOverlay(
+  ctx: CanvasRenderingContext2D,
+  generators: readonly Anarchy3DGenerator[],
+  audio: SceneAudioState,
+  timeSeconds: number,
+  width: number = STUDY_SIZE.width,
+  height: number = STUDY_SIZE.height,
+  seed: number,
+  reducedMotion: boolean
+): void {
+  if (!generators || generators.length === 0) return;
+  const t = reducedMotion ? 0 : timeSeconds;
+
+  for (let gIdx = 0; gIdx < generators.length; gIdx++) {
+    const gen = generators[gIdx];
+    const col = gen.color ?? "#00f5ff";
+    const col2 = gen.secondaryColor ?? "#ff2a85";
+    const audioMul = 1 + audio.bassEnvelope * 0.8 + audio.transientPulse * 0.65;
+
+    if (gen.type === "particle_field") {
+      const count = Math.max(40, Math.min(600, Math.round((gen.count ?? 400) * 0.2)));
+      const behavior = gen.behavior ?? "vortex";
+      const spd = (gen.speed ?? 1.0) * (reducedMotion ? 0 : 1);
+      const szBase = Math.max(1, Math.min(4, Math.round(gen.scale ?? 1.5)));
+      let rng = ((seed + gIdx * 7919) ^ 0x517cc1b7) >>> 0;
+      const nextRand = () => {
+        rng = (rng * 1664525 + 1013904223) >>> 0;
+        return rng / 4294967296;
+      };
+      ctx.save();
+      for (let i = 0; i < count; i++) {
+        const r0 = nextRand();
+        const r1 = nextRand();
+        const r2 = nextRand();
+        let px = 0;
+        let py = 0;
+        if (behavior === "vortex") {
+          const ang = r0 * Math.PI * 2 + t * spd * (0.6 + r1 * 1.4);
+          const rad = (12 + r1 * (width * 0.45)) * (0.75 + (audioMul - 1) * 0.35);
+          px = width * 0.5 + Math.cos(ang) * rad;
+          py = height * 0.5 + Math.sin(ang) * rad * 0.62;
+        } else if (behavior === "explosion_on_kick") {
+          const ang = r0 * Math.PI * 2;
+          const burst = ((t * spd * 0.7 + r2) % 1) * (width * 0.55) * audioMul;
+          px = width * 0.5 + Math.cos(ang) * burst;
+          py = height * 0.5 + Math.sin(ang) * burst * 0.72;
+        } else if (behavior === "rain") {
+          px = r0 * width;
+          py = ((r1 * height + t * spd * (75 + r2 * 60) * audioMul) % (height + 8)) - 4;
+        } else {
+          // swarm
+          px =
+            width * 0.5 +
+            Math.sin(t * spd * (0.9 + r0) + r1 * 12) * (width * 0.42) * audioMul;
+          py =
+            height * 0.5 +
+            Math.cos(t * spd * (1.1 + r1) + r2 * 12) * (height * 0.38);
+        }
+        ctx.globalAlpha = 0.45 + r2 * 0.55;
+        ctx.fillStyle = i % 3 === 0 ? col2 : col;
+        if (behavior === "rain") {
+          ctx.fillRect(Math.round(px), Math.round(py), 1, szBase * 3);
+        } else {
+          ctx.fillRect(Math.round(px), Math.round(py), szBase, szBase);
+        }
+      }
+      ctx.restore();
+    } else if (gen.type === "ribbon_trails") {
+      const ribbons = Math.max(2, Math.min(12, Math.round(gen.count ?? 6)));
+      const spd = (gen.speed ?? 1.0) * (reducedMotion ? 0 : 1);
+      const amp = (gen.scale ?? 1.0) * 28 * audioMul;
+      ctx.save();
+      ctx.lineWidth = Math.max(1, Math.min(4, Math.round((gen.scale ?? 1) * 1.5)));
+      for (let r = 0; r < ribbons; r++) {
+        ctx.strokeStyle = r % 2 === 0 ? col : col2;
+        ctx.globalAlpha = 0.65;
+        ctx.beginPath();
+        const yBase = ((r + 1) / (ribbons + 1)) * height;
+        for (let x = 0; x <= width; x += 12) {
+          const y =
+            yBase +
+            Math.sin(x * 0.025 + t * spd * 2.1 + r * 1.3) * amp +
+            Math.cos(x * 0.012 - t * spd * 1.4 + r) * (amp * 0.5);
+          if (x === 0) ctx.moveTo(x, y);
+          else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+  }
 }
 
 /**
@@ -2497,14 +2835,65 @@ function buildAnarchy3DScenePolygons(
     }
   };
 
-  // 1. TERRAIN 3D DATA-DRIVEN (terrainLayer.type)
+  // 1. TERRAIN 3D DATA-DRIVEN (compositionMode + terrainLayer.type)
+  const compMode = scene.compositionMode ?? "corridor";
   const waveAmp =
     map.midTarget === "terrain_wave_height"
       ? 0.25 + audio.midEnvelope * 0.85
       : 0.15 + audio.midEnvelope * 0.25;
   const scrollZ = (timeSeconds * 2.4) % 2.4;
 
-  switch (terrainLayer.type) {
+  if (compMode === "terrain_flyover") {
+    const flyAmp = waveAmp * (1.7 + audio.bassEnvelope * 1.2);
+    for (let row = 0; row < 5; row++) {
+      const z0 = 1.8 + row * 2.1 - scrollZ * 0.85;
+      const z1 = z0 + 1.95;
+      for (let col = -3; col <= 2; col++) {
+        const x0 = col * 1.55;
+        const x1 = (col + 1) * 1.55;
+        const y00 = -1.6 + Math.sin(x0 * 0.8 + z0 * 0.7 + timeSeconds * 2.2) * flyAmp;
+        const y10 = -1.6 + Math.sin(x1 * 0.8 + z0 * 0.7 + timeSeconds * 2.2) * flyAmp;
+        const y11 = -1.6 + Math.sin(x1 * 0.8 + z1 * 0.7 + timeSeconds * 2.2) * flyAmp;
+        const y01 = -1.6 + Math.sin(x0 * 0.8 + z1 * 0.7 + timeSeconds * 2.2) * flyAmp;
+        polygons.push({
+          vertices: [
+            { x: x0, y: y00, z: z0 },
+            { x: x1, y: y10, z: z0 },
+            { x: x1, y: y11, z: z1 },
+            { x: x0, y: y01, z: z1 },
+          ],
+          tone: clamp01(0.35 + (y00 + 1.6) * 0.45),
+          checker: (row + col) % 2 === 0,
+          wireRim: true,
+          fillColor:
+            (row + col) % 2 === 0
+              ? terrainLayer.primaryColor
+              : terrainLayer.secondaryColor,
+          wireColor: terrainLayer.secondaryColor,
+        });
+      }
+    }
+  } else if (compMode === "tunnel_infinite") {
+    const ringBoost =
+      map.bassTarget === "tunnel_boost"
+        ? 1 + audio.bassEnvelope * 0.45
+        : 1 + audio.bassEnvelope * 0.22;
+    for (let r = 0; r < 6; r++) {
+      const zPos = 2.2 + r * 1.8 - (scrollZ % 1.8);
+      addRing(
+        zPos,
+        (2.1 + r * 0.18) * ringBoost,
+        0.48,
+        8,
+        timeSeconds * (r % 2 === 0 ? 0.85 : -0.85) + r * 0.35,
+        r % 2 === 0 ? terrainLayer.primaryColor : terrainLayer.secondaryColor,
+        r % 2 === 0 ? terrainLayer.secondaryColor : terrainLayer.primaryColor,
+        0.82,
+        true
+      );
+    }
+  } else if (compMode === "corridor") {
+    switch (terrainLayer.type) {
     case "infinite_grid": {
       for (let row = 0; row < 4; row++) {
         const z0 = 2.0 + row * 2.4 - scrollZ;
@@ -2750,9 +3139,10 @@ function buildAnarchy3DScenePolygons(
       break;
     }
   }
+  }
 
   // 2. DÉCORS LATÉRAUX PROCÉDURAUX (sidePropsLayer)
-  if (sidePropsLayer.type !== "none" && sidePropsLayer.density > 0.05) {
+  if (compMode === "corridor" && sidePropsLayer.type !== "none" && sidePropsLayer.density > 0.05) {
     const propCount = Math.max(1, Math.min(4, Math.round(1 + sidePropsLayer.density * 3)));
     const propStep = 9.0 / propCount;
     const propScroll = (timeSeconds * 2.4) % propStep;
@@ -3182,6 +3572,119 @@ function buildAnarchy3DScenePolygons(
     }
   }
 
+  // 3B. KALEIDO_MANDALA : symétrie radiale sur N axes autour de (0, 0, 5.0)
+  if (compMode === "kaleido_mandala" && polygons.length > 0) {
+    const axes = Math.max(3, Math.min(12, Math.round(scene.kaleidoAxes ?? 6)));
+    const baseCount = polygons.length;
+    for (let ax = 1; ax < axes; ax++) {
+      const ang = (ax / axes) * Math.PI * 2;
+      const cosA = Math.cos(ang);
+      const sinA = Math.sin(ang);
+      for (let pi = 0; pi < baseCount; pi++) {
+        const srcPoly = polygons[pi];
+        polygons.push({
+          ...srcPoly,
+          vertices: srcPoly.vertices.map((v) => ({
+            x: v.x * cosA - v.y * sinA,
+            y: v.x * sinA + v.y * cosA,
+            z: v.z,
+          })),
+        });
+      }
+    }
+  }
+
+  // 3C. GÉNÉRATEURS 3D PROCÉDURAUX (audio_wave_mesh, instanced_array)
+  if (scene.generators && scene.generators.length > 0) {
+    for (let gIdx = 0; gIdx < scene.generators.length; gIdx++) {
+      const gen = scene.generators[gIdx];
+      const gCol = gen.color ?? primaryCol;
+      const gCol2 = gen.secondaryColor ?? accentCol;
+      const gSpd = gen.speed ?? 1.0;
+      const gScale = gen.scale ?? 1.0;
+      const gAudio = 1 + audio.bassEnvelope * 0.8 + audio.midEnvelope * 0.55;
+
+      if (gen.type === "audio_wave_mesh") {
+        const cols = 7;
+        const rows = 3;
+        const amp = (gen.amplitude ?? 0.55) * gScale * gAudio;
+        for (let r = 0; r < rows; r++) {
+          const z0 = 3.2 + r * 1.4;
+          const z1 = z0 + 1.25;
+          for (let c = -3; c < cols - 3; c++) {
+            const x0 = c * 0.85;
+            const x1 = (c + 1) * 0.85;
+            const y00 = -0.85 + Math.sin(x0 * 1.4 + timeSeconds * 3.0 * gSpd + r) * amp;
+            const y10 = -0.85 + Math.sin(x1 * 1.4 + timeSeconds * 3.0 * gSpd + r) * amp;
+            const y11 = -0.85 + Math.sin(x1 * 1.4 + timeSeconds * 3.0 * gSpd + r + 1) * amp;
+            const y01 = -0.85 + Math.sin(x0 * 1.4 + timeSeconds * 3.0 * gSpd + r + 1) * amp;
+            polygons.push({
+              vertices: [
+                { x: x0, y: y00, z: z0 },
+                { x: x1, y: y10, z: z0 },
+                { x: x1, y: y11, z: z1 },
+                { x: x0, y: y01, z: z1 },
+              ],
+              tone: clamp01(0.45 + (y00 + 0.85) * 0.5),
+              checker: (r + c) % 2 === 0,
+              wireRim: true,
+              fillColor: (r + c) % 2 === 0 ? gCol : gCol2,
+              wireColor: gCol2,
+            });
+          }
+        }
+      } else if (gen.type === "instanced_array") {
+        const count = Math.max(4, Math.min(36, Math.round(gen.count ?? 16)));
+        const pattern = gen.pattern ?? "spiral";
+        const prim = pattern === "ring" ? "ring" : pattern === "fractal" ? "pyramid" : "box";
+        for (let i = 0; i < count; i++) {
+          const frac = i / Math.max(1, count);
+          let ix = 0;
+          let iy = 0;
+          let iz = 5.2;
+          let isc = 0.28 * gScale;
+          if (pattern === "grid") {
+            const side = Math.max(2, Math.round(Math.sqrt(count)));
+            const gx = (i % side) - (side - 1) * 0.5;
+            const gz = Math.floor(i / side) - (side - 1) * 0.5;
+            ix = gx * 0.9;
+            iy = Math.sin(timeSeconds * 2.2 * gSpd + gx + gz) * 0.4 * gAudio;
+            iz = 5.2 + gz * 0.9;
+          } else if (pattern === "ring") {
+            const ang = frac * Math.PI * 2 + timeSeconds * 0.8 * gSpd;
+            const rad = 1.65 * gScale * (0.85 + gAudio * 0.18);
+            ix = Math.cos(ang) * rad;
+            iy = Math.sin(ang) * rad;
+            iz = 5.0;
+          } else if (pattern === "fractal") {
+            const ang = i * 2.39996 + timeSeconds * 0.6 * gSpd;
+            const rad = Math.sqrt(frac) * 2.1 * gScale;
+            ix = Math.cos(ang) * rad;
+            iy = Math.sin(ang) * rad * 0.75;
+            iz = 4.6 + frac * 2.2;
+            isc *= 1.15 - frac * 0.65;
+          } else {
+            // spiral
+            const ang = frac * Math.PI * 4 + timeSeconds * 1.1 * gSpd;
+            const rad = (0.4 + frac * 1.8) * gScale;
+            ix = Math.cos(ang) * rad;
+            iy = (frac - 0.5) * 2.2;
+            iz = 4.2 + Math.sin(ang) * 1.4;
+          }
+          const colA = i % 2 === 0 ? gCol : gCol2;
+          const colB = i % 2 === 0 ? gCol2 : gCol;
+          if (prim === "pyramid") {
+            addPyramid(ix, iy, iz, isc, isc * 1.4, colA, colB, 0.84, true, false, timeSeconds * gSpd + i);
+          } else if (prim === "ring") {
+            addRing(iz, isc, isc * 0.35, 6, timeSeconds * gSpd + i, colA, colB, 0.85, true, ix, iy);
+          } else {
+            addBox(ix, iy, iz, isc, isc, isc, colA, colB, 0.84, true, false, timeSeconds * gSpd + i);
+          }
+        }
+      }
+    }
+  }
+
   // 4. MODE CAMÉRA FPS_ARMS : Bras / Lames 3D cybernétiques au premier plan
   if (cam.mode === "fps_arms") {
     const slash =
@@ -3390,14 +3893,19 @@ export function renderSceneFrame(
       ? audio.transientPulse * 0.22
       : 0;
 
+  const isV3Style = Boolean(scene3d?.renderStyle);
   const effects: RetroEffects = {
-    dither: clamp01(input.effects?.dither ?? DEFAULT_RETRO_EFFECTS.dither),
+    dither: clamp01(
+      input.effects?.dither ?? (isV3Style ? 0.08 : DEFAULT_RETRO_EFFECTS.dither)
+    ),
     fog: clamp01(jsonFogNormalized * faderFogMul),
     grain: clamp01(
-      (input.effects?.grain ?? DEFAULT_RETRO_EFFECTS.grain) + fluxGlitchBoost
+      (isV3Style
+        ? scene3d?.postFx?.crtScanlines ?? 0
+        : input.effects?.grain ?? DEFAULT_RETRO_EFFECTS.grain) + fluxGlitchBoost
     ),
     vertexSnap:
-      Boolean(input.effects?.vertexSnap ?? DEFAULT_RETRO_EFFECTS.vertexSnap) ||
+      Boolean(input.effects?.vertexSnap ?? (isV3Style ? false : DEFAULT_RETRO_EFFECTS.vertexSnap)) ||
       (scene3d?.postFx?.ps1VertexJitter ?? 0) > 0.12,
     affineTextures:
       input.effects?.affineTextures ?? DEFAULT_RETRO_EFFECTS.affineTextures,
@@ -3406,7 +3914,9 @@ export function renderSceneFrame(
     targetPaletteId: input.effects?.targetPaletteId,
     kickBlackout: kickBlackoutStrength,
     anaglyphSplit: clamp01(
-      (input.effects?.anaglyphSplit ?? 0.16) + fluxGlitchBoost * 0.5
+      (isV3Style
+        ? scene3d?.postFx?.chromaticAberration ?? 0
+        : input.effects?.anaglyphSplit ?? 0.16) + fluxGlitchBoost * 0.5
     ),
     strobeGlow: clamp01(input.effects?.strobeGlow ?? 0.25),
     pendulumSwing: clamp01(input.effects?.pendulumSwing ?? 0.25),
@@ -3440,7 +3950,7 @@ export function renderSceneFrame(
     };
   }
 
-  // Paramètres caméra unifiés : JSON camera (mode, fov, shakeIntensity) × Multiplicateurs Faders
+  // Paramètres caméra unifiés : JSON camera (mode, rig, beatCut, fov, shakeIntensity) × Multiplicateurs Faders
   const pendulumAmt = reducedMotion ? 0 : effects.pendulumSwing ?? 0;
   const midSwayBonus =
     scene3d?.audioMapping.midTarget === "camera_sway"
@@ -3470,6 +3980,46 @@ export function renderSceneFrame(
         modePitch = 0.24;
         modeDistFactor = 0.94;
         break;
+    }
+
+    if (!reducedMotion && scene3d.camera.rig) {
+      switch (scene3d.camera.rig) {
+        case "orbit_smooth":
+          modeYaw = Math.sin(input.timeSeconds * 0.55) * 0.95;
+          modePitch = 0.14 + Math.sin(input.timeSeconds * 0.32) * 0.09;
+          modeDistFactor = 1.04;
+          break;
+        case "dolly_zoom_on_kick": {
+          const kickD = audio.bassEnvelope * 0.45 + audio.transientPulse * 0.35;
+          modeDistFactor = 0.85 + kickD * 0.45;
+          modePitch = 0.06;
+          break;
+        }
+        case "first_person_fly":
+          modeYaw = Math.sin(input.timeSeconds * 0.72) * 0.24;
+          modePitch = -0.04 + Math.cos(input.timeSeconds * 0.88) * 0.07;
+          modeDistFactor = 0.72;
+          break;
+        case "top_down_spin":
+          modeYaw = input.timeSeconds * 0.45;
+          modePitch = 0.78;
+          modeDistFactor = 1.12;
+          break;
+        case "handheld_shake":
+          modeYaw = Math.sin(input.timeSeconds * 2.1) * 0.14 + Math.sin(input.timeSeconds * 11) * 0.03;
+          modePitch = Math.cos(input.timeSeconds * 1.7) * 0.11 + Math.cos(input.timeSeconds * 13) * 0.025;
+          modeDistFactor = 0.92;
+          break;
+      }
+    }
+
+    if (!reducedMotion && scene3d.camera.beatCut) {
+      const beatSlot = Math.floor(
+        input.bpmConfig ? (input.timeSeconds * input.bpmConfig.bpm) / 60 : input.timeSeconds * 2
+      );
+      const cutAngles = [0, 0.55, -0.62, 0.28, -0.38, 0.85];
+      modeYaw = cutAngles[Math.abs(beatSlot) % cutAngles.length];
+      modePitch += (beatSlot % 3 - 1) * 0.12;
     }
   }
 
@@ -3701,10 +4251,43 @@ export function renderSceneFrame(
           fovScale: Math.round(188 * camOff.fovMul),
           targetY: 0,
         },
-        effects
+        effects,
+        scene3d.renderStyle
       );
       vertexCount += customCounts.vertexCount;
       triangleCount += customCounts.triangleCount;
+    }
+
+    if (scene3d.generators && scene3d.generators.length > 0) {
+      drawAnarchy3DGeneratorsOverlay(
+        sceneCtx,
+        scene3d.generators,
+        audio,
+        effectiveTime,
+        STUDY_SIZE.width,
+        STUDY_SIZE.height,
+        scene3d.seed ?? seed,
+        reducedMotion
+      );
+    }
+
+    const resScale = scene3d.renderStyle?.resolutionScale;
+    if (resScale !== undefined && resScale < 0.72 && typeof document !== "undefined") {
+      const lowW = Math.max(48, Math.round(STUDY_SIZE.width * Math.max(0.15, resScale)));
+      const lowH = Math.max(27, Math.round(STUDY_SIZE.height * Math.max(0.15, resScale)));
+      const tmp = document.createElement("canvas");
+      tmp.width = lowW;
+      tmp.height = lowH;
+      const tctx = tmp.getContext("2d");
+      if (tctx) {
+        tctx.imageSmoothingEnabled = false;
+        tctx.drawImage(sceneCtx.canvas, 0, 0, lowW, lowH);
+        sceneCtx.save();
+        sceneCtx.resetTransform();
+        sceneCtx.imageSmoothingEnabled = false;
+        sceneCtx.drawImage(tmp, 0, 0, STUDY_SIZE.width, STUDY_SIZE.height);
+        sceneCtx.restore();
+      }
     }
   } else {
     switch (descriptor.id) {

@@ -258,6 +258,61 @@ export const CLONER_MODE_REGISTRY = [
   },
 ] as const;
 
+export const SHADING_MODE_REGISTRY = [
+  { value: "flat", label: "flat (Aplats Low-Poly)" },
+  { value: "wireframe", label: "wireframe (Filaire Néon Pur)" },
+  { value: "toon_cel", label: "toon_cel (Cel-Shading BD + Contours Noirs)" },
+  { value: "hologram", label: "hologram (Hologramme Translucide)" },
+  { value: "chrome_reflective", label: "chrome_reflective (Chrome Spéculaire)" },
+  { value: "neon_glow", label: "neon_glow (Halo Néon Émissif)" },
+] as const;
+
+export const COMPOSITION_MODE_REGISTRY = [
+  { value: "corridor", label: "corridor (Couloir Terrain + Décors)" },
+  { value: "void_orbital", label: "void_orbital (Espace 360° Sans Sol)" },
+  { value: "tunnel_infinite", label: "tunnel_infinite (Tunnel Infini BPM)" },
+  { value: "kaleido_mandala", label: "kaleido_mandala (Mandala Radial N Axes)" },
+  { value: "terrain_flyover", label: "terrain_flyover (Survol Vagues/Montagnes)" },
+] as const;
+
+export const GENERATOR_TYPE_REGISTRY = [
+  { value: "particle_field", label: "particle_field (Nuage 500–5000 Particules)" },
+  { value: "ribbon_trails", label: "ribbon_trails (Rubans / Courbes 3D Fluides)" },
+  { value: "audio_wave_mesh", label: "audio_wave_mesh (Maillage Déformé FFT)" },
+  { value: "instanced_array", label: "instanced_array (Réseau / Fractale Paramétrique)" },
+] as const;
+
+export const PARTICLE_BEHAVIOR_REGISTRY = [
+  { value: "vortex", label: "vortex (Tourbillon Orbital)" },
+  { value: "explosion_on_kick", label: "explosion_on_kick (Éruption sur Kick)" },
+  { value: "rain", label: "rain (Pluie Verticale / Matricielle)" },
+  { value: "swarm", label: "swarm (Essaim Organique 3D)" },
+] as const;
+
+export const BACKDROP_SHADER_REGISTRY = [
+  { value: "none", label: "none (Dégradé Ciel Classique)" },
+  { value: "plasma_fluid", label: "plasma_fluid (Plasma Fluide Audio)" },
+  { value: "voronoi_cells", label: "voronoi_cells (Cellules Voronoi)" },
+  { value: "radial_sunburst", label: "radial_sunburst (Rayons Radiaux BD)" },
+  { value: "grid_horizon", label: "grid_horizon (Horizon Grille Rétro)" },
+  { value: "noise_fog", label: "noise_fog (Brume Procédurale)" },
+] as const;
+
+export const CAMERA_RIG_REGISTRY = [
+  { value: "orbit_smooth", label: "orbit_smooth (Orbite 360° Fluide)" },
+  { value: "dolly_zoom_on_kick", label: "dolly_zoom_on_kick (Vertigo sur Kick)" },
+  { value: "first_person_fly", label: "first_person_fly (Vol FPV Dynamique)" },
+  { value: "top_down_spin", label: "top_down_spin (Plongée Zénithale Rotative)" },
+  { value: "handheld_shake", label: "handheld_shake (Caméra Épaule Organique)" },
+] as const;
+
+export type AnarchyShadingMode = (typeof SHADING_MODE_REGISTRY)[number]["value"];
+export type AnarchyCompositionMode = (typeof COMPOSITION_MODE_REGISTRY)[number]["value"];
+export type AnarchyGeneratorType = (typeof GENERATOR_TYPE_REGISTRY)[number]["value"];
+export type AnarchyParticleBehavior = (typeof PARTICLE_BEHAVIOR_REGISTRY)[number]["value"];
+export type AnarchyBackdropShader = (typeof BACKDROP_SHADER_REGISTRY)[number]["value"];
+export type AnarchyCameraRig = (typeof CAMERA_RIG_REGISTRY)[number]["value"];
+
 export const AI_STYLE_PRESETS = [
   {
     id: "hotline-miami",
@@ -602,6 +657,12 @@ export function generateAiPackPromptV3(
   const meshes = SUBJECT_MESH_REGISTRY.map((m) => `"${m.value}"`).join(" | ");
   const primitives = PROCEDURAL_PRIMITIVE_REGISTRY.map((p) => `"${p.value}"`).join(" | ");
   const cameras = CAMERA_MODE_REGISTRY.map((c) => `"${c.value}"`).join(" | ");
+  const cameraRigs = CAMERA_RIG_REGISTRY.map((r) => `"${r.value}"`).join(" | ");
+  const shadings = SHADING_MODE_REGISTRY.map((s) => `"${s.value}"`).join(" | ");
+  const compositions = COMPOSITION_MODE_REGISTRY.map((c) => `"${c.value}"`).join(" | ");
+  const generatorTypes = GENERATOR_TYPE_REGISTRY.map((g) => `"${g.value}"`).join(" | ");
+  const particleBehaviors = PARTICLE_BEHAVIOR_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
+  const backdropShaders = BACKDROP_SHADER_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
   const cloners = CLONER_MODE_REGISTRY.map((c) => `"${c.value}"`).join(" | ");
   const triggers = TRIGGER_ACTION_REGISTRY.map((t) => `"${t.value}"`).join(" | ");
   const bass = BASS_TARGET_REGISTRY.map((b) => `"${b.value}"`).join(" | ");
@@ -612,38 +673,40 @@ export function generateAiPackPromptV3(
   const stylePreset =
     AI_STYLE_PRESETS.find((s) => s.id === styleId) ?? AI_STYLE_PRESETS[0];
 
-  return `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v4 Data-Driven Intelligent).
-Génère une "Cartouche / Pack 3D v4" au format JSON strict (Anarchy3DPack) contenant 4 à 5 scènes 3D évolutives synchronisées à ${Math.round(activeBpm)} BPM.
+  return `Tu es un directeur artistique 3D temps réel pour Open Hub // Anarchy Visual Studio (Moteur v3/v4 Data-Driven Expressif).
+Génère une "Cartouche / Pack 3D" au format JSON strict (Anarchy3DPack) contenant 4 à 5 scènes 3D radicalement variées synchronisées à ${Math.round(activeBpm)} BPM.
 
 DIRECTION ARTISTIQUE DEMANDÉE (${stylePreset.label}) :
 - Palette conseillée : ${stylePreset.paletteHint}
 - Décors & Sujets : ${stylePreset.terrainHint}
 - Post-FX suggérés : ${stylePreset.fxHint}
 
-IMPORTANT — RÈGLES STRICTES v4 :
+IMPORTANT — RÈGLES STRICTES :
 1. Réponds UNIQUEMENT avec un bloc JSON valide (aucun code JS/C++, aucune fonction, aucun \`eval\`).
 2. Valeurs autorisées issues du Registre :
+   - renderStyle.shading : ${shadings} (resolutionScale: 0.15..1.0, outlineThickness: 0..6)
+   - compositionMode : ${compositions} (kaleidoAxes: 2..12)
+   - backdrop.shader.type : ${backdropShaders}
+   - generators[].type : ${generatorTypes} (behavior: ${particleBehaviors})
+   - camera.mode : ${cameras} · camera.rig : ${cameraRigs} (beatCut: true|false)
    - terrain.type : ${terrains}
    - sideProps.type : ${props}
    - subject.meshType : ${meshes}
    - procedural_group parts[].primitive : ${primitives}
    - cloner.mode : ${cloners} (count entre 2 et 64, total < 256 primitives/scène pour 60 FPS)
-   - camera.mode : ${cameras}
    - triggers[].action : ${triggers}
    - audioMapping.bassTarget : ${bass}
    - audioMapping.midTarget : ${mid}
    - audioMapping.trebleTarget : ${treble}
    - audioMapping.fluxTarget : ${flux}
-3. Paramètres nommés ("params") au niveau Pack ou Scène :
+3. CRT / scanlines / aberration chromatique sont strictement optionnels (0 par défaut) : ne les active que si le style le demande.
+4. Paramètres nommés ("params") au niveau Pack ou Scène :
    - Ex: "params": { "speed": 2.4, "amp": 0.65 } → réutilisables directement dans animations[] et triggers[].
-4. Cloneurs Procéduraux ("cloner") sur tout sujet ou part :
-   - { "mode": "linear"|"radial"|"grid"|"spiral", "count": 12, "offset": [dx, dy, dz], "stepRotation": [rxDeg, ryDeg, rzDeg], "stepScale": [sx, sy, sz] }
 5. Expressions Mathématiques Temps Réel ("animations[]") :
    - Cibles : "pos.x", "pos.y", "pos.z", "rot.x", "rot.y", "rot.z", "scale", "scale.x", "scale.y", "scale.z", "emissiveIntensity", "fov"
-   - Variables : t (secondes), beat (0..1 phase BPM), i (index clone), u (0..1 index normalisé), count, bass, mid, treble, flux, rms (0..1), seed + tes variables de params.
-   - Fonctions : sin, cos, tan, abs, floor, ceil, fract, sqrt, min, max, step, pulse, mod, pow, gt, lt, clamp, smoothstep, mix, lerp, constantes pi, tau, opérateurs + - * / % ^
-   - Exemple : { "target": "pos.y", "expr": "mix(-0.4, 0.9, pulse(beat + u, 0.35)) * bass" }
-6. Règles Réactives Conditionnelles ("triggers[]") sur chaque scène :
+   - Variables : t, beat, i, u, count, bass, mid, treble, flux, rms, seed + tes params.
+   - Fonctions : sin, cos, tan, abs, floor, ceil, fract, sqrt, min, max, step, pulse, mod, pow, gt, lt, clamp, smoothstep, mix, lerp, pi, tau.
+6. Règles Réactives Conditionnelles ("triggers[]") :
    - Ex: { "when": "gt(bass, 0.72)", "action": "boost_fov", "intensity": 0.8 }
 7. Toutes les couleurs doivent être au format hexadécimal "#RRGGBB".`;
 }

@@ -119,4 +119,10 @@ Dans le panneau **`PACK DE SCÈNES // ENCHAÎNEMENT BPM`** :
   - **Snippets 3D** insérables en 1 clic (*Soleil Synthwave Strié*, *Spirale d'Anneaux Néon*, *Arche Brutaliste*, *Véhicule Low-Poly*, *Matrice de Monolithes*).
   - **Générateur de Prompt IA v3** avec sélecteur de style (*Hotline Miami*, *PS1 Dark Fantasy*, *Brutalist Techno*, *Cyberpunk Tokyo*, *Acid Rave*) injectant automatiquement le **BPM actif**.
   - Boutons **`✨ Prettify`** et **`★ Favori`** (sauvegarde `localStorage`).
+- **Capacités Expressives v3 (`renderStyle`, `compositionMode`, `generators[]`, `backdrop.shader`, `camera.rig`)** :
+  - **`renderStyle`** : `resolutionScale (0.15..1.0)`, `shading (wireframe | flat | toon_cel | hologram | chrome_reflective | neon_glow)`, `outlineThickness (0..6)` (CRT/scanlines strictement optionnels).
+  - **`compositionMode`** : `corridor | void_orbital | tunnel_infinite | kaleido_mandala | terrain_flyover` (+ `kaleidoAxes`).
+  - **`generators[]`** : `particle_field`, `ribbon_trails`, `audio_wave_mesh`, `instanced_array`.
+  - **`backdrop.shader`** : `none | plasma_fluid | voronoi_cells | radial_sunburst | grid_horizon | noise_fog`.
+  - **`camera.rig` & `beatCut`** : `orbit_smooth | dolly_zoom_on_kick | first_person_fly | top_down_spin | handheld_shake`.
 

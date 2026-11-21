@@ -405,6 +405,23 @@ export default function VisualStudioDocsPage() {
                     <code>t, beat, i, bass, mid, treble, flux</code> · fonctions{" "}
                     <code>sin, cos, tan, abs, min, max, clamp, smoothstep, pi, tau</code>
                   </li>
+                  <li>
+                    <strong>renderStyle (v3)</strong> :{" "}
+                    <code>resolutionScale (0.15..1.0)</code>,{" "}
+                    <code>shading (wireframe | flat | toon_cel | hologram | chrome_reflective | neon_glow)</code>,{" "}
+                    <code>outlineThickness (0..6)</code> (CRT/scanlines strictement optionnels)
+                  </li>
+                  <li>
+                    <strong>compositionMode &amp; backdrop.shader (v3)</strong> :{" "}
+                    <code>corridor | void_orbital | tunnel_infinite | kaleido_mandala | terrain_flyover</code> ·{" "}
+                    shaders <code>none | plasma_fluid | voronoi_cells | radial_sunburst | grid_horizon | noise_fog</code>
+                  </li>
+                  <li>
+                    <strong>generators[] (v3)</strong> :{" "}
+                    <code>particle_field</code> (<code>vortex | explosion_on_kick | rain | swarm</code>),{" "}
+                    <code>ribbon_trails</code>, <code>audio_wave_mesh</code>,{" "}
+                    <code>instanced_array</code> (<code>grid | spiral | ring | fractal</code>)
+                  </li>
                 </ul>
               </div>
 
@@ -412,8 +429,9 @@ export default function VisualStudioDocsPage() {
                 <div className="font-bold text-brand-black">2. CAMERA &amp; AUDIOMAPPING (VALEURS AUTORISÉES)</div>
                 <ul className="space-y-1 text-neutral-800">
                   <li>
-                    <strong>camera.mode</strong> :{" "}
-                    <code>{ANARCHY_CAMERA_MODES.map((x) => x.value).join(" | ")}</code>
+                    <strong>camera.mode / rig (v3)</strong> :{" "}
+                    <code>{ANARCHY_CAMERA_MODES.map((x) => x.value).join(" | ")}</code> · rig:{" "}
+                    <code>orbit_smooth | dolly_zoom_on_kick | first_person_fly | top_down_spin | handheld_shake</code> (+ <code>beatCut</code>)
                   </li>
                   <li>
                     <strong>audioMapping.bassTarget</strong> :{" "}
