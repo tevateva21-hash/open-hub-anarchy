@@ -86,6 +86,7 @@ import type {
   SceneId,
 } from "@/lib/visual-engine/contracts";
 import { PALETTE_IDS, SCENE_IDS } from "@/lib/visual-engine/presets";
+import { buildFictionalUniversePacks } from "@/lib/visual-engine/fictional-packs";
 import { validateMathExpression } from "@/lib/visual-studio/math-expr";
 import {
   ACTOR_TYPE_REGISTRY,
@@ -4838,6 +4839,7 @@ export const DEFAULT_SCENE_PACKS: Anarchy3DPack[] = [
       }),
     ],
   },
+  ...buildFictionalUniversePacks(createDefaultAnarchy3DScene),
 ];
 
 function mulberry32(seed: number) {
